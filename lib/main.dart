@@ -1,11 +1,14 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'skin_analyzer.dart';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter/services.dart';
 
 import 'instructions_page.dart';
 import 'look_engine.dart';
@@ -58,8 +61,41 @@ class _FaceScanPageState extends State<FaceScanPage> {
   FaceProfile? _faceProfile;
   LookResult? _look;
 
-  // ✅ NEW: user-controlled intensity (opacity) for makeup overlay
+  // ✅ User-controlled intensity (opacity) for makeup overlay
   double _intensity = 0.75;
+
+  // ✅ Day 2: Post-scan quality feedback
+  List<String> _warnings = [];
+  static const double _minConfidenceOk = 0.45;
+  static const double _minConfidenceGood = 0.60;
+
+  // ===== Live scan quality (Day 2 upgrade) =====
+  bool _liveRunning = false;
+  DateTime _lastLiveTick = DateTime.fromMillisecondsSinceEpoch(0);
+  static const Duration _liveInterval = Duration(milliseconds: 450);
+
+  String _liveQualityLabel = 'Point camera at your face…';
+  List<String> _liveWarnings = [];
+  double _liveBrightness = 0.0; // 0..255 approx
+  
+  // ✅ Step 1: Add 2 toggles (Rotation + UV Swap)
+  InputImageRotation _liveRotation = InputImageRotation.rotation90deg;
+  bool _swapUV = false; // 👈 key fix for Poco/Xiaomi sometimes
+  
+  // ✅ Step 4: Add persistence for face detection
+  int _noFaceStreak = 0;
+  Face? _lastDetectedFace;
+
+  // ✅ Step 5: Make live detection less strict
+  late final FaceDetector _liveFaceDetector = FaceDetector(
+    options: FaceDetectorOptions(
+      performanceMode: FaceDetectorMode.fast,
+      minFaceSize: 0.05, // ✅ very forgiving for live
+      enableContours: false,
+      enableLandmarks: false,
+      enableClassification: false,
+    ),
+  );
 
   String _status = 'Tap "Capture & Scan" to start.';
 
@@ -90,6 +126,8 @@ class _FaceScanPageState extends State<FaceScanPage> {
       await controller.initialize();
       if (!mounted) return;
       setState(() => _controller = controller);
+      // ✅ Start live quality analysis after camera initializes
+      await _startLiveQuality(controller);
     } catch (e) {
       setState(() => _status = 'Camera init error: $e');
     }
@@ -97,8 +135,10 @@ class _FaceScanPageState extends State<FaceScanPage> {
 
   @override
   void dispose() {
+    _stopLiveQuality();
     _controller?.dispose();
     _faceDetector.close();
+    _liveFaceDetector.close();
     super.dispose();
   }
 
@@ -109,7 +149,369 @@ class _FaceScanPageState extends State<FaceScanPage> {
     return frame.image;
   }
 
+  // ✅ Convert YUV420 to NV21 (Most reliable for ML Kit)
+  Uint8List _yuv420ToNv21(CameraImage image) {
+    final int width = image.width;
+    final int height = image.height;
+
+    final Uint8List yPlane = image.planes[0].bytes;
+    final Uint8List uPlane = image.planes[1].bytes;
+    final Uint8List vPlane = image.planes[2].bytes;
+
+    final int yRowStride = image.planes[0].bytesPerRow;
+    final int uvRowStride = image.planes[1].bytesPerRow;
+    final int uvPixelStride = image.planes[1].bytesPerPixel ?? 1;
+
+    final Uint8List nv21 = Uint8List(width * height + (width * height ~/ 2));
+
+    int index = 0;
+
+    // ---- Copy Y plane ----
+    for (int row = 0; row < height; row++) {
+      final int yRowStart = row * yRowStride;
+      for (int col = 0; col < width; col++) {
+        nv21[index++] = yPlane[yRowStart + col];
+      }
+    }
+
+    // ✅ Step 2 — Update your NV21 converter to allow swapping
+    // ---- Copy UV as VU (NV21) ----
+    final int uvHeight = height ~/ 2;
+    final int uvWidth = width ~/ 2;
+
+    for (int row = 0; row < uvHeight; row++) {
+      final int uvRowStart = row * uvRowStride;
+      for (int col = 0; col < uvWidth; col++) {
+        final int uvIndex = uvRowStart + col * uvPixelStride;
+
+        final u = uPlane[uvIndex];
+        final v = vPlane[uvIndex];
+
+        if (_swapUV) {
+          // some devices label planes reversed
+          nv21[index++] = u; // treat U as V
+          nv21[index++] = v; // treat V as U
+        } else {
+          // normal NV21: V then U
+          nv21[index++] = v;
+          nv21[index++] = u;
+        }
+      }
+    }
+
+    return nv21;
+  }
+
+  // ✅ Create InputImage from NV21 (Most stable for Android)
+  InputImage _inputImageFromCameraImageNv21(CameraImage image) {
+    // Must be YUV420 with 3 planes on Android
+    if (image.format.group != ImageFormatGroup.yuv420 || image.planes.length != 3) {
+      throw Exception('Unsupported camera stream: group=${image.format.group}, planes=${image.planes.length}');
+    }
+
+    final bytes = _yuv420ToNv21(image);
+
+    // ✅ Step 3 — Use your rotation variable (not constant)
+    final rotation = _liveRotation;
+
+    final metadata = InputImageMetadata(
+      size: Size(image.width.toDouble(), image.height.toDouble()),
+      rotation: rotation,
+      format: InputImageFormat.nv21,
+      bytesPerRow: image.width,
+    );
+
+    return InputImage.fromBytes(bytes: bytes, metadata: metadata);
+  }
+
+  // ✅ Simple version for captured images
+  InputImage _inputImageFromCameraImage(CameraImage image, CameraDescription camera) {
+    final format = InputImageFormatValue.fromRawValue(image.format.raw);
+    if (format == null) {
+      throw Exception('Unsupported image format: ${image.format.raw}');
+    }
+
+    // Use a fixed portrait rotation (stable for most front cameras)
+    final rotation = InputImageRotation.rotation90deg;
+
+    final bytes = WriteBuffer();
+    for (final plane in image.planes) {
+      bytes.putUint8List(plane.bytes);
+    }
+    final allBytes = bytes.done().buffer.asUint8List();
+
+    final inputImageData = InputImageMetadata(
+      size: Size(image.width.toDouble(), image.height.toDouble()),
+      rotation: rotation,
+      format: format,
+      bytesPerRow: image.planes[0].bytesPerRow,
+    );
+
+    return InputImage.fromBytes(bytes: allBytes, metadata: inputImageData);
+  }
+
+  // ✅ Lighting estimator (fast)
+  double _estimateBrightness(CameraImage image) {
+    final yPlane = image.planes[0].bytes;
+    if (yPlane.isEmpty) return 0;
+
+    const step = 50;
+    int sum = 0;
+    int count = 0;
+
+    for (int i = 0; i < yPlane.length; i += step) {
+      sum += yPlane[i];
+      count++;
+    }
+    return count == 0 ? 0 : (sum / count);
+  }
+
+  String _brightnessLabel(double b) {
+    if (b < 60) return 'Too dark';
+    if (b < 90) return 'Dim';
+    if (b < 170) return 'Good';
+    return 'Very bright';
+  }
+
+  // ✅ Face near edge detection (FIXED - using center-based approach)
+  bool _isFaceNearEdge(Face face, int imgW, int imgH) {
+    final b = face.boundingBox;
+
+    final cx = (b.left + b.right) / 2;
+    final cy = (b.top + b.bottom) / 2;
+
+    // safe zone = middle 70% of screen (15% margin each side)
+    final marginX = imgW * 0.15;
+    final marginY = imgH * 0.15;
+
+    final insideX = cx > marginX && cx < (imgW - marginX);
+    final insideY = cy > marginY && cy < (imgH - marginY);
+
+    return !(insideX && insideY);
+  }
+
+  // ✅ Live warning builder (framing + lighting)
+  List<String> _buildLiveWarnings({
+    required Face? face,
+    required int imgW,
+    required int imgH,
+    required double brightness,
+  }) {
+    final warnings = <String>[];
+
+    // Lighting tips
+    if (brightness < 60) {
+      warnings.add('Too dark. Move to a brighter area or face a light source.');
+    } else if (brightness < 90) {
+      warnings.add('Lighting is dim. Try brighter and even lighting.');
+    } else if (brightness > 210) {
+      warnings.add('Very bright. Avoid harsh light directly hitting the face.');
+    }
+
+    // Face tips
+    if (face == null) {
+      warnings.add('No face detected. Face the camera and remove obstructions.');
+      return warnings;
+    }
+
+    // ✅ Step 3: Reduce face too small threshold even more for live
+    final faceArea = face.boundingBox.width * face.boundingBox.height;
+    final imgArea = imgW * imgH;
+    final ratio = faceArea / imgArea;
+    if (ratio < 0.04) { // ✅ Lowered even more for very small faces in live view
+      warnings.add('Move closer. Your face is too small in the frame.');
+    }
+
+    // ✅ FIXED: Use proper center-based edge detection
+    final nearEdge = _isFaceNearEdge(face, imgW, imgH);
+    if (nearEdge) {
+      warnings.add("Center your face. It's too close to the edge.");
+    }
+
+    return warnings;
+  }
+
+  String _liveQualityFromWarnings(List<String> w) {
+    if (w.isEmpty) return 'Good ✅';
+    if (w.length == 1) return 'Moderate ⚠️';
+    return 'Low ⚠️';
+  }
+
+  // ✅ Start live streaming analysis with NV21 conversion
+  Future<void> _startLiveQuality(CameraController controller) async {
+    if (_liveRunning) return;
+    _liveRunning = true;
+
+    await controller.startImageStream((CameraImage image) async {
+      if (!_liveRunning) return;
+
+      // throttle
+      final now = DateTime.now();
+      if (now.difference(_lastLiveTick) < _liveInterval) return;
+      _lastLiveTick = now;
+
+      try {
+        final brightness = _estimateBrightness(image);
+        
+        // ✅ Use NV21 conversion for live stream
+        final input = _inputImageFromCameraImageNv21(image);
+        
+        final faces = await _liveFaceDetector.processImage(input);
+
+        // ✅ Step 1: Add debug logging
+        debugPrint('LIVE faces: ${faces.length}  img=${image.width}x${image.height}  rotation=$_liveRotation  swapUV=$_swapUV');
+
+        // ✅ Step 4: Implement persistence for face detection
+        Face? face;
+        if (faces.isNotEmpty) {
+          faces.sort((a, b) => (b.boundingBox.width * b.boundingBox.height)
+              .compareTo(a.boundingBox.width * a.boundingBox.height));
+          face = faces.first;
+          _lastDetectedFace = face;
+          _noFaceStreak = 0; // Reset streak when face is detected
+        } else {
+          _noFaceStreak++;
+          // ✅ Use last detected face if streak is low (for smoother UI)
+          if (_noFaceStreak < 3 && _lastDetectedFace != null) {
+            face = _lastDetectedFace;
+          }
+        }
+
+        final showNoFace = _noFaceStreak >= 3;
+        final faceForWarnings = showNoFace ? null : face;
+
+        final warnings = _buildLiveWarnings(
+          face: faceForWarnings,
+          imgW: image.width,
+          imgH: image.height,
+          brightness: brightness,
+        );
+
+        if (mounted) {
+          setState(() {
+            _liveBrightness = brightness;
+            _liveWarnings = warnings;
+            _liveQualityLabel =
+                '${_liveQualityFromWarnings(warnings)} • ${_brightnessLabel(brightness)}';
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _liveQualityLabel = 'Live Scan Quality: Error (see logs)';
+            _liveWarnings = ['Live analyzer error: $e'];
+          });
+        }
+        debugPrint('LIVE ANALYZER ERROR: $e');
+      }
+    });
+  }
+
+  // ✅ Stop live stream
+  Future<void> _stopLiveQuality() async {
+    _liveRunning = false;
+    try {
+      await _controller?.stopImageStream();
+    } catch (_) {}
+  }
+
+  // ✅ Add this function: Check if capture is allowed
+  bool _canCaptureNow() {
+    final severe = _liveWarnings.any((w) =>
+        w.toLowerCase().contains('too dark') ||
+        w.toLowerCase().contains('center your face') ||
+        w.toLowerCase().contains('move closer') ||
+        w.toLowerCase().contains('no face detected'));
+
+    return !severe;
+  }
+
+  void _showCaptureBlockedMessage() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Fix live scan tips first (lighting/center/closer) before capturing.'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  // ✅ Toggle functions
+  void _toggleLiveRotation() {
+    setState(() {
+      _liveRotation = _liveRotation == InputImageRotation.rotation90deg
+          ? InputImageRotation.rotation270deg
+          : InputImageRotation.rotation90deg;
+    });
+  }
+
+  void _toggleUVSwap() {
+    setState(() {
+      _swapUV = !_swapUV;
+    });
+  }
+
+  // Post-scan quality feedback helpers
+  bool _isFaceTooSmall(Face face, int imgW, int imgH) {
+    final box = face.boundingBox;
+    final faceArea = box.width * box.height;
+    final imageArea = imgW * imgH;
+    final ratio = faceArea / imageArea;
+    return ratio < 0.12; // Less than 12% of image area
+  }
+
+  // ✅ Use the same improved edge detection for post-scan warnings
+  bool _isFaceNearEdges(Face face, int imgW, int imgH) {
+    return _isFaceNearEdge(face, imgW, imgH);
+  }
+
+  List<String> _buildWarnings({
+    required Face face,
+    required FaceProfile profile,
+    required int imgW,
+    required int imgH,
+  }) {
+    final warnings = <String>[];
+
+    // Face size warning
+    if (_isFaceTooSmall(face, imgW, imgH)) {
+      warnings.add('Move closer for better analysis');
+    }
+
+    // Face position warning (using improved detection)
+    if (_isFaceNearEdges(face, imgW, imgH)) {
+      warnings.add('Center your face in the frame');
+    }
+
+    // Skin confidence warning
+    if (profile.skinConfidence < _minConfidenceOk) {
+      if (profile.skinConfidence < 0.3) {
+        warnings.add('Poor lighting—try brighter light');
+      } else {
+        warnings.add('Fair lighting—try more direct light');
+      }
+    }
+
+    // Undertone low confidence
+    if (profile.undertoneConfidence < 0.5) {
+      warnings.add('Undertone detection uncertain');
+    }
+
+    return warnings;
+  }
+
+  String _confidenceLabel(double c) {
+    if (c >= _minConfidenceGood) return 'Good';
+    if (c >= _minConfidenceOk) return 'Fair';
+    return 'Low';
+  }
+
   Future<void> _captureAndScan() async {
+    // ✅ Enforce capture gate
+    if (!_canCaptureNow()) {
+      _showCaptureBlockedMessage();
+      return;
+    }
+
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized) return;
     if (_busy) return;
@@ -122,12 +524,14 @@ class _FaceScanPageState extends State<FaceScanPage> {
       _detectedFace = null;
       _faceProfile = null;
       _look = null;
-
-      // optional: reset intensity when scanning again
+      _warnings = [];
       _intensity = 0.75;
     });
 
     try {
+      // Stop live stream BEFORE taking picture
+      await _stopLiveQuality();
+
       // Capture
       final file = await controller.takePicture();
       final uiImage = await _loadUiImageFromFile(file.path);
@@ -152,26 +556,37 @@ class _FaceScanPageState extends State<FaceScanPage> {
           .compareTo(a.boundingBox.width * a.boundingBox.height));
       final face = faces.first;
 
-      // ===========================================
       // Skin Analysis Integration
-      // ===========================================
       setState(() => _status = 'Analyzing skin tone…');
 
       final skin = await SkinAnalyzer.analyze(uiImage, face);
       final profile = FaceProfile.fromAnalysis(face, skin);
       final look = LookEngine.recommendLook(profile);
-      // ===========================================
+
+      // Compute warnings
+      final warnings = _buildWarnings(
+        face: face,
+        profile: profile,
+        imgW: uiImage.width,
+        imgH: uiImage.height,
+      );
 
       setState(() {
         _detectedFace = face;
         _faceProfile = profile;
         _look = look;
+        _warnings = warnings;
         _status = 'Done ✅ Tap "View Instructions".';
       });
     } catch (e) {
       setState(() => _status = 'Error: $e');
     } finally {
       setState(() => _busy = false);
+      // Restart live quality after capturing
+      final c = _controller;
+      if (c != null && c.value.isInitialized) {
+        await _startLiveQuality(c);
+      }
     }
   }
 
@@ -204,6 +619,99 @@ class _FaceScanPageState extends State<FaceScanPage> {
                 : Stack(
                     children: [
                       CameraPreview(controller),
+                      // ✅ Show the live quality banner on the camera preview
+                      Align(
+                        alignment: Alignment.topCenter,
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.55),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        'Live Scan Quality: $_liveQualityLabel',
+                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                                      ),
+                                    ),
+                                    // ✅ Show current rotation status
+                                    TextButton(
+                                      onPressed: _toggleLiveRotation,
+                                      style: TextButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        minimumSize: Size.zero,
+                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                      child: Text(
+                                        'Rot: ${_liveRotation == InputImageRotation.rotation90deg ? '90°' : '270°'}',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (_liveWarnings.isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    _liveWarnings.take(2).map((e) => '• $e').join('\n'),
+                                    style: const TextStyle(color: Colors.white),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      
+                      // ✅ Step 4 — Add 2 buttons so you can test instantly
+                      Align(
+                        alignment: Alignment.topCenter,
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 70),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              ElevatedButton(
+                                onPressed: _toggleLiveRotation,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.black.withOpacity(0.7),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                ),
+                                child: Text(
+                                  'Rot: ${_liveRotation == InputImageRotation.rotation90deg ? '90°' : '270°'}',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              ElevatedButton(
+                                onPressed: _toggleUVSwap,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.black.withOpacity(0.7),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                ),
+                                child: Text(
+                                  'UV: ${_swapUV ? 'Swapped' : 'Normal'}',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      
                       if (_busy)
                         const Align(
                           alignment: Alignment.topCenter,
@@ -238,8 +746,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
                               lipstickColor: _look!.lipstickColor,
                               blushColor: _look!.blushColor,
                               eyeshadowColor: _look!.eyeshadowColor,
-
-                              // ✅ NEW: pass intensity + face shape
                               intensity: _intensity,
                               faceShape: _faceProfile?.faceShape ?? FaceShape.unknown,
                             ),
@@ -249,7 +755,7 @@ class _FaceScanPageState extends State<FaceScanPage> {
                     ),
                   ),
 
-                  // ✅ NEW: slider
+                  // Slider
                   if (showSlider)
                     Padding(
                       padding: const EdgeInsets.only(top: 10),
@@ -278,10 +784,22 @@ class _FaceScanPageState extends State<FaceScanPage> {
               child: Text(_status),
             ),
 
+          // Profile chips
           if (_faceProfile != null)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: _ProfileChipRow(profile: _faceProfile!),
+            ),
+
+          // Results Summary Card
+          if (_faceProfile != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: _ResultsSummaryCard(
+                profile: _faceProfile!,
+                warnings: _warnings,
+                confidenceLabel: _confidenceLabel(_faceProfile!.skinConfidence),
+              ),
             ),
 
           // Buttons
@@ -293,7 +811,7 @@ class _FaceScanPageState extends State<FaceScanPage> {
                   child: SizedBox(
                     height: 52,
                     child: ElevatedButton.icon(
-                      onPressed: _busy ? null : _captureAndScan,
+                      onPressed: _busy || !_canCaptureNow() ? null : _captureAndScan,
                       icon: const Icon(Icons.camera_alt),
                       label: const Text('Capture & Scan'),
                     ),
@@ -335,6 +853,148 @@ class _ProfileChipRow extends StatelessWidget {
         Chip(label: Text('RGB: ${profile.avgR},${profile.avgG},${profile.avgB}')),
         Chip(label: Text('Skin conf: ${(profile.skinConfidence * 100).toStringAsFixed(0)}%')),
       ],
+    );
+  }
+}
+
+// Results Summary Card Widget
+class _ResultsSummaryCard extends StatelessWidget {
+  final FaceProfile profile;
+  final List<String> warnings;
+  final String confidenceLabel;
+
+  const _ResultsSummaryCard({
+    required this.profile,
+    required this.warnings,
+    required this.confidenceLabel,
+  });
+
+  Color _confidenceColor() {
+    final c = profile.skinConfidence;
+    if (c >= _FaceScanPageState._minConfidenceGood) return Colors.green;
+    if (c >= _FaceScanPageState._minConfidenceOk) return Colors.orange;
+    return Colors.red;
+  }
+
+  Color _confidenceBgColor() {
+    final c = profile.skinConfidence;
+    if (c >= _FaceScanPageState._minConfidenceGood) return Colors.green.shade50;
+    if (c >= _FaceScanPageState._minConfidenceOk) return Colors.orange.shade50;
+    return Colors.red.shade50;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Row(
+              children: [
+                const Icon(Icons.analytics, size: 20),
+                const SizedBox(width: 8),
+                const Text(
+                  'Scan Quality',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _confidenceBgColor(),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: _confidenceColor(),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '$confidenceLabel (${(profile.skinConfidence * 100).toStringAsFixed(0)}%)',
+                        style: TextStyle(
+                          color: _confidenceColor(),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Warnings section
+            if (warnings.isNotEmpty)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Suggestions for better results:',
+                    style: TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 6),
+                  ...warnings.map(
+                    (w) => Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            size: 16,
+                            color: Colors.orange.shade700,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              w,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            else
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.check_circle, size: 16, color: Colors.green),
+                      SizedBox(width: 8),
+                      Text(
+                        'Good scan quality',
+                        style: TextStyle(color: Colors.green, fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Face position and lighting look good for accurate analysis.',
+                    style: TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

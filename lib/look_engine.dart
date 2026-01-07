@@ -16,6 +16,9 @@ class FaceProfile {
   final int avgG;
   final int avgB;
   final double skinConfidence;
+  
+  // ✅ ADDED: Undertone confidence
+  final double undertoneConfidence;
 
   const FaceProfile({
     required this.skinTone,
@@ -25,6 +28,8 @@ class FaceProfile {
     required this.avgG,
     required this.avgB,
     required this.skinConfidence,
+    // ✅ ADDED: New parameter
+    this.undertoneConfidence = 0.7,
   });
 
   static FaceShape classifyFaceShape(Face face) {
@@ -36,11 +41,29 @@ class FaceProfile {
     return FaceShape.square;
   }
 
+  // ✅ ADDED: Helper method to calculate undertone confidence
+  static double _calculateUndertoneConfidence(SkinAnalysisResult a) {
+    final r = a.avgR;
+    final g = a.avgG;
+    final b = a.avgB;
+    
+    // Calculate how distinct the RGB values are
+    final maxValue = max(r, max(g, b));
+    final minValue = min(r, min(g, b));
+    final range = maxValue - minValue;
+    
+    // Normalize to 0-1 scale
+    final rawConfidence = range / 255.0;
+    
+    // Map to reasonable range: 0.4 to 0.9
+    return 0.4 + rawConfidence * 0.5;
+  }
+
   static FaceProfile fromAnalysis(Face face, SkinAnalysisResult a) {
-    final shape = classifyFaceShape(face);
+    // ✅ FIXED: Call static method correctly
+    final shape = FaceProfile.classifyFaceShape(face);
 
     // Optional: very rough heart detection if forehead/jaw differs
-    // (you can upgrade this later using contours)
     FaceShape refined = shape;
     if (shape == FaceShape.oval) {
       refined = FaceShape.oval;
@@ -54,6 +77,8 @@ class FaceProfile {
       avgG: a.avgG,
       avgB: a.avgB,
       skinConfidence: a.confidence,
+      // ✅ FIXED: Call helper method correctly
+      undertoneConfidence: FaceProfile._calculateUndertoneConfidence(a),
     );
   }
 }
@@ -118,7 +143,7 @@ class LookEngine {
       FaceShape.square =>
         'Blush: Focus blush on the apples to soften the jawline.',
       FaceShape.heart =>
-        'Blush: Apply in a “C” shape from cheekbones toward temples for balance.',
+        'Blush: Apply in a "C" shape from cheekbones toward temples for balance.',
       FaceShape.unknown =>
         'Blush: Apply on the apples and blend upward softly.',
     };
