@@ -5,6 +5,9 @@ import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 import 'look_engine.dart'; // for FaceShape
 
+// ✅ 1) Add enum at the top of file
+enum LipFinish { matte, glossy }
+
 class MakeupOverlayPainter extends CustomPainter {
   final ui.Image image;
   final Face face;
@@ -19,6 +22,9 @@ class MakeupOverlayPainter extends CustomPainter {
   /// For face-shape-aware placement
   final FaceShape faceShape;
 
+  // ✅ 2) Add field
+  final LipFinish lipFinish;
+
   MakeupOverlayPainter({
     required this.image,
     required this.face,
@@ -27,7 +33,93 @@ class MakeupOverlayPainter extends CustomPainter {
     required this.eyeshadowColor,
     required this.intensity,
     required this.faceShape,
+    // ✅ 2) Add to constructor with default value
+    this.lipFinish = LipFinish.glossy,
   });
+
+  // ---------- EYELINER HELPERS ----------
+  Path _catmullRomToBezierPath(List<ui.Offset> pts, {double tension = 0.5}) {
+    if (pts.length < 2) return Path();
+
+    // Clamp tension: 0..1
+    final t = tension.clamp(0.0, 1.0);
+
+    // Duplicate endpoints for boundary conditions
+    ui.Offset p(int i) {
+      if (i < 0) return pts.first;
+      if (i >= pts.length) return pts.last;
+      return pts[i];
+    }
+
+    final path = Path()..moveTo(pts.first.dx, pts.first.dy);
+
+    for (int i = 0; i < pts.length - 1; i++) {
+      final p0 = p(i - 1);
+      final p1 = p(i);
+      final p2 = p(i + 1);
+      final p3 = p(i + 2);
+
+      // Catmull-Rom to Bezier conversion
+      final c1 = ui.Offset(
+        p1.dx + (p2.dx - p0.dx) * (t / 6.0),
+        p1.dy + (p2.dy - p0.dy) * (t / 6.0),
+      );
+      final c2 = ui.Offset(
+        p2.dx - (p3.dx - p1.dx) * (t / 6.0),
+        p2.dy - (p3.dy - p1.dy) * (t / 6.0),
+      );
+
+      path.cubicTo(c1.dx, c1.dy, c2.dx, c2.dy, p2.dx, p2.dy);
+    }
+
+    return path;
+  }
+
+  List<ui.Offset> _upperLidPoints(List<ui.Offset> eyePts) {
+    // Split points into upper half using midpoint Y
+    double minY = eyePts.first.dy, maxY = eyePts.first.dy;
+    double minX = eyePts.first.dx, maxX = eyePts.first.dx;
+
+    for (final p in eyePts.skip(1)) {
+      minY = min(minY, p.dy);
+      maxY = max(maxY, p.dy);
+      minX = min(minX, p.dx);
+      maxX = max(maxX, p.dx);
+    }
+
+    final centerY = (minY + maxY) / 2.0;
+
+    // Upper lid = points above centerY
+    final upper = eyePts.where((p) => p.dy <= centerY).toList();
+    if (upper.length < 3) return [];
+
+    // Keep only points that are roughly on the lid (removes weird jumps)
+    upper.sort((a, b) => a.dx.compareTo(b.dx));
+
+    // Light downsample to reduce jitter (keeps shape)
+    final filtered = <ui.Offset>[];
+    for (int i = 0; i < upper.length; i++) {
+      if (i == 0 || i == upper.length - 1 || i % 2 == 0) {
+        filtered.add(upper[i]);
+      }
+    }
+
+    return filtered;
+  }
+
+  double _eyeOpennessRatio(List<ui.Offset> eyePts) {
+    double minY = eyePts.first.dy, maxY = eyePts.first.dy;
+    double minX = eyePts.first.dx, maxX = eyePts.first.dx;
+    for (final p in eyePts.skip(1)) {
+      minY = min(minY, p.dy);
+      maxY = max(maxY, p.dy);
+      minX = min(minX, p.dx);
+      maxX = max(maxX, p.dx);
+    }
+    final w = max(1.0, maxX - minX);
+    final h = max(1.0, maxY - minY);
+    return h / w; // bigger = more open
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -63,24 +155,156 @@ class MakeupOverlayPainter extends CustomPainter {
       return path;
     }
 
+    // ✅ 4) Replace the whole lipstick section with this COMPLETE block
     // ---------------------------
-    // 1) LIPSTICK (soft fill)
+    // 1) LIPSTICK (Natural Gradient + Texture)
+    // - darker inside, softer edges
+    // - matte grain OR glossy shine
     // ---------------------------
-    final lipPaint = Paint()
-      ..color = lipstickColor.withOpacity(0.75 * k)
-      ..style = PaintingStyle.fill
-      ..isAntiAlias = true;
 
-    void drawLip(FaceContourType t) {
+    void drawLipNatural(FaceContourType t) {
       final pts = contourPoints(t);
       if (pts == null) return;
-      canvas.drawPath(pathFromPoints(pts), lipPaint);
+
+      final lipPath = pathFromPoints(pts);
+      final rect = boundsOf(pts);
+
+      // A) Base soft fill
+      final basePaint = Paint()
+        ..color = lipstickColor.withOpacity(0.30 * k)
+        ..style = PaintingStyle.fill
+        ..isAntiAlias = true;
+      canvas.drawPath(lipPath, basePaint);
+
+      // B) Inner depth gradient (darker center, soft edges)
+      final innerShader = ui.Gradient.radial(
+        rect.center,
+        (rect.width + rect.height) * 0.55,
+        [
+          // darker inside
+          Color.lerp(Colors.black, lipstickColor, 0.78)!.withOpacity(0.55 * k),
+          lipstickColor.withOpacity(0.28 * k),
+          lipstickColor.withOpacity(0.10 * k),
+          lipstickColor.withOpacity(0.0),
+        ],
+        [0.0, 0.45, 0.78, 1.0],
+      );
+
+      final innerPaint = Paint()
+        ..shader = innerShader
+        ..blendMode = BlendMode.multiply
+        ..style = PaintingStyle.fill
+        ..isAntiAlias = true
+        ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 6);
+
+      canvas.drawPath(lipPath, innerPaint);
+
+      // C) Edge feathering (removes polygon edges)
+      final edgePaint = Paint()
+        ..color = lipstickColor.withOpacity(0.22 * k)
+        ..style = PaintingStyle.stroke
+        ..strokeJoin = StrokeJoin.round
+        ..strokeCap = StrokeCap.round
+        ..isAntiAlias = true
+        ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 10)
+        ..strokeWidth = (rect.height * 0.25).clamp(3.5, 10.0);
+
+      canvas.drawPath(lipPath, edgePaint);
+
+      // D) Texture simulation — clip to lip path
+      canvas.save();
+      canvas.clipPath(lipPath);
+
+      if (lipFinish == LipFinish.matte) {
+        // Matte = subtle grain (very light)
+        final rand = Random(1337 + rect.left.round() + rect.top.round());
+        final area = rect.width * rect.height;
+        final dotCount = (area / 120).clamp(80, 260).toInt();
+
+        for (int i = 0; i < dotCount; i++) {
+          final x = rect.left + rand.nextDouble() * rect.width;
+          final y = rect.top + rand.nextDouble() * rect.height;
+
+          final r = (0.35 + rand.nextDouble() * 0.85) * k;
+          final isLight = rand.nextBool();
+
+          final p = Paint()
+            ..color = (isLight ? Colors.white : Colors.black).withOpacity(0.018 * k)
+            ..blendMode = BlendMode.overlay
+            ..isAntiAlias = true;
+
+          canvas.drawCircle(ui.Offset(x, y), r, p);
+        }
+
+        // Powder veil
+        final matteVeil = Paint()
+          ..color = Colors.white.withOpacity(0.03 * k)
+          ..blendMode = BlendMode.softLight
+          ..isAntiAlias = true
+          ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 6);
+
+        canvas.drawRect(rect.inflate(2), matteVeil);
+      } else {
+        // Glossy = curved shine + bloom
+        final shineStroke = Paint()
+          ..color = Colors.white.withOpacity(0.12 * k)
+          ..blendMode = BlendMode.screen
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..isAntiAlias = true
+          ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 8)
+          ..strokeWidth = (rect.height * 0.10).clamp(1.5, 5.0);
+
+        // Shine line 1
+        final s1 = Path()
+          ..moveTo(rect.left + rect.width * 0.18, rect.top + rect.height * 0.52)
+          ..quadraticBezierTo(
+            rect.left + rect.width * 0.46,
+            rect.top + rect.height * 0.30,
+            rect.left + rect.width * 0.78,
+            rect.top + rect.height * 0.46,
+          );
+
+        // Shine line 2 (smaller)
+        final s2 = Path()
+          ..moveTo(rect.left + rect.width * 0.22, rect.top + rect.height * 0.68)
+          ..quadraticBezierTo(
+            rect.left + rect.width * 0.50,
+            rect.top + rect.height * 0.52,
+            rect.left + rect.width * 0.72,
+            rect.top + rect.height * 0.64,
+          );
+
+        canvas.drawPath(s1, shineStroke);
+        canvas.drawPath(s2, shineStroke);
+
+        // Specular bloom (soft spot highlight)
+        final bloom = Paint()
+          ..shader = ui.Gradient.radial(
+            ui.Offset(rect.left + rect.width * 0.62, rect.top + rect.height * 0.44),
+            max(rect.width, rect.height) * 0.55,
+            [
+              Colors.white.withOpacity(0.10 * k),
+              Colors.white.withOpacity(0.0),
+            ],
+            [0.0, 1.0],
+          )
+          ..blendMode = BlendMode.screen
+          ..isAntiAlias = true
+          ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 12);
+
+        canvas.drawRect(rect.inflate(4), bloom);
+      }
+
+      canvas.restore();
     }
 
-    drawLip(FaceContourType.upperLipTop);
-    drawLip(FaceContourType.upperLipBottom);
-    drawLip(FaceContourType.lowerLipTop);
-    drawLip(FaceContourType.lowerLipBottom);
+    // Use the upgraded lip draw for all lip contours
+    drawLipNatural(FaceContourType.upperLipTop);
+    drawLipNatural(FaceContourType.upperLipBottom);
+    drawLipNatural(FaceContourType.lowerLipTop);
+    drawLipNatural(FaceContourType.lowerLipBottom);
 
     // ---------------------------
     // 2) EYESHADOW (eyelid region)
@@ -138,48 +362,171 @@ class MakeupOverlayPainter extends CustomPainter {
     drawEyelidShadow(FaceContourType.rightEye);
 
     // ---------------------------
-    // 3) EYELINER (thin line along upper lash)
+    // 3) EYELINER (UPGRADED VERSION)
     // ---------------------------
     void drawEyeliner(FaceContourType eyeType) {
-      final eyePts = contourPoints(eyeType);
-      if (eyePts == null) return;
+      final eyePtsRaw = contourPoints(eyeType);
+      if (eyePtsRaw == null || eyePtsRaw.length < 6) return;
 
-      final eyeBounds = boundsOf(eyePts);
-      final centerY = (eyeBounds.top + eyeBounds.bottom) / 2;
+      final box = face.boundingBox;
+      final faceCenterX = box.left + box.width * 0.5;
 
-      // Use upper half points as lash line approximation
-      final upperPts = eyePts.where((p) => p.dy <= centerY).toList();
-      if (upperPts.length < 3) return;
+      // Get upper lid points
+      final upper = _upperLidPoints(eyePtsRaw);
+      if (upper.length < 4) return;
 
-      // Smooth polyline
-      final path = Path()..moveTo(upperPts.first.dx, upperPts.first.dy);
-      for (final p in upperPts.skip(1)) {
-        path.lineTo(p.dx, p.dy);
-      }
+      // Slightly lift liner up so it doesn't touch the eyeball
+      final lift = max(0.8, (box.height * 0.003));
+      final upperLifted = upper.map((p) => ui.Offset(p.dx, p.dy - lift)).toList();
 
-      final linerPaint = Paint()
-        ..color = Colors.black.withOpacity(0.70 * k)
+      // Build smooth bezier path
+      final linerPath = _catmullRomToBezierPath(upperLifted, tension: 0.75);
+
+      // Eye bounds for thickness scaling
+      final eyeBounds = boundsOf(eyePtsRaw);
+      final openness = _eyeOpennessRatio(eyePtsRaw);
+
+      // Adaptive thickness based on eye size (clamped)
+      final baseW = (eyeBounds.height * 0.085).clamp(1.2, 4.2).toDouble();
+
+      // ---------- Tightline blur (blended lash line) ----------
+      final blurPaint = Paint()
+        ..color = Colors.black.withOpacity(0.18 * k)
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
         ..isAntiAlias = true
-        ..strokeWidth = max(1.2, eyeBounds.height * 0.10);
+        ..strokeWidth = baseW * 2.2
+        ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 10);
 
-      canvas.drawPath(path, linerPaint);
+      canvas.drawPath(linerPath, blurPaint);
 
-      // Small wing
-      final last = upperPts.last;
-      final wing = ui.Offset(last.dx + eyeBounds.width * 0.18, last.dy - eyeBounds.height * 0.12);
-      final wingPath = Path()
-        ..moveTo(last.dx, last.dy)
-        ..lineTo(wing.dx, wing.dy);
-
-      final wingPaint = Paint()
-        ..color = Colors.black.withOpacity(0.70 * k)
+      // 🪄 Optional: Lash density illusion (subtle lash root darkening)
+      final lashShadowPaint = Paint()
+        ..color = Colors.black.withOpacity(0.10 * k)
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
         ..isAntiAlias = true
-        ..strokeWidth = max(1.0, eyeBounds.height * 0.08);
+        ..strokeWidth = baseW * 0.9;
+
+      canvas.drawPath(linerPath.shift(const Offset(0, 1)), lashShadowPaint);
+
+      // ---------- Main crisp liner stroke ----------
+      final linerPaint = Paint()
+        ..color = Colors.black.withOpacity(0.62 * k)
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..isAntiAlias = true
+        ..strokeWidth = baseW;
+
+      canvas.drawPath(linerPath, linerPaint);
+
+      // ---------- Wing gating logic ----------
+      // 1) Don't add wing if eyes are too closed/squinting
+      // Typical openness range varies, but below ~0.16 tends to look closed in MLKit contours
+      final allowByOpenness = openness > 0.16;
+
+      // 2) Don't add wing if head is rotated too much
+      final yaw = face.headEulerAngleY ?? 0.0;
+      final roll = face.headEulerAngleZ ?? 0.0;
+      final allowByPose = yaw.abs() < 18 && roll.abs() < 22;
+
+      // 3) Determine true "outer corner" direction using face center
+      // Outer corner = farthest from face center in X direction
+      ui.Offset outerCorner = upperLifted.first;
+      ui.Offset innerCorner = upperLifted.last;
+
+      double bestOuter = -1;
+      double bestInner = -1;
+
+      for (final p in upperLifted) {
+        final dx = (p.dx - faceCenterX).abs();
+        if (dx > bestOuter) {
+          bestOuter = dx;
+          outerCorner = p;
+        }
+      }
+
+      for (final p in upperLifted) {
+        final dx = (p.dx - faceCenterX).abs();
+        // inner corner tends to be closer to face center horizontally
+        final inv = 999999 - dx;
+        if (inv > bestInner) {
+          bestInner = inv;
+          innerCorner = p;
+        }
+      }
+
+      final outwardSign = (outerCorner.dx - faceCenterX).sign;
+      if (outwardSign == 0) return;
+
+      // 4) Prevent wrong-direction wing by checking segment direction
+      // Use last segment direction along the lid in outward direction
+      upperLifted.sort((a, b) => a.dx.compareTo(b.dx));
+      final ordered = upperLifted;
+
+      // Pick endpoints based on outwardSign
+      final endIdx = outwardSign > 0 ? ordered.length - 1 : 0;
+      final prevIdx = outwardSign > 0 ? ordered.length - 2 : 1;
+
+      final end = ordered[endIdx];
+      final prev = ordered[prevIdx];
+
+      final lidDir = ui.Offset(end.dx - prev.dx, end.dy - prev.dy);
+
+      // Wing should go outward (same sign as outwardSign)
+      final wingDirOutwardOk = lidDir.dx.sign == outwardSign;
+
+      // 5) Optional: only wing if outer corner is not drooping heavily
+      // If outer is much lower than inner, wing can look weird
+      final droop = (outerCorner.dy - innerCorner.dy);
+      final allowByShape = droop < eyeBounds.height * 0.35;
+
+      final allowWing = allowByOpenness && allowByPose && wingDirOutwardOk && allowByShape;
+
+      if (!allowWing) return;
+
+      // ---------- Draw subtle micro-wing ----------
+      // Smaller wing for natural realism
+      final wingLen = (eyeBounds.width * 0.14).clamp(3.0, 14.0).toDouble();
+      final wingUp = (eyeBounds.height * 0.10).clamp(1.5, 10.0).toDouble();
+
+      final wingEnd = ui.Offset(
+        end.dx + outwardSign * wingLen,
+        end.dy - wingUp,
+      );
+
+      final wingPath = Path()
+        ..moveTo(end.dx, end.dy)
+        ..quadraticBezierTo(
+          end.dx + outwardSign * (wingLen * 0.55),
+          end.dy - (wingUp * 0.65),
+          wingEnd.dx,
+          wingEnd.dy,
+        );
+
+      // Wing blur blend first
+      final wingBlur = Paint()
+        ..color = Colors.black.withOpacity(0.16 * k)
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..isAntiAlias = true
+        ..strokeWidth = baseW * 2.0
+        ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 10);
+
+      canvas.drawPath(wingPath, wingBlur);
+
+      // Then crisp wing
+      final wingPaint = Paint()
+        ..color = Colors.black.withOpacity(0.60 * k)
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..isAntiAlias = true
+        ..strokeWidth = baseW * 0.95;
 
       canvas.drawPath(wingPath, wingPaint);
     }
@@ -390,6 +737,7 @@ class MakeupOverlayPainter extends CustomPainter {
         oldDelegate.blushColor != blushColor ||
         oldDelegate.eyeshadowColor != eyeshadowColor ||
         oldDelegate.intensity != intensity ||
-        oldDelegate.faceShape != faceShape;
+        oldDelegate.faceShape != faceShape ||
+        oldDelegate.lipFinish != lipFinish; // ✅ Add lipFinish check
   }
 }

@@ -64,6 +64,9 @@ class _FaceScanPageState extends State<FaceScanPage> {
   // ✅ User-controlled intensity (opacity) for makeup overlay
   double _intensity = 0.75;
 
+  // ✅ 2) Add state variable for lip finish
+  LipFinish _lipFinish = LipFinish.matte;
+
   // ✅ Day 2: Post-scan quality feedback
   List<String> _warnings = [];
   static const double _minConfidenceOk = 0.45;
@@ -526,6 +529,7 @@ class _FaceScanPageState extends State<FaceScanPage> {
       _look = null;
       _warnings = [];
       _intensity = 0.75;
+      _lipFinish = LipFinish.matte; // Reset to matte when capturing new photo
     });
 
     try {
@@ -747,7 +751,8 @@ class _FaceScanPageState extends State<FaceScanPage> {
                               blushColor: _look!.blushColor,
                               eyeshadowColor: _look!.eyeshadowColor,
                               intensity: _intensity,
-                              faceShape: _faceProfile?.faceShape ?? FaceShape.unknown,
+                              faceShape: _faceProfile!.faceShape,
+                              lipFinish: _lipFinish, // ✅ 4) Pass lip finish
                             ),
                           ),
                         ),
@@ -775,6 +780,28 @@ class _FaceScanPageState extends State<FaceScanPage> {
                         ],
                       ),
                     ),
+
+                  // ✅ 3) Add lip finish toggle UI
+                  if (_faceProfile != null && _look != null) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Text('Lip Finish'),
+                        const SizedBox(width: 12),
+                        ChoiceChip(
+                          label: const Text('Matte'),
+                          selected: _lipFinish == LipFinish.matte,
+                          onSelected: (_) => setState(() => _lipFinish = LipFinish.matte),
+                        ),
+                        const SizedBox(width: 8),
+                        ChoiceChip(
+                          label: const Text('Glossy'),
+                          selected: _lipFinish == LipFinish.glossy,
+                          onSelected: (_) => setState(() => _lipFinish = LipFinish.glossy),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             )
