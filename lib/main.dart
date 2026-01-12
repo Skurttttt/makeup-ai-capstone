@@ -1,6 +1,8 @@
+// lib/main.dart
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+
 import 'skin_analyzer.dart';
 
 import 'package:camera/camera.dart';
@@ -13,6 +15,7 @@ import 'package:flutter/services.dart';
 import 'instructions_page.dart';
 import 'look_engine.dart';
 import 'makeup_overlay_painter.dart';
+import 'utils.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -64,13 +67,16 @@ class _FaceScanPageState extends State<FaceScanPage> {
   // ✅ User-controlled intensity (opacity) for makeup overlay
   double _intensity = 0.75;
 
-  // ✅ 2) Add state variable for lip finish
+  // ✅ Lip finish toggle
   LipFinish _lipFinish = LipFinish.matte;
 
   // ✅ Day 2: Post-scan quality feedback
   List<String> _warnings = [];
   static const double _minConfidenceOk = 0.45;
   static const double _minConfidenceGood = 0.60;
+
+  // ✅ NEW: captured-image scene luminance (0..1)
+  double _sceneLuminance = 0.50;
 
   // ===== Live scan quality (Day 2 upgrade) =====
   bool _liveRunning = false;
@@ -79,21 +85,20 @@ class _FaceScanPageState extends State<FaceScanPage> {
 
   String _liveQualityLabel = 'Point camera at your face…';
   List<String> _liveWarnings = [];
-  double _liveBrightness = 0.0; // 0..255 approx
-  
-  // ✅ Step 1: Add 2 toggles (Rotation + UV Swap)
+  double _liveBrightness = 0.0;
+
+  // ✅ Rotation + UV Swap toggles
   InputImageRotation _liveRotation = InputImageRotation.rotation90deg;
-  bool _swapUV = false; // 👈 key fix for Poco/Xiaomi sometimes
-  
-  // ✅ Step 4: Add persistence for face detection
+  bool _swapUV = false;
+
+  // ✅ Persistence for face detection
   int _noFaceStreak = 0;
   Face? _lastDetectedFace;
 
-  // ✅ Step 5: Make live detection less strict
   late final FaceDetector _liveFaceDetector = FaceDetector(
     options: FaceDetectorOptions(
       performanceMode: FaceDetectorMode.fast,
-      minFaceSize: 0.05, // ✅ very forgiving for live
+      minFaceSize: 0.05,
       enableContours: false,
       enableLandmarks: false,
       enableClassification: false,
@@ -129,7 +134,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
       await controller.initialize();
       if (!mounted) return;
       setState(() => _controller = controller);
-      // ✅ Start live quality analysis after camera initializes
       await _startLiveQuality(controller);
     } catch (e) {
       setState(() => _status = 'Camera init error: $e');
@@ -152,7 +156,40 @@ class _FaceScanPageState extends State<FaceScanPage> {
     return frame.image;
   }
 
-  // ✅ Convert YUV420 to NV21 (Most reliable for ML Kit)
+  // ✅ NEW: Estimate scene luminance from captured ui.Image (0..1)
+  Future<double> _estimateSceneLuminance(ui.Image image) async {
+    final bd = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    if (bd == null) return 0.50;
+
+    final bytes = bd.buffer.asUint8List();
+    final w = image.width;
+    final h = image.height;
+
+    // sample grid (fast)
+    const step = 20; // larger = faster
+    double sum = 0.0;
+    int count = 0;
+
+    for (int y = 0; y < h; y += step) {
+      for (int x = 0; x < w; x += step) {
+        final i = (y * w + x) * 4;
+        if (i + 2 >= bytes.length) continue;
+
+        final r = bytes[i] / 255.0;
+        final g = bytes[i + 1] / 255.0;
+        final b = bytes[i + 2] / 255.0;
+
+        // simple luminance
+        final l = (0.2126 * r + 0.7152 * g + 0.0722 * b);
+        sum += l;
+        count++;
+      }
+    }
+
+    if (count == 0) return 0.50;
+    return (sum / count).clamp(0.0, 1.0);
+  }
+
   Uint8List _yuv420ToNv21(CameraImage image) {
     final int width = image.width;
     final int height = image.height;
@@ -169,7 +206,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
 
     int index = 0;
 
-    // ---- Copy Y plane ----
     for (int row = 0; row < height; row++) {
       final int yRowStart = row * yRowStride;
       for (int col = 0; col < width; col++) {
@@ -177,8 +213,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
       }
     }
 
-    // ✅ Step 2 — Update your NV21 converter to allow swapping
-    // ---- Copy UV as VU (NV21) ----
     final int uvHeight = height ~/ 2;
     final int uvWidth = width ~/ 2;
 
@@ -191,12 +225,10 @@ class _FaceScanPageState extends State<FaceScanPage> {
         final v = vPlane[uvIndex];
 
         if (_swapUV) {
-          // some devices label planes reversed
           nv21[index++] = u; // treat U as V
           nv21[index++] = v; // treat V as U
         } else {
-          // normal NV21: V then U
-          nv21[index++] = v;
+          nv21[index++] = v; // NV21: V then U
           nv21[index++] = u;
         }
       }
@@ -205,21 +237,16 @@ class _FaceScanPageState extends State<FaceScanPage> {
     return nv21;
   }
 
-  // ✅ Create InputImage from NV21 (Most stable for Android)
   InputImage _inputImageFromCameraImageNv21(CameraImage image) {
-    // Must be YUV420 with 3 planes on Android
     if (image.format.group != ImageFormatGroup.yuv420 || image.planes.length != 3) {
       throw Exception('Unsupported camera stream: group=${image.format.group}, planes=${image.planes.length}');
     }
 
     final bytes = _yuv420ToNv21(image);
 
-    // ✅ Step 3 — Use your rotation variable (not constant)
-    final rotation = _liveRotation;
-
     final metadata = InputImageMetadata(
       size: Size(image.width.toDouble(), image.height.toDouble()),
-      rotation: rotation,
+      rotation: _liveRotation,
       format: InputImageFormat.nv21,
       bytesPerRow: image.width,
     );
@@ -227,33 +254,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
     return InputImage.fromBytes(bytes: bytes, metadata: metadata);
   }
 
-  // ✅ Simple version for captured images
-  InputImage _inputImageFromCameraImage(CameraImage image, CameraDescription camera) {
-    final format = InputImageFormatValue.fromRawValue(image.format.raw);
-    if (format == null) {
-      throw Exception('Unsupported image format: ${image.format.raw}');
-    }
-
-    // Use a fixed portrait rotation (stable for most front cameras)
-    final rotation = InputImageRotation.rotation90deg;
-
-    final bytes = WriteBuffer();
-    for (final plane in image.planes) {
-      bytes.putUint8List(plane.bytes);
-    }
-    final allBytes = bytes.done().buffer.asUint8List();
-
-    final inputImageData = InputImageMetadata(
-      size: Size(image.width.toDouble(), image.height.toDouble()),
-      rotation: rotation,
-      format: format,
-      bytesPerRow: image.planes[0].bytesPerRow,
-    );
-
-    return InputImage.fromBytes(bytes: allBytes, metadata: inputImageData);
-  }
-
-  // ✅ Lighting estimator (fast)
   double _estimateBrightness(CameraImage image) {
     final yPlane = image.planes[0].bytes;
     if (yPlane.isEmpty) return 0;
@@ -276,14 +276,12 @@ class _FaceScanPageState extends State<FaceScanPage> {
     return 'Very bright';
   }
 
-  // ✅ Face near edge detection (FIXED - using center-based approach)
   bool _isFaceNearEdge(Face face, int imgW, int imgH) {
     final b = face.boundingBox;
 
     final cx = (b.left + b.right) / 2;
     final cy = (b.top + b.bottom) / 2;
 
-    // safe zone = middle 70% of screen (15% margin each side)
     final marginX = imgW * 0.15;
     final marginY = imgH * 0.15;
 
@@ -293,7 +291,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
     return !(insideX && insideY);
   }
 
-  // ✅ Live warning builder (framing + lighting)
   List<String> _buildLiveWarnings({
     required Face? face,
     required int imgW,
@@ -302,7 +299,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
   }) {
     final warnings = <String>[];
 
-    // Lighting tips
     if (brightness < 60) {
       warnings.add('Too dark. Move to a brighter area or face a light source.');
     } else if (brightness < 90) {
@@ -311,23 +307,19 @@ class _FaceScanPageState extends State<FaceScanPage> {
       warnings.add('Very bright. Avoid harsh light directly hitting the face.');
     }
 
-    // Face tips
     if (face == null) {
       warnings.add('No face detected. Face the camera and remove obstructions.');
       return warnings;
     }
 
-    // ✅ Step 3: Reduce face too small threshold even more for live
     final faceArea = face.boundingBox.width * face.boundingBox.height;
     final imgArea = imgW * imgH;
     final ratio = faceArea / imgArea;
-    if (ratio < 0.04) { // ✅ Lowered even more for very small faces in live view
+    if (ratio < 0.04) {
       warnings.add('Move closer. Your face is too small in the frame.');
     }
 
-    // ✅ FIXED: Use proper center-based edge detection
-    final nearEdge = _isFaceNearEdge(face, imgW, imgH);
-    if (nearEdge) {
+    if (_isFaceNearEdge(face, imgW, imgH)) {
       warnings.add("Center your face. It's too close to the edge.");
     }
 
@@ -340,7 +332,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
     return 'Low ⚠️';
   }
 
-  // ✅ Start live streaming analysis with NV21 conversion
   Future<void> _startLiveQuality(CameraController controller) async {
     if (_liveRunning) return;
     _liveRunning = true;
@@ -348,33 +339,26 @@ class _FaceScanPageState extends State<FaceScanPage> {
     await controller.startImageStream((CameraImage image) async {
       if (!_liveRunning) return;
 
-      // throttle
       final now = DateTime.now();
       if (now.difference(_lastLiveTick) < _liveInterval) return;
       _lastLiveTick = now;
 
       try {
         final brightness = _estimateBrightness(image);
-        
-        // ✅ Use NV21 conversion for live stream
         final input = _inputImageFromCameraImageNv21(image);
-        
         final faces = await _liveFaceDetector.processImage(input);
 
-        // ✅ Step 1: Add debug logging
         debugPrint('LIVE faces: ${faces.length}  img=${image.width}x${image.height}  rotation=$_liveRotation  swapUV=$_swapUV');
 
-        // ✅ Step 4: Implement persistence for face detection
         Face? face;
         if (faces.isNotEmpty) {
           faces.sort((a, b) => (b.boundingBox.width * b.boundingBox.height)
               .compareTo(a.boundingBox.width * a.boundingBox.height));
           face = faces.first;
           _lastDetectedFace = face;
-          _noFaceStreak = 0; // Reset streak when face is detected
+          _noFaceStreak = 0;
         } else {
           _noFaceStreak++;
-          // ✅ Use last detected face if streak is low (for smoother UI)
           if (_noFaceStreak < 3 && _lastDetectedFace != null) {
             face = _lastDetectedFace;
           }
@@ -410,7 +394,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
     });
   }
 
-  // ✅ Stop live stream
   Future<void> _stopLiveQuality() async {
     _liveRunning = false;
     try {
@@ -418,7 +401,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
     } catch (_) {}
   }
 
-  // ✅ Add this function: Check if capture is allowed
   bool _canCaptureNow() {
     final severe = _liveWarnings.any((w) =>
         w.toLowerCase().contains('too dark') ||
@@ -438,7 +420,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
     );
   }
 
-  // ✅ Toggle functions
   void _toggleLiveRotation() {
     setState(() {
       _liveRotation = _liveRotation == InputImageRotation.rotation90deg
@@ -453,16 +434,14 @@ class _FaceScanPageState extends State<FaceScanPage> {
     });
   }
 
-  // Post-scan quality feedback helpers
   bool _isFaceTooSmall(Face face, int imgW, int imgH) {
     final box = face.boundingBox;
     final faceArea = box.width * box.height;
     final imageArea = imgW * imgH;
     final ratio = faceArea / imageArea;
-    return ratio < 0.12; // Less than 12% of image area
+    return ratio < 0.12;
   }
 
-  // ✅ Use the same improved edge detection for post-scan warnings
   bool _isFaceNearEdges(Face face, int imgW, int imgH) {
     return _isFaceNearEdge(face, imgW, imgH);
   }
@@ -475,17 +454,14 @@ class _FaceScanPageState extends State<FaceScanPage> {
   }) {
     final warnings = <String>[];
 
-    // Face size warning
     if (_isFaceTooSmall(face, imgW, imgH)) {
       warnings.add('Move closer for better analysis');
     }
 
-    // Face position warning (using improved detection)
     if (_isFaceNearEdges(face, imgW, imgH)) {
       warnings.add('Center your face in the frame');
     }
 
-    // Skin confidence warning
     if (profile.skinConfidence < _minConfidenceOk) {
       if (profile.skinConfidence < 0.3) {
         warnings.add('Poor lighting—try brighter light');
@@ -494,7 +470,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
       }
     }
 
-    // Undertone low confidence
     if (profile.undertoneConfidence < 0.5) {
       warnings.add('Undertone detection uncertain');
     }
@@ -509,7 +484,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
   }
 
   Future<void> _captureAndScan() async {
-    // ✅ Enforce capture gate
     if (!_canCaptureNow()) {
       _showCaptureBlockedMessage();
       return;
@@ -529,24 +503,26 @@ class _FaceScanPageState extends State<FaceScanPage> {
       _look = null;
       _warnings = [];
       _intensity = 0.75;
-      _lipFinish = LipFinish.matte; // Reset to matte when capturing new photo
+      _lipFinish = LipFinish.matte;
+      _sceneLuminance = 0.50;
     });
 
     try {
-      // Stop live stream BEFORE taking picture
       await _stopLiveQuality();
 
-      // Capture
       final file = await controller.takePicture();
       final uiImage = await _loadUiImageFromFile(file.path);
+
+      // ✅ NEW: compute scene luminance from captured still
+      final sceneL = await _estimateSceneLuminance(uiImage);
 
       setState(() {
         _capturedFile = file;
         _capturedUiImage = uiImage;
+        _sceneLuminance = sceneL;
         _status = 'Detecting face…';
       });
 
-      // ML Kit detection
       final inputImage = InputImage.fromFilePath(file.path);
       final faces = await _faceDetector.processImage(inputImage);
 
@@ -555,19 +531,16 @@ class _FaceScanPageState extends State<FaceScanPage> {
         return;
       }
 
-      // Choose largest face
       faces.sort((a, b) => (b.boundingBox.width * b.boundingBox.height)
           .compareTo(a.boundingBox.width * a.boundingBox.height));
       final face = faces.first;
 
-      // Skin Analysis Integration
       setState(() => _status = 'Analyzing skin tone…');
 
       final skin = await SkinAnalyzer.analyze(uiImage, face);
       final profile = FaceProfile.fromAnalysis(face, skin);
       final look = LookEngine.recommendLook(profile);
 
-      // Compute warnings
       final warnings = _buildWarnings(
         face: face,
         profile: profile,
@@ -586,7 +559,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
       setState(() => _status = 'Error: $e');
     } finally {
       setState(() => _busy = false);
-      // Restart live quality after capturing
       final c = _controller;
       if (c != null && c.value.isInitialized) {
         await _startLiveQuality(c);
@@ -623,7 +595,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
                 : Stack(
                     children: [
                       CameraPreview(controller),
-                      // ✅ Show the live quality banner on the camera preview
                       Align(
                         alignment: Alignment.topCenter,
                         child: Padding(
@@ -646,7 +617,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
                                         style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
                                       ),
                                     ),
-                                    // ✅ Show current rotation status
                                     TextButton(
                                       onPressed: _toggleLiveRotation,
                                       style: TextButton.styleFrom(
@@ -677,8 +647,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
                           ),
                         ),
                       ),
-                      
-                      // ✅ Step 4 — Add 2 buttons so you can test instantly
                       Align(
                         alignment: Alignment.topCenter,
                         child: Padding(
@@ -715,7 +683,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
                           ),
                         ),
                       ),
-                      
                       if (_busy)
                         const Align(
                           alignment: Alignment.topCenter,
@@ -728,7 +695,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
                   ),
           ),
 
-          // Preview section (captured image + overlay)
           if (showPreview)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
@@ -752,7 +718,15 @@ class _FaceScanPageState extends State<FaceScanPage> {
                               eyeshadowColor: _look!.eyeshadowColor,
                               intensity: _intensity,
                               faceShape: _faceProfile!.faceShape,
-                              lipFinish: _lipFinish, // ✅ 4) Pass lip finish
+                              lipFinish: _lipFinish,
+                              skinColor: Color.fromARGB(
+                                255,
+                                _faceProfile!.avgR,
+                                _faceProfile!.avgG,
+                                _faceProfile!.avgB,
+                              ),
+                              // ✅ NEW: pass scene luminance (0..1)
+                              sceneLuminance: _sceneLuminance,
                             ),
                           ),
                         ),
@@ -760,7 +734,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
                     ),
                   ),
 
-                  // Slider
                   if (showSlider)
                     Padding(
                       padding: const EdgeInsets.only(top: 10),
@@ -781,7 +754,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
                       ),
                     ),
 
-                  // ✅ 3) Add lip finish toggle UI
                   if (_faceProfile != null && _look != null) ...[
                     const SizedBox(height: 8),
                     Row(
@@ -811,14 +783,12 @@ class _FaceScanPageState extends State<FaceScanPage> {
               child: Text(_status),
             ),
 
-          // Profile chips
           if (_faceProfile != null)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: _ProfileChipRow(profile: _faceProfile!),
             ),
 
-          // Results Summary Card
           if (_faceProfile != null)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -829,7 +799,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
               ),
             ),
 
-          // Buttons
           Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
@@ -884,7 +853,6 @@ class _ProfileChipRow extends StatelessWidget {
   }
 }
 
-// Results Summary Card Widget
 class _ResultsSummaryCard extends StatelessWidget {
   final FaceProfile profile;
   final List<String> warnings;
@@ -919,7 +887,6 @@ class _ResultsSummaryCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header
             Row(
               children: [
                 const Icon(Icons.analytics, size: 20),
@@ -960,8 +927,6 @@ class _ResultsSummaryCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-
-            // Warnings section
             if (warnings.isNotEmpty)
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -980,16 +945,13 @@ class _ResultsSummaryCard extends StatelessWidget {
                           Icon(
                             Icons.info_outline,
                             size: 16,
-                            color: Colors.orange.shade700,
+                            color: Colors.orange,
                           ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               w,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.grey.shade700,
-                              ),
+                              style: const TextStyle(fontSize: 13),
                             ),
                           ),
                         ],
@@ -999,26 +961,7 @@ class _ResultsSummaryCard extends StatelessWidget {
                 ],
               )
             else
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.check_circle, size: 16, color: Colors.green),
-                      SizedBox(width: 8),
-                      Text(
-                        'Good scan quality',
-                        style: TextStyle(color: Colors.green, fontWeight: FontWeight.w500),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    'Face position and lighting look good for accurate analysis.',
-                    style: TextStyle(fontSize: 13, color: Colors.grey),
-                  ),
-                ],
-              ),
+              const Text('Good scan quality'),
           ],
         ),
       ),
