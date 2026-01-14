@@ -6,13 +6,33 @@ import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 import 'look_engine.dart';
 
+/// Configuration for blush style per look
+class BlushStyleProfile {
+  final double strength; // 0.4–1.0
+  final double verticalPlacement; // -0.1 to +0.1 (lower/higher)
+  final double horizontalSpread; // 0.8–1.2 (temple vs centered)
+  final double softness; // 0.5–1.5 (soft vs bold)
+  final Color? overrideColor;
+  
+  const BlushStyleProfile({
+    this.strength = 1.0,
+    this.verticalPlacement = 0.0,
+    this.horizontalSpread = 1.0,
+    this.softness = 1.0,
+    this.overrideColor,
+  });
+}
+
 class BlushPainter {
   final Face face;
   final Color blushColor;
   final double intensity;
   final FaceShape faceShape;
+  final String? lookStyle;
+  final bool isLiveMode;
+  final bool debugMode;
 
-  /// Optional sampled skin color (FaceProfile avgR/G/B) hehehe
+  /// Optional sampled skin color (FaceProfile avgR/G/B)
   final Color? skinColor;
 
   /// NEW: overall scene luminance (0..1). Compute this once and pass in.
@@ -23,37 +43,115 @@ class BlushPainter {
   final int faceId;
 
   // Tuning knobs for cheek anchor positioning
-  static const double anchorUpFactor = 0.02; // Lift relative to face height
-  static const double anchorOutFactor = 0.03; // Move toward temple relative to face width
-  static const double anchorInLimitFactor = 0.08; // Max inward movement relative to face width
+  static const double anchorUpFactor = 0.02;
+  static const double anchorOutFactor = 0.03;
+  static const double anchorInLimitFactor = 0.08;
 
   BlushPainter({
     required this.face,
     required this.blushColor,
     required this.intensity,
     required this.faceShape,
+    this.lookStyle,
+    this.isLiveMode = true,
+    this.debugMode = false,
     this.skinColor,
     this.sceneLuminance,
     this.faceId = -1,
   });
 
   // -----------------------------
-  // #6 Anti-jitter smoothing (EMA)
+  // Anti-jitter smoothing (EMA) - Now conditional
   // -----------------------------
   static final Map<int, List<ui.Offset>> _ovalSmoothers = <int, List<ui.Offset>>{};
   static final Map<int, ui.Offset> _leftAnchorSmoothers = <int, ui.Offset>{};
   static final Map<int, ui.Offset> _rightAnchorSmoothers = <int, ui.Offset>{};
 
-  // TASK A: Fix smoothing key generation
+  // Reset method for still images
+  static void resetSmoothers() {
+    _ovalSmoothers.clear();
+    _leftAnchorSmoothers.clear();
+    _rightAnchorSmoothers.clear();
+  }
+
+  // Non-linear intensity curve - GENTLER VERSION
+  double _applyIntensityCurve(double intensity) {
+    // Much gentler curve for smooth blending
+    if (intensity <= 0.4) {
+      return intensity * 0.8; // Very gentle in low range
+    } else if (intensity <= 0.7) {
+      return 0.32 + (intensity - 0.4) * 0.8; // Smooth transition
+    } else {
+      return 0.56 + (intensity - 0.7) * 1.2; // Moderate ramp in high range
+    }
+  }
+
+  // Look engine blush style profiles - SOFTER VERSION
+  BlushStyleProfile _getBlushStyleProfile(String? lookStyle) {
+    switch (lookStyle) {
+      case 'natural':
+        return BlushStyleProfile(
+          strength: 0.6,
+          verticalPlacement: 0.0,
+          horizontalSpread: 1.0,
+          softness: 1.4,
+        );
+      case 'glam':
+        return BlushStyleProfile(
+          strength: 0.9,
+          verticalPlacement: 0.02,
+          horizontalSpread: 0.95,
+          softness: 1.0,
+          overrideColor: null,
+        );
+      case 'emo':
+        return BlushStyleProfile(
+          strength: 0.35,
+          verticalPlacement: -0.01,
+          horizontalSpread: 0.9,
+          softness: 1.8,
+          overrideColor: blushColor.withRed((blushColor.red * 0.9).toInt())
+            .withGreen((blushColor.green * 0.8).toInt()),
+        );
+      case 'soft':
+        return BlushStyleProfile(
+          strength: 0.4,
+          verticalPlacement: 0.01,
+          horizontalSpread: 1.1,
+          softness: 1.6,
+        );
+      case 'bold':
+        return BlushStyleProfile(
+          strength: 1.0,
+          verticalPlacement: 0.0,
+          horizontalSpread: 0.98,
+          softness: 0.9,
+        );
+      default:
+        return BlushStyleProfile(
+          strength: 0.7,
+          verticalPlacement: 0.0,
+          horizontalSpread: 1.0,
+          softness: 1.2,
+        );
+    }
+  }
+
   int _faceKey() => (faceId == -1) ? face.boundingBox.hashCode : faceId;
 
   void paint(Canvas canvas, Size size) {
-    final k0 = intensity.clamp(0.0, 1.0);
+    // Apply gentle non-linear intensity curve
+    final k0 = _applyIntensityCurve(intensity.clamp(0.0, 1.0));
     if (k0 <= 0.0) return;
 
     final box = face.boundingBox;
     final faceW = box.width;
     final faceH = box.height;
+
+    // Reset smoothers if not in live mode
+    if (!isLiveMode) {
+      resetSmoothers();
+    }
 
     // Face-shape tuning
     double cheekYFactor;
@@ -94,25 +192,54 @@ class BlushPainter {
         break;
     }
 
-    // #4 Tone adaptation (auto-visibility boost from skin/blush tone)
-    final autoBoost = _computeAutoBoost(blush: blushColor, skin: skinColor);
+    // Get blush style profile
+    final blushProfile = _getBlushStyleProfile(lookStyle);
+    final lookStrength = blushProfile.strength;
+    final blushColorToUse = blushProfile.overrideColor ?? blushColor;
+    
+    // Core opacity multiplier from profile
+    final coreOpacityMultiplier = blushProfile.softness < 1.0 ? 1.1 : 
+                                  blushProfile.softness > 1.5 ? 0.6 : 0.8;
 
-    // ✅ Lighting Awareness Boost
-    // TASK C: Now using properly passed sceneLuminance
-    final l = (sceneLuminance ?? (skinColor != null ? _luminance01(skinColor!) : 0.55)).clamp(0.0, 1.0);
-    final lightingBoost = (l < 0.35)
-        ? ui.lerpDouble(1.20, 1.00, (l / 0.35).clamp(0.0, 1.0))!
-        : (l > 0.75)
-            ? ui.lerpDouble(1.00, 0.90, ((l - 0.75) / 0.25).clamp(0.0, 1.0))!
-            : 1.00;
+    // Tone adaptation (auto-visibility boost from skin/blush tone)
+    final autoBoost = _computeAutoBoost(blush: blushColorToUse, skin: skinColor);
 
-    final k = (k0 * autoBoost * lightingBoost).clamp(0.0, 1.0);
+    // ✅ FIXED: New scene luminance handling - NO aggressive boost in dark
+    final l = (sceneLuminance ?? (skinColor != null ? _luminance01(skinColor!) : 0.55))
+        .clamp(0.0, 1.0);
 
-    // Scale-aware feathering (consistent look across face sizes)
+    // Instead of boosting pigment in dark scenes,
+    // we keep k stable and handle darkness via feather/blur changes.
+    final darkT = ((0.35 - l) / 0.35).clamp(0.0, 1.0);   // 0=normal, 1=very dark
+    final brightT = ((l - 0.75) / 0.25).clamp(0.0, 1.0); // 0=normal, 1=very bright
+
+    // k behavior:
+    // - dark: slight increase only (NOT big), avoid harsh edges
+    // - bright: tiny decrease to avoid looking "painted"
+    final darkKBoost = ui.lerpDouble(1.00, 1.08, darkT)!;
+    final brightKCut = ui.lerpDouble(1.00, 0.92, brightT)!;
+
+    final k = (k0 * lookStrength * autoBoost * darkKBoost * brightKCut).clamp(0.0, 1.0);
+
+    // ✅ FIXED: Adaptive feather/blur in dark scenes
     final sigmaBase = max(faceW, faceH) * 0.012;
-    final sigmaSoft = sigmaBase * 2.0;
-    final sigmaFeather = sigmaBase * 3.3;
-    final sigmaDiffuse = sigmaBase * 4.4;
+
+    var sigmaSoft = sigmaBase * 2.0;
+    var sigmaFeather = sigmaBase * 3.3;
+    var sigmaDiffuse = sigmaBase * 4.4;
+
+    // Dark scene: increase feather + diffuse so edges disappear
+    sigmaFeather *= ui.lerpDouble(1.0, 1.35, darkT)!;
+    sigmaDiffuse *= ui.lerpDouble(1.0, 1.45, darkT)!;
+
+    // Bright scene: slightly reduce blur so it doesn't look too foggy
+    sigmaFeather *= ui.lerpDouble(1.0, 0.92, brightT)!;
+    sigmaDiffuse *= ui.lerpDouble(1.0, 0.92, brightT)!;
+
+    // Apply blush profile softness
+    sigmaSoft *= blushProfile.softness;
+    sigmaFeather *= blushProfile.softness;
+    sigmaDiffuse *= blushProfile.softness;
 
     // Landmark-based placement
     final leftCheekPts = _contourOffsets(face.contours[FaceContourType.leftCheek]?.points);
@@ -130,41 +257,47 @@ class BlushPainter {
         cheekYFactor: cheekYFactor,
         lift: lift,
         widthFactor: widthFactor,
-        k: k,
+        kCore: k,
+        kEdge: k * 0.7,
         sigmaSoft: sigmaSoft,
         sigmaFeather: sigmaFeather,
+        darkT: darkT,
+        blushColor: blushColorToUse,
+        coreOpacityMultiplier: coreOpacityMultiplier,
+        blushProfile: blushProfile,
       );
       return;
     }
 
-    // Smooth face oval points (#6 anti-jitter)
-    final baseKey = _faceKey(); // TASK A: Use fixed key
-    final smoothedOval = _smoothPoints(faceOvalPts, baseKey, alpha: 0.18);
+    // Conditional smoothing
+    final baseKey = _faceKey();
+    final smoothedOval = isLiveMode 
+        ? _smoothPoints(faceOvalPts, baseKey, alpha: 0.18)
+        : faceOvalPts;
 
-    // #5 No-paint zone masking
+    // No-paint zone masking
     final faceClip = _buildSmoothClosedPath(smoothedOval, targetPoints: 42);
 
     final eyeL = _contourOffsets(face.contours[FaceContourType.leftEye]?.points);
     final eyeR = _contourOffsets(face.contours[FaceContourType.rightEye]?.points);
     final upperLip = _contourOffsets(face.contours[FaceContourType.upperLipTop]?.points);
     final lowerLip = _contourOffsets(face.contours[FaceContourType.lowerLipBottom]?.points);
-    // FIX B: Get eyebrow contours if available
     final leftEyebrow = _contourOffsets(face.contours[FaceContourType.leftEyebrowTop]?.points);
     final rightEyebrow = _contourOffsets(face.contours[FaceContourType.rightEyebrowTop]?.points);
 
     final exclude = Path();
 
-    // FIX B: Inflate eye exclusion zones
+    // Eye exclusion zones - MORE GENEROUS
     if (eyeL.length >= 5) {
-      final eyeBounds = _boundsOf(eyeL).inflate(faceW * 0.08); // Bigger safety zone
+      final eyeBounds = _boundsOf(eyeL).inflate(faceW * 0.12);
       exclude.addOval(eyeBounds);
     }
     if (eyeR.length >= 5) {
-      final eyeBounds = _boundsOf(eyeR).inflate(faceW * 0.08); // Bigger safety zone
+      final eyeBounds = _boundsOf(eyeR).inflate(faceW * 0.12);
       exclude.addOval(eyeBounds);
     }
     
-    // FIX B: Add eyebrow exclusion zones
+    // Eyebrow exclusion zones
     if (leftEyebrow.isNotEmpty) {
       final browBounds = _boundsOf(leftEyebrow).inflate(faceW * 0.04);
       exclude.addOval(browBounds);
@@ -174,6 +307,7 @@ class BlushPainter {
       exclude.addOval(browBounds);
     }
     
+    // Lip exclusion zones
     if (upperLip.length >= 5 && lowerLip.length >= 5) {
       exclude.addPath(_buildSmoothClosedPath(upperLip, targetPoints: 22), ui.Offset.zero);
       exclude.addPath(_buildSmoothClosedPath(lowerLip, targetPoints: 22), ui.Offset.zero);
@@ -186,7 +320,28 @@ class BlushPainter {
       exclude.addRRect(RRect.fromRectXY(nb, 18, 18));
     }
 
-    final clip = Path.combine(PathOperation.difference, faceClip, exclude);
+    // Nose area protection - but SOFTER
+    _addNoseProtectionZone(exclude, box, faceW, faceH);
+
+    // Cheek-only mask for extra safety
+    Path clip = Path.combine(PathOperation.difference, faceClip, exclude);
+    
+    // Get eye and mouth boundaries for cheek band
+    final eyeBoundsL = eyeL.isNotEmpty ? _boundsOf(eyeL) : null;
+    final eyeBoundsR = eyeR.isNotEmpty ? _boundsOf(eyeR) : null;
+    final mouthBounds = upperLip.isNotEmpty ? _boundsOf(upperLip) : null;
+    
+    // Add cheek zone clipping band with SOFT clamping
+    final cheekBandClip = _buildCheekBandClipSoft(
+      box, 
+      eyeBoundsL, 
+      eyeBoundsR, 
+      mouthBounds, 
+      faceH
+    );
+    if (cheekBandClip != null) {
+      clip = Path.combine(PathOperation.intersect, clip, cheekBandClip);
+    }
 
     canvas.save();
     canvas.clipPath(clip);
@@ -194,30 +349,45 @@ class BlushPainter {
     // Nose center bias to keep blush stable on yaw
     final noseCenterX = _estimateNoseCenterX(face, box);
 
+    // Yaw detection for asymmetry compensation
+    final faceCenterX = box.center.dx;
+    final yawOffset = (noseCenterX - faceCenterX) / faceW;
+    final yawFactor = yawOffset.clamp(-0.4, 0.4);
+
     // Calculate cheek anchors for both sides
-    final leftAnchor = _computeCheekAnchor(
+    final leftAnchor = _computeCheekAnchorStable(
       isLeft: true,
       box: box,
       faceW: faceW,
       faceH: faceH,
       eyeContour: eyeL,
+      upperLip: upperLip,
       faceOval: smoothedOval,
       noseCenterX: noseCenterX,
-      cheekYFactor: cheekYFactor, // FIX A: Pass cheekYFactor
+      verticalPlacement: blushProfile.verticalPlacement,
+      horizontalSpread: blushProfile.horizontalSpread,
       faceKey: baseKey,
     );
 
-    final rightAnchor = _computeCheekAnchor(
+    final rightAnchor = _computeCheekAnchorStable(
       isLeft: false,
       box: box,
       faceW: faceW,
       faceH: faceH,
       eyeContour: eyeR,
+      upperLip: upperLip,
       faceOval: smoothedOval,
       noseCenterX: noseCenterX,
-      cheekYFactor: cheekYFactor, // FIX A: Pass cheekYFactor
+      verticalPlacement: blushProfile.verticalPlacement,
+      horizontalSpread: blushProfile.horizontalSpread,
       faceKey: baseKey,
     );
+
+    // Debug mode overlay
+    if (debugMode) {
+      _drawDebugOverlay(canvas, box, eyeBoundsL, eyeBoundsR, mouthBounds, 
+                       leftAnchor, rightAnchor, faceH);
+    }
 
     if (leftCheekPts.length >= 5 && rightCheekPts.length >= 5) {
       _drawCheekFromContour(
@@ -231,13 +401,18 @@ class BlushPainter {
         lift: lift,
         widthFactor: widthFactor,
         inwardFactor: inwardFactor,
-        k: k,
+        kCore: k,
         sigmaSoft: sigmaSoft,
         sigmaFeather: sigmaFeather,
         sigmaDiffuse: sigmaDiffuse,
         noseCenterX: noseCenterX,
         cheekAnchor: leftAnchor,
         faceKey: baseKey,
+        yawFactor: yawFactor,
+        coreOpacityMultiplier: coreOpacityMultiplier,
+        darkT: darkT,
+        blushColor: blushColorToUse,
+        blushProfile: blushProfile,
       );
 
       _drawCheekFromContour(
@@ -251,13 +426,18 @@ class BlushPainter {
         lift: lift,
         widthFactor: widthFactor,
         inwardFactor: inwardFactor,
-        k: k,
+        kCore: k,
         sigmaSoft: sigmaSoft,
         sigmaFeather: sigmaFeather,
         sigmaDiffuse: sigmaDiffuse,
         noseCenterX: noseCenterX,
         cheekAnchor: rightAnchor,
         faceKey: baseKey,
+        yawFactor: yawFactor,
+        coreOpacityMultiplier: coreOpacityMultiplier,
+        darkT: darkT,
+        blushColor: blushColorToUse,
+        blushProfile: blushProfile,
       );
     } else {
       _drawCheekFromFaceOvalBand(
@@ -268,13 +448,18 @@ class BlushPainter {
         lift: lift,
         widthFactor: widthFactor,
         inwardFactor: inwardFactor,
-        k: k,
+        kCore: k,
         sigmaSoft: sigmaSoft,
         sigmaFeather: sigmaFeather,
         sigmaDiffuse: sigmaDiffuse,
         left: true,
         noseCenterX: noseCenterX,
         cheekAnchor: leftAnchor,
+        yawFactor: yawFactor,
+        coreOpacityMultiplier: coreOpacityMultiplier,
+        darkT: darkT,
+        blushColor: blushColorToUse,
+        blushProfile: blushProfile,
       );
 
       _drawCheekFromFaceOvalBand(
@@ -285,13 +470,18 @@ class BlushPainter {
         lift: lift,
         widthFactor: widthFactor,
         inwardFactor: inwardFactor,
-        k: k,
+        kCore: k,
         sigmaSoft: sigmaSoft,
         sigmaFeather: sigmaFeather,
         sigmaDiffuse: sigmaDiffuse,
         left: false,
         noseCenterX: noseCenterX,
         cheekAnchor: rightAnchor,
+        yawFactor: yawFactor,
+        coreOpacityMultiplier: coreOpacityMultiplier,
+        darkT: darkT,
+        blushColor: blushColorToUse,
+        blushProfile: blushProfile,
       );
     }
 
@@ -299,109 +489,136 @@ class BlushPainter {
   }
 
   // ----------------------------------------------------------
-  // #2 Multi-gradient shape realism + #3 Blend mode layering
+  // UPDATED: Layered blush rendering with dark lighting fixes
   // ----------------------------------------------------------
   void _renderLayeredBlush({
     required Canvas canvas,
     required Path region,
-    required ui.Offset center, // Now using cheekAnchor as center
+    required ui.Offset center,
     required double radius,
     required Rect saveBounds,
-    required double k,
+    required double kCore,
     required double sigmaSoft,
     required double sigmaFeather,
     required double sigmaDiffuse,
     required bool left,
+    required double coreOpacityMultiplier,
+    required double yawFactor,
+    required double darkT,
+    required Color blushColor,
+    required BlushStyleProfile blushProfile,
   }) {
     final base = blushColor;
 
-    // Slight HSL tuning for realism
-    final core = _shiftHsl(base, hueDelta: 4.0, satMul: 1.10, lightMul: 0.98);
-    final edge = _shiftHsl(base, hueDelta: 6.0, satMul: 0.88, lightMul: 1.06);
+    // Slight HSL tuning for realism - SOFTER
+    final core = _shiftHsl(base, hueDelta: 3.0, satMul: 1.05, lightMul: 0.99);
+    final edge = _shiftHsl(base, hueDelta: 5.0, satMul: 0.92, lightMul: 1.04);
+
+    // Asymmetry compensation based on yaw - SOFTER
+    double yawAdjustedRadius = radius;
+    double yawAdjustedCore = kCore;
+    
+    if (left && yawFactor > 0.15) {
+      yawAdjustedRadius *= (1.0 - yawFactor * 0.3);
+      yawAdjustedCore *= (1.0 - yawFactor * 0.2);
+    } else if (!left && yawFactor < -0.15) {
+      yawAdjustedRadius *= (1.0 + yawFactor * 0.3);
+      yawAdjustedCore *= (1.0 + yawFactor * 0.2);
+    }
+
+    // Apply horizontal spread from profile
+    yawAdjustedRadius *= blushProfile.horizontalSpread;
+
+    // ✅ FIXED: Reduce harsh blend passes when dark
+    final harshPass = ui.lerpDouble(1.0, 0.55, darkT)!; // dark -> reduce multiply/overlay
 
     // Directional lift gradient (toward temple)
-    final dir = left ? const ui.Offset(-1, -1) : const ui.Offset(1, -1);
-    final liftA = center + dir * (radius * 0.45);
-    final liftB = center - dir * (radius * 0.55);
+    final dir = left ? ui.Offset(-1, -1) : ui.Offset(1, -1);
+    final liftA = center + dir * (yawAdjustedRadius * 0.45);
+    final liftB = center - dir * (yawAdjustedRadius * 0.55);
 
     final liftShader = ui.Gradient.linear(
       liftA,
       liftB,
       [
-        Colors.white.withOpacity(0.06 * k),
+        Colors.white.withOpacity(0.04 * yawAdjustedCore),
         Colors.transparent,
       ],
       const [0.0, 1.0],
     );
 
+    // Base radial gradient
     final baseShader = ui.Gradient.radial(
       center,
-      radius,
+      yawAdjustedRadius,
       [
-        core.withOpacity(0.52 * k),
-        base.withOpacity(0.18 * k),
+        core.withOpacity(0.42 * yawAdjustedCore),
+        base.withOpacity(0.14 * yawAdjustedCore),
         edge.withOpacity(0.0),
       ],
-      const [0.0, 0.72, 1.0],
+      const [0.0, 0.85, 1.0],
     );
 
-    final featherShader = ui.Gradient.radial(
-      center,
-      radius * 1.25,
+    // ✅ NEW: Enhanced vertical fade for bottom edges
+    final verticalFadeShader = ui.Gradient.linear(
+      ui.Offset(center.dx, center.dy - yawAdjustedRadius * 0.6),
+      ui.Offset(center.dx, center.dy + yawAdjustedRadius * 0.9),
       [
-        base.withOpacity(0.14 * k),
-        base.withOpacity(0.05 * k),
+        Colors.transparent,
+        Colors.transparent,
+        base.withOpacity(0.15 * yawAdjustedCore),
+        base.withOpacity(0.25 * yawAdjustedCore),
         Colors.transparent,
       ],
-      const [0.0, 0.72, 1.0],
+      const [0.0, 0.4, 0.6, 0.85, 1.0],
     );
 
     canvas.saveLayer(saveBounds, Paint());
 
-    // PASS 1: soft embedded pigment
+    // PASS 1: soft embedded pigment - Use core intensity
     canvas.drawPath(
       region,
       Paint()
         ..isAntiAlias = true
         ..shader = baseShader
         ..blendMode = BlendMode.softLight
-        ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, sigmaSoft),
+        ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, sigmaSoft * 1.2),
     );
 
-    // PASS 2: deepen (shadow depth)
+    // PASS 2: deepen (shadow depth) - REDUCED in dark scenes
     canvas.drawPath(
       region,
       Paint()
         ..isAntiAlias = true
         ..shader = ui.Gradient.radial(
           center,
-          radius * 0.95,
+          yawAdjustedRadius * 1.1,
           [
-            base.withOpacity(0.10 * k),
+            base.withOpacity(0.10 * yawAdjustedCore * harshPass), // Reduced in dark
             Colors.transparent,
           ],
           const [0.0, 1.0],
         )
         ..blendMode = BlendMode.multiply
-        ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, sigmaSoft * 0.95),
+        ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, sigmaSoft * 1.1),
     );
 
-    // PASS 3: pigment core pop (contrast)
+    // PASS 3: pigment core pop (contrast) - REDUCED in dark scenes
     canvas.drawPath(
       region,
       Paint()
         ..isAntiAlias = true
         ..shader = ui.Gradient.radial(
           center,
-          radius * 0.62,
+          yawAdjustedRadius * 0.75,
           [
-            core.withOpacity(0.26 * k),
+            core.withOpacity(0.26 * yawAdjustedCore * coreOpacityMultiplier * harshPass), // Reduced in dark
             Colors.transparent,
           ],
           const [0.0, 1.0],
         )
         ..blendMode = BlendMode.overlay
-        ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, sigmaSoft * 0.85),
+        ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, sigmaSoft),
     );
 
     // PASS 4: feather edges
@@ -409,19 +626,39 @@ class BlushPainter {
       region,
       Paint()
         ..isAntiAlias = true
-        ..shader = featherShader
+        ..shader = ui.Gradient.radial(
+          center,
+          yawAdjustedRadius * 1.4,
+          [
+            base.withOpacity(0.10 * yawAdjustedCore),
+            base.withOpacity(0.03 * yawAdjustedCore),
+            Colors.transparent,
+          ],
+          const [0.0, 0.85, 1.0],
+        )
         ..blendMode = BlendMode.softLight
-        ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, sigmaFeather),
+        ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, sigmaFeather * 1.2),
     );
+
+    // Very subtle skin texture illusion (optional)
+    if (blushProfile.softness < 1.3) {
+      _drawTextureNoise(
+        canvas: canvas,
+        region: region,
+        bounds: saveBounds,
+        opacity: 0.015 * yawAdjustedCore,
+        scale: 0.05,
+      );
+    }
 
     // PASS 5: diffuse haze
     canvas.drawPath(
       region,
       Paint()
         ..isAntiAlias = true
-        ..color = base.withOpacity(0.028 * k)
+        ..color = base.withOpacity(0.018 * yawAdjustedCore)
         ..blendMode = BlendMode.softLight
-        ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, sigmaDiffuse),
+        ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, sigmaDiffuse * 1.3),
     );
 
     // PASS 6: subtle highlight lift (toward temple)
@@ -431,12 +668,341 @@ class BlushPainter {
         ..isAntiAlias = true
         ..shader = liftShader
         ..blendMode = BlendMode.screen
-        ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, sigmaSoft * 1.1),
+        ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, sigmaSoft * 1.3),
+    );
+
+    // ✅ FIXED: Extra feather-only pass in dark scenes (kills the edge)
+    if (darkT > 0.01) {
+      final extra = ui.lerpDouble(0.0, 1.0, darkT)!;
+      canvas.drawPath(
+        region,
+        Paint()
+          ..isAntiAlias = true
+          ..shader = ui.Gradient.radial(
+            center,
+            radius * 1.35,
+            [
+              base.withOpacity(0.06 * yawAdjustedCore * extra),
+              Colors.transparent,
+            ],
+            const [0.55, 1.0],
+          )
+          ..blendMode = BlendMode.softLight
+          ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, sigmaDiffuse * 1.15),
+      );
+    }
+
+    // Bottom fade to prevent jaw bleed
+    canvas.drawPath(
+      region,
+      Paint()
+        ..isAntiAlias = true
+        ..shader = verticalFadeShader
+        ..blendMode = BlendMode.dstOut
+        ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, sigmaSoft * 1.8),
     );
 
     canvas.restore();
   }
 
+  // Color adaptation for dark lighting
+  Color _adaptColorForDarkLighting(Color color, double darkFactor) {
+    if (darkFactor > 0.1) {
+      // In dark lighting, make color slightly more muted
+      final hsl = HSLColor.fromColor(color);
+      final saturation = hsl.saturation * (1.0 - (darkFactor * 0.2));
+      final lightness = hsl.lightness * (1.0 - (darkFactor * 0.1));
+      return hsl.withSaturation(saturation.clamp(0.0, 1.0))
+               .withLightness(lightness.clamp(0.0, 1.0))
+               .toColor();
+    }
+    return color;
+  }
+
+  // Very subtle skin texture illusion
+  void _drawTextureNoise({
+    required Canvas canvas,
+    required Path region,
+    required Rect bounds,
+    required double opacity,
+    required double scale,
+  }) {
+    if (opacity < 0.001) return;
+    
+    final paint = Paint()
+      ..color = Colors.black.withOpacity(opacity * 0.3)
+      ..blendMode = BlendMode.overlay
+      ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, 1.0);
+
+    final rng = Random(42);
+    final cellSize = 6.0;
+    
+    canvas.saveLayer(bounds, Paint());
+    canvas.clipPath(region);
+    
+    for (double x = bounds.left; x < bounds.right; x += cellSize) {
+      for (double y = bounds.top; y < bounds.bottom; y += cellSize) {
+        if (rng.nextDouble() < 0.15) {
+          final alpha = rng.nextDouble() * 0.05 * opacity;
+          canvas.drawRect(
+            Rect.fromLTWH(x, y, cellSize * scale, cellSize * scale),
+            paint..color = Colors.black.withOpacity(alpha),
+          );
+        }
+      }
+    }
+    
+    canvas.restore();
+  }
+
+  // Nose protection zone - SOFTER
+  void _addNoseProtectionZone(Path exclude, Rect box, double faceW, double faceH) {
+    final noseZoneWidth = faceW * 0.12;
+    final noseZoneHeight = faceH * 0.15;
+    final noseZoneCenter = ui.Offset(box.center.dx, box.top + faceH * 0.45);
+    
+    final noseZone = Path()
+      ..addOval(Rect.fromCenter(
+        center: noseZoneCenter,
+        width: noseZoneWidth,
+        height: noseZoneHeight,
+      ));
+    
+    exclude.addPath(noseZone, ui.Offset.zero);
+  }
+
+  // SOFT cheek band clamp
+  Path? _buildCheekBandClipSoft(
+    Rect box, 
+    Rect? eyeBoundsL, 
+    Rect? eyeBoundsR, 
+    Rect? mouthBounds, 
+    double faceH
+  ) {
+    double top = box.bottom;
+    double bottom = box.top;
+    
+    if (eyeBoundsL != null) {
+      top = min(top, eyeBoundsL.bottom);
+    }
+    if (eyeBoundsR != null) {
+      top = min(top, eyeBoundsR.bottom);
+    }
+    
+    if (mouthBounds != null) {
+      bottom = max(bottom, mouthBounds.top);
+    }
+    
+    final padding = faceH * 0.05;
+    top += padding;
+    bottom -= padding;
+    
+    if (bottom > top && bottom - top > faceH * 0.08) {
+      return Path()..addRect(Rect.fromLTRB(
+        box.left,
+        top,
+        box.right,
+        bottom,
+      ));
+    }
+    
+    return null;
+  }
+
+  // Stable anchor computation
+  ui.Offset _computeCheekAnchorStable({
+    required bool isLeft,
+    required Rect box,
+    required double faceW,
+    required double faceH,
+    required List<ui.Offset> eyeContour,
+    required List<ui.Offset> upperLip,
+    required List<ui.Offset> faceOval,
+    required double noseCenterX,
+    required double verticalPlacement,
+    required double horizontalSpread,
+    required int faceKey,
+  }) {
+    double safeTop = box.bottom;
+    double safeBottom = box.top;
+    
+    if (eyeContour.isNotEmpty) {
+      safeTop = _getEyeBottomFromContour(eyeContour);
+    }
+    
+    if (upperLip.isNotEmpty) {
+      safeBottom = _getMouthTopFromContour(upperLip);
+    }
+    
+    final padding = faceH * 0.05;
+    safeTop += padding;
+    safeBottom -= padding;
+    
+    if (safeBottom <= safeTop) {
+      safeTop = box.top + faceH * 0.35;
+      safeBottom = box.top + faceH * 0.65;
+    }
+    
+    final bandHeight = safeBottom - safeTop;
+    final baseY = safeTop + bandHeight * 0.4;
+    final targetY = baseY + (bandHeight * verticalPlacement);
+    
+    final clampedY = targetY.clamp(safeTop + padding * 0.5, safeBottom - padding * 0.5);
+    
+    final sidePts = faceOval.where((p) => isLeft ? (p.dx <= box.center.dx) : (p.dx >= box.center.dx)).toList();
+    double targetX = isLeft ? box.left + faceW * 0.25 : box.right - faceW * 0.25;
+    
+    if (sidePts.isNotEmpty) {
+      sidePts.sort((a, b) => (a.dy - clampedY).abs().compareTo((b.dy - clampedY).abs()));
+      final closestPoint = sidePts.first;
+      
+      final yDist = (closestPoint.dy - clampedY).abs() / faceH;
+      final weight = 1.0 - yDist.clamp(0.0, 0.3);
+      
+      if (isLeft) {
+        final leftmostPts = sidePts.where((p) => (p.dy - clampedY).abs() < faceH * 0.15).toList();
+        if (leftmostPts.isNotEmpty) {
+          leftmostPts.sort((a, b) => a.dx.compareTo(b.dx));
+          targetX = leftmostPts.first.dx * weight + targetX * (1 - weight);
+        }
+      } else {
+        final rightmostPts = sidePts.where((p) => (p.dy - clampedY).abs() < faceH * 0.15).toList();
+        if (rightmostPts.isNotEmpty) {
+          rightmostPts.sort((a, b) => b.dx.compareTo(a.dx));
+          targetX = rightmostPts.first.dx * weight + targetX * (1 - weight);
+        }
+      }
+    }
+    
+    final spreadAdjustment = (1.0 - horizontalSpread) * faceW * 0.08;
+    if (horizontalSpread < 1.0) {
+      targetX += isLeft ? spreadAdjustment : -spreadAdjustment;
+    } else if (horizontalSpread > 1.0) {
+      targetX += isLeft ? -spreadAdjustment : spreadAdjustment;
+    }
+    
+    final liftY = -faceH * anchorUpFactor;
+    final outX = isLeft ? -faceW * anchorOutFactor : faceW * anchorOutFactor;
+    
+    var anchor = ui.Offset(
+      targetX + outX,
+      clampedY + liftY,
+    );
+
+    final maxInward = faceW * anchorInLimitFactor * 1.2;
+    if (isLeft) {
+      final distanceFromNose = noseCenterX - anchor.dx;
+      if (distanceFromNose < maxInward) {
+        anchor = ui.Offset(noseCenterX - maxInward, anchor.dy);
+      }
+    } else {
+      final distanceFromNose = anchor.dx - noseCenterX;
+      if (distanceFromNose < maxInward) {
+        anchor = ui.Offset(noseCenterX + maxInward, anchor.dy);
+      }
+    }
+
+    if (isLiveMode) {
+      final smootherKey = faceKey * 1000 + (isLeft ? 1 : 2);
+      final smoothers = isLeft ? _leftAnchorSmoothers : _rightAnchorSmoothers;
+      final prevAnchor = smoothers[smootherKey];
+      
+      if (prevAnchor == null) {
+        smoothers[smootherKey] = anchor;
+      } else {
+        final smoothed = ui.Offset(
+          prevAnchor.dx + (anchor.dx - prevAnchor.dx) * 0.25,
+          prevAnchor.dy + (anchor.dy - prevAnchor.dy) * 0.25,
+        );
+        smoothers[smootherKey] = smoothed;
+        anchor = smoothed;
+      }
+    }
+
+    return anchor;
+  }
+
+  // Debug mode overlay
+  void _drawDebugOverlay(
+    Canvas canvas,
+    Rect box,
+    Rect? eyeBoundsL,
+    Rect? eyeBoundsR,
+    Rect? mouthBounds,
+    ui.Offset leftAnchor,
+    ui.Offset rightAnchor,
+    double faceH,
+  ) {
+    final paint = Paint()
+      ..color = Colors.red.withOpacity(0.3)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+    
+    final textStyle = TextStyle(
+      color: Colors.red,
+      fontSize: 12,
+      fontWeight: FontWeight.bold,
+    );
+    
+    final textPainter = TextPainter(
+      textDirection: TextDirection.ltr,
+    );
+    
+    if (eyeBoundsL != null && eyeBoundsR != null && mouthBounds != null) {
+      final top = max(eyeBoundsL.bottom, eyeBoundsR.bottom) + faceH * 0.05;
+      final bottom = mouthBounds.top - faceH * 0.05;
+      
+      canvas.drawRect(
+        Rect.fromLTRB(box.left, top, box.right, bottom),
+        paint..color = Colors.blue.withOpacity(0.2),
+      );
+      
+      canvas.drawLine(
+        ui.Offset(box.left, top),
+        ui.Offset(box.right, top),
+        paint..color = Colors.blue,
+      );
+      
+      canvas.drawLine(
+        ui.Offset(box.left, bottom),
+        ui.Offset(box.right, bottom),
+        paint..color = Colors.blue,
+      );
+    }
+    
+    canvas.drawCircle(leftAnchor, 4, Paint()..color = Colors.green);
+    canvas.drawCircle(rightAnchor, 4, Paint()..color = Colors.green);
+    
+    textPainter.text = TextSpan(
+      text: 'L',
+      style: textStyle,
+    );
+    textPainter.layout();
+    textPainter.paint(canvas, leftAnchor + ui.Offset(6, -12));
+    
+    textPainter.text = TextSpan(
+      text: 'R',
+      style: textStyle,
+    );
+    textPainter.layout();
+    textPainter.paint(canvas, rightAnchor + ui.Offset(6, -12));
+    
+    if (eyeBoundsL != null) {
+      canvas.drawRect(eyeBoundsL.inflate(faceH * 0.12), paint..color = Colors.red.withOpacity(0.2));
+    }
+    if (eyeBoundsR != null) {
+      canvas.drawRect(eyeBoundsR.inflate(faceH * 0.12), paint..color = Colors.red.withOpacity(0.2));
+    }
+    
+    final noseZone = Rect.fromCenter(
+      center: ui.Offset(box.center.dx, box.top + faceH * 0.45),
+      width: box.width * 0.12,
+      height: faceH * 0.15,
+    );
+    canvas.drawOval(noseZone, paint..color = Colors.purple.withOpacity(0.2));
+  }
+
+  // Updated cheek drawing method
   void _drawCheekFromContour({
     required Canvas canvas,
     required Rect box,
@@ -448,18 +1014,24 @@ class BlushPainter {
     required double lift,
     required double widthFactor,
     required double inwardFactor,
-    required double k,
+    required double kCore,
     required double sigmaSoft,
     required double sigmaFeather,
     required double sigmaDiffuse,
     required double noseCenterX,
-    required ui.Offset cheekAnchor, // New: pre-computed cheek anchor
-    required int faceKey, // TASK A: Use fixed key
+    required ui.Offset cheekAnchor,
+    required int faceKey,
+    required double yawFactor,
+    required double coreOpacityMultiplier,
+    required double darkT,
+    required Color blushColor,
+    required BlushStyleProfile blushProfile,
   }) {
     if (cheekContour.length < 5) return;
 
-    final cheekKey = faceKey * 100 + (left ? 1 : 2); // TASK A: Fixed key
-    final cheek = _smoothPoints(cheekContour, cheekKey, alpha: 0.22);
+    final cheek = isLiveMode 
+        ? _smoothPoints(cheekContour, faceKey * 100 + (left ? 1 : 2), alpha: 0.22)
+        : cheekContour;
 
     final sideSign = left ? -1.0 : 1.0;
     final noseBias = ((box.center.dx - noseCenterX) / max(1.0, faceW)).clamp(-0.18, 0.18);
@@ -477,21 +1049,26 @@ class BlushPainter {
     final band = cheek.where((p) => p.dy >= bandTop && p.dy <= bandBot).toList();
     final outer = _resample(band.isNotEmpty ? band : cheek, 12);
 
-    final inner = outer.map((p) {
-      final px = p.dx + biasX;
+    final inner = List<ui.Offset>.generate(outer.length, (i) {
+      final p = outer[i];
+      final t = i / (outer.length - 1);
+      
+      final curveBias = (1.0 - t * 0.7) * 0.07;
+      final curveOffset = left ? -faceW * curveBias : faceW * curveBias;
+      
+      final px = p.dx + biasX + curveOffset;
       return ui.Offset(px + inward * dirXToCenter, p.dy - liftY);
-    }).toList();
+    });
 
     final region = _buildRegionFromOuterInner(outer, inner);
 
-    // Use cheekAnchor as center instead of average
-    var center = cheekAnchor;
+    final center = cheekAnchor;
     
-    // FIX C: Reduce radius if anchor is too high
     var radius = faceW * 0.22 * widthFactor;
-    final tooHigh = center.dy < box.top + faceH * 0.45;
-    if (tooHigh) {
-      radius *= 0.75; // Reduce radius when too close to eyes
+    
+    final eyeBottom = _getEyeBottom(left);
+    if (eyeBottom != null && center.dy < eyeBottom + faceH * 0.05) {
+      radius *= 0.85;
     }
     
     final saveBounds = region.getBounds().inflate(radius * 0.70);
@@ -502,11 +1079,16 @@ class BlushPainter {
       center: center,
       radius: radius,
       saveBounds: saveBounds,
-      k: k,
+      kCore: kCore,
       sigmaSoft: sigmaSoft,
       sigmaFeather: sigmaFeather,
       sigmaDiffuse: sigmaDiffuse,
       left: left,
+      coreOpacityMultiplier: coreOpacityMultiplier,
+      yawFactor: yawFactor,
+      darkT: darkT,
+      blushColor: blushColor,
+      blushProfile: blushProfile,
     );
   }
 
@@ -518,13 +1100,18 @@ class BlushPainter {
     required double lift,
     required double widthFactor,
     required double inwardFactor,
-    required double k,
+    required double kCore,
     required double sigmaSoft,
     required double sigmaFeather,
     required double sigmaDiffuse,
     required bool left,
     required double noseCenterX,
-    required ui.Offset cheekAnchor, // New: pre-computed cheek anchor
+    required ui.Offset cheekAnchor,
+    required double yawFactor,
+    required double coreOpacityMultiplier,
+    required double darkT,
+    required Color blushColor,
+    required BlushStyleProfile blushProfile,
   }) {
     final faceW = box.width;
     final faceH = box.height;
@@ -549,21 +1136,26 @@ class BlushPainter {
     final liftY = faceH * 0.04 * lift;
     final dirXToCenter = left ? 1.0 : -1.0;
 
-    final inner = outer.map((p) {
-      final px = p.dx + biasX;
+    final inner = List<ui.Offset>.generate(outer.length, (i) {
+      final p = outer[i];
+      final t = i / (outer.length - 1);
+      
+      final curveBias = (1.0 - t * 0.7) * 0.05;
+      final curveOffset = left ? -faceW * curveBias : faceW * curveBias;
+      
+      final px = p.dx + biasX + curveOffset;
       return ui.Offset(px + inward * dirXToCenter, p.dy - liftY);
-    }).toList();
+    });
 
     final region = _buildRegionFromOuterInner(outer, inner);
 
-    // Use cheekAnchor as center instead of average
-    var center = cheekAnchor;
+    final center = cheekAnchor;
     
-    // FIX C: Reduce radius if anchor is too high
     var radius = faceW * 0.24 * widthFactor;
-    final tooHigh = center.dy < box.top + faceH * 0.45;
-    if (tooHigh) {
-      radius *= 0.75; // Reduce radius when too close to eyes
+    
+    final eyeBottom = _getEyeBottom(left);
+    if (eyeBottom != null && center.dy < eyeBottom + faceH * 0.05) {
+      radius *= 0.85;
     }
     
     final saveBounds = region.getBounds().inflate(radius * 0.70);
@@ -574,11 +1166,16 @@ class BlushPainter {
       center: center,
       radius: radius,
       saveBounds: saveBounds,
-      k: k,
+      kCore: kCore,
       sigmaSoft: sigmaSoft,
       sigmaFeather: sigmaFeather,
       sigmaDiffuse: sigmaDiffuse,
       left: left,
+      coreOpacityMultiplier: coreOpacityMultiplier,
+      yawFactor: yawFactor,
+      darkT: darkT,
+      blushColor: blushColor,
+      blushProfile: blushProfile,
     );
   }
 
@@ -590,9 +1187,14 @@ class BlushPainter {
     required double cheekYFactor,
     required double lift,
     required double widthFactor,
-    required double k,
+    required double kCore,
+    required double kEdge,
     required double sigmaSoft,
     required double sigmaFeather,
+    required double darkT,
+    required Color blushColor,
+    required double coreOpacityMultiplier,
+    required BlushStyleProfile blushProfile,
   }) {
     void draw(bool left) {
       final cx = left ? (box.left + faceW * 0.30) : (box.left + faceW * 0.70);
@@ -624,11 +1226,16 @@ class BlushPainter {
         center: ui.Offset(cx, cy),
         radius: r,
         saveBounds: saveBounds,
-        k: k,
+        kCore: kCore,
         sigmaSoft: sigmaSoft,
         sigmaFeather: sigmaFeather,
         sigmaDiffuse: sigmaFeather * 1.3,
         left: left,
+        coreOpacityMultiplier: coreOpacityMultiplier,
+        yawFactor: 0.0,
+        darkT: darkT,
+        blushColor: blushColor,
+        blushProfile: blushProfile,
       );
     }
 
@@ -637,149 +1244,7 @@ class BlushPainter {
   }
 
   // -----------------------------
-  // CHEEK ANCHOR FUNCTION (IMPROVED WITH ALL FIXES)
-  // -----------------------------
-  ui.Offset _computeCheekAnchor({
-    required bool isLeft,
-    required Rect box,
-    required double faceW,
-    required double faceH,
-    required List<ui.Offset> eyeContour,
-    required List<ui.Offset> faceOval,
-    required double noseCenterX,
-    required double cheekYFactor, // FIX A: Added cheekYFactor parameter
-    required int faceKey, // TASK A: Use fixed key
-  }) {
-    ui.Offset startPoint;
-    
-    // FIX A: Calculate target cheek Y
-    final targetCheekY = box.top + faceH * cheekYFactor;
-    final minY = targetCheekY - 0.06 * faceH; // Slightly above cheek band
-    final maxY = targetCheekY + 0.02 * faceH; // Slightly below cheek band
-    
-    if (eyeContour.isNotEmpty) {
-      // TASK B: Improved outer eye corner selection
-      // Find eye bounds and vertical center
-      double minX = eyeContour.first.dx, maxX = eyeContour.first.dx;
-      double minYEye = eyeContour.first.dy, maxYEye = eyeContour.first.dy;
-      
-      for (final p in eyeContour.skip(1)) {
-        minX = min(minX, p.dx);
-        maxX = max(maxX, p.dx);
-        minYEye = min(minYEye, p.dy);
-        maxYEye = max(maxYEye, p.dy);
-      }
-      
-      final eyeCenterY = (minYEye + maxYEye) / 2;
-      final searchWidth = (maxX - minX) * 0.3; // Look at outer 30% of eye width
-      
-      List<ui.Offset> outerCandidates = [];
-      
-      if (isLeft) {
-        // Left eye: look at leftmost points
-        final leftBoundary = minX + searchWidth;
-        outerCandidates = eyeContour.where((p) => p.dx <= leftBoundary).toList();
-      } else {
-        // Right eye: look at rightmost points
-        final rightBoundary = maxX - searchWidth;
-        outerCandidates = eyeContour.where((p) => p.dx >= rightBoundary).toList();
-      }
-      
-      if (outerCandidates.isNotEmpty) {
-        // Pick the candidate closest to vertical center
-        outerCandidates.sort((a, b) {
-          final diffA = (a.dy - eyeCenterY).abs();
-          final diffB = (b.dy - eyeCenterY).abs();
-          return diffA.compareTo(diffB);
-        });
-        startPoint = outerCandidates.first;
-      } else {
-        // Fallback to original method
-        startPoint = eyeContour.reduce((a, b) {
-          if (isLeft) {
-            return a.dx < b.dx ? a : b;
-          } else {
-            return a.dx > b.dx ? a : b;
-          }
-        });
-      }
-    } else {
-      // Fallback: use face oval side midpoint, but adjusted to cheek zone
-      final sidePts = faceOval.where((p) => isLeft ? (p.dx <= box.center.dx) : (p.dx >= box.center.dx)).toList();
-      if (sidePts.isNotEmpty) {
-        // FIX A: Find points in the cheek zone
-        final cheekZonePts = sidePts.where((p) => p.dy >= minY && p.dy <= maxY).toList();
-        if (cheekZonePts.isNotEmpty) {
-          // Pick the outermost point in cheek zone
-          cheekZonePts.sort((a, b) => isLeft ? a.dx.compareTo(b.dx) : b.dx.compareTo(a.dx));
-          startPoint = cheekZonePts.first;
-        } else {
-          // Fallback to original midpoint but clamp Y
-          sidePts.sort((a, b) => a.dy.compareTo(b.dy));
-          final midIdx = sidePts.length ~/ 2;
-          startPoint = sidePts[midIdx];
-        }
-      } else {
-        // Ultimate fallback - use target cheek Y
-        startPoint = ui.Offset(
-          isLeft ? box.left + faceW * 0.25 : box.right - faceW * 0.25,
-          targetCheekY,
-        );
-      }
-    }
-
-    // Apply tuning knobs
-    final liftY = -faceH * anchorUpFactor; // Lift up
-    final outX = isLeft ? -faceW * anchorOutFactor : faceW * anchorOutFactor; // Move toward temple
-    
-    // Calculate proposed anchor
-    var anchor = ui.Offset(
-      startPoint.dx + outX,
-      startPoint.dy + liftY,
-    );
-
-    // FIX A: Clamp Y to cheek band
-    anchor = ui.Offset(
-      anchor.dx,
-      anchor.dy.clamp(minY, maxY),
-    );
-
-    // Prevent going too close to nose
-    final maxInward = faceW * anchorInLimitFactor;
-    if (isLeft) {
-      final distanceFromNose = noseCenterX - anchor.dx;
-      if (distanceFromNose < maxInward) {
-        anchor = ui.Offset(noseCenterX - maxInward, anchor.dy);
-      }
-    } else {
-      final distanceFromNose = anchor.dx - noseCenterX;
-      if (distanceFromNose < maxInward) {
-        anchor = ui.Offset(noseCenterX + maxInward, anchor.dy);
-      }
-    }
-
-    // Apply smoothing
-    final smootherKey = faceKey * 1000 + (isLeft ? 1 : 2); // TASK A: Fixed key
-    final smoothers = isLeft ? _leftAnchorSmoothers : _rightAnchorSmoothers;
-    final prevAnchor = smoothers[smootherKey];
-    
-    if (prevAnchor == null) {
-      smoothers[smootherKey] = anchor;
-    } else {
-      // EMA smoothing for stability
-      final smoothed = ui.Offset(
-        prevAnchor.dx + (anchor.dx - prevAnchor.dx) * 0.25,
-        prevAnchor.dy + (anchor.dy - prevAnchor.dy) * 0.25,
-      );
-      smoothers[smootherKey] = smoothed;
-      anchor = smoothed;
-    }
-
-    return anchor;
-  }
-
-  // -----------------------------
-  // Helpers
+  // Helper methods
   // -----------------------------
   List<ui.Offset> _contourOffsets(List<Point<int>>? pts) {
     if (pts == null || pts.isEmpty) return const [];
@@ -920,6 +1385,7 @@ class BlushPainter {
   }
 
   Rect _boundsOf(List<ui.Offset> pts) {
+    if (pts.isEmpty) return Rect.zero;
     double minX = pts.first.dx, maxX = pts.first.dx;
     double minY = pts.first.dy, maxY = pts.first.dy;
     for (final p in pts.skip(1)) {
@@ -931,8 +1397,37 @@ class BlushPainter {
     return Rect.fromLTRB(minX, minY, maxX, maxY);
   }
 
-  // EMA smoothing for point list
+  double _getEyeBottomFromContour(List<ui.Offset> eyeContour) {
+    if (eyeContour.isEmpty) return double.infinity;
+    double maxY = eyeContour.first.dy;
+    for (final p in eyeContour) {
+      if (p.dy > maxY) maxY = p.dy;
+    }
+    return maxY;
+  }
+
+  double _getMouthTopFromContour(List<ui.Offset> mouthContour) {
+    if (mouthContour.isEmpty) return 0;
+    double minY = mouthContour.first.dy;
+    for (final p in mouthContour) {
+      if (p.dy < minY) minY = p.dy;
+    }
+    return minY;
+  }
+
+  double? _getEyeBottom(bool left) {
+    final eyeContourType = left ? FaceContourType.leftEye : FaceContourType.rightEye;
+    final eyeContour = _contourOffsets(face.contours[eyeContourType]?.points);
+    if (eyeContour.isNotEmpty) {
+      return _getEyeBottomFromContour(eyeContour);
+    }
+    return null;
+  }
+
+  // EMA smoothing for point list (now conditional)
   List<ui.Offset> _smoothPoints(List<ui.Offset> pts, int key, {double alpha = 0.18}) {
+    if (!isLiveMode) return pts;
+    
     final prev = _ovalSmoothers[key];
     if (prev == null || prev.length != pts.length) {
       _ovalSmoothers[key] = List<ui.Offset>.from(pts);

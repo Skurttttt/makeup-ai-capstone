@@ -156,22 +156,24 @@ class _FaceScanPageState extends State<FaceScanPage> {
     return frame.image;
   }
 
-  // ✅ NEW: Estimate scene luminance from captured ui.Image (0..1)
+  // ✅ UPDATED: Better scene luminance estimation with adaptive sampling
   Future<double> _estimateSceneLuminance(ui.Image image) async {
-    final bd = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
-    if (bd == null) return 0.50;
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    if (byteData == null) return 0.5;
 
-    final bytes = bd.buffer.asUint8List();
+    final bytes = byteData.buffer.asUint8List();
     final w = image.width;
     final h = image.height;
 
-    // sample grid (fast)
-    const step = 20; // larger = faster
+    // Adaptive sampling: sample every ~25px
+    final stepX = (w / 25).clamp(8, 40).toInt();
+    final stepY = (h / 25).clamp(8, 40).toInt();
+
     double sum = 0.0;
     int count = 0;
 
-    for (int y = 0; y < h; y += step) {
-      for (int x = 0; x < w; x += step) {
+    for (int y = 0; y < h; y += stepY) {
+      for (int x = 0; x < w; x += stepX) {
         final i = (y * w + x) * 4;
         if (i + 2 >= bytes.length) continue;
 
@@ -179,14 +181,14 @@ class _FaceScanPageState extends State<FaceScanPage> {
         final g = bytes[i + 1] / 255.0;
         final b = bytes[i + 2] / 255.0;
 
-        // simple luminance
-        final l = (0.2126 * r + 0.7152 * g + 0.0722 * b);
-        sum += l;
+        // Standard luminance formula
+        final lum = (0.2126 * r + 0.7152 * g + 0.0722 * b);
+        sum += lum;
         count++;
       }
     }
 
-    if (count == 0) return 0.50;
+    if (count == 0) return 0.5;
     return (sum / count).clamp(0.0, 1.0);
   }
 
@@ -513,13 +515,13 @@ class _FaceScanPageState extends State<FaceScanPage> {
       final file = await controller.takePicture();
       final uiImage = await _loadUiImageFromFile(file.path);
 
-      // ✅ NEW: compute scene luminance from captured still
-      final sceneL = await _estimateSceneLuminance(uiImage);
+      // ✅ IMPORTANT: Compute scene luminance from captured image
+      final sceneLum = await _estimateSceneLuminance(uiImage);
 
       setState(() {
         _capturedFile = file;
         _capturedUiImage = uiImage;
-        _sceneLuminance = sceneL;
+        _sceneLuminance = sceneLum; // Store computed luminance
         _status = 'Detecting face…';
       });
 
@@ -725,7 +727,7 @@ class _FaceScanPageState extends State<FaceScanPage> {
                                 _faceProfile!.avgG,
                                 _faceProfile!.avgB,
                               ),
-                              // ✅ NEW: pass scene luminance (0..1)
+                              // ✅ CRITICAL: Pass scene luminance to blush painter
                               sceneLuminance: _sceneLuminance,
                             ),
                           ),
