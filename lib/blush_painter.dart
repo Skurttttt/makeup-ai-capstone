@@ -12,7 +12,7 @@ class BlushPainter {
   final double intensity;
   final FaceShape faceShape;
 
-  /// Optional sampled skin color (FaceProfile avgR/G/B)
+  /// Optional sampled skin color (FaceProfile avgR/G/B) hehehe
   final Color? skinColor;
 
   /// NEW: overall scene luminance (0..1). Compute this once and pass in.
