@@ -1,9 +1,10 @@
+// lib/eyeliner_painter.dart
 import 'dart:ui' as ui;
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+
 import 'utils.dart';
-import 'look_engine.dart';  // Add this import
 
 class EyelinerPainter {
   final Face face;
@@ -18,6 +19,18 @@ class EyelinerPainter {
     final pts = face.contours[type]?.points;
     if (pts == null || pts.length < 3) return null;
     return pts.map((p) => ui.Offset(p.x.toDouble(), p.y.toDouble())).toList();
+  }
+
+  Rect _boundsOf(List<ui.Offset> pts) {
+    double minX = pts.first.dx, maxX = pts.first.dx;
+    double minY = pts.first.dy, maxY = pts.first.dy;
+    for (final p in pts.skip(1)) {
+      minX = min(minX, p.dx);
+      maxX = max(maxX, p.dx);
+      minY = min(minY, p.dy);
+      maxY = max(maxY, p.dy);
+    }
+    return Rect.fromLTRB(minX, minY, maxX, maxY);
   }
 
   List<ui.Offset> _upperLidPoints(List<ui.Offset> eyePts) {
@@ -36,11 +49,11 @@ class EyelinerPainter {
     if (upper.length < 3) return [];
 
     upper.sort((a, b) => a.dx.compareTo(b.dx));
+
+    // light downsample to reduce jitter
     final filtered = <ui.Offset>[];
     for (int i = 0; i < upper.length; i++) {
-      if (i == 0 || i == upper.length - 1 || i % 2 == 0) {
-        filtered.add(upper[i]);
-      }
+      if (i == 0 || i == upper.length - 1 || i % 2 == 0) filtered.add(upper[i]);
     }
     return filtered;
   }
@@ -59,113 +72,240 @@ class EyelinerPainter {
     return h / w;
   }
 
+  ui.Offset _normalize(ui.Offset v) {
+    final len = sqrt(v.dx * v.dx + v.dy * v.dy);
+    if (len < 1e-6) return const ui.Offset(1, 0);
+    return ui.Offset(v.dx / len, v.dy / len);
+  }
+
+  /// ✅ Robust extension that works even if the front camera is mirrored.
+  /// eyeOnLeftSideOfImage:
+  ///   - true  => outer corner is minX end (index 0)
+  ///   - false => outer corner is maxX end (last index)
+  List<ui.Offset> _extendUpperLid({
+    required List<ui.Offset> upperOrdered,
+    required bool eyeOnLeftSideOfImage,
+    required Rect eyeBounds,
+    required double openness,
+  }) {
+    if (upperOrdered.length < 4) return upperOrdered;
+
+    final outerIdx = eyeOnLeftSideOfImage ? 0 : (upperOrdered.length - 1);
+    final inwardIdx = eyeOnLeftSideOfImage ? 1 : (upperOrdered.length - 2);
+
+    final outer = upperOrdered[outerIdx];
+    final inward = upperOrdered[inwardIdx];
+
+    var tangent = ui.Offset(outer.dx - inward.dx, outer.dy - inward.dy);
+    tangent = _normalize(tangent);
+
+    final baseExt = (eyeBounds.width * 0.125).clamp(3.2, 14.8);
+    final openBoost = ui.lerpDouble(
+      0.95,
+      1.18,
+      ((openness - 0.14) / 0.12).clamp(0.0, 1.0),
+    )!;
+    final extLen = (baseExt * openBoost).clamp(3.0, 15.0);
+
+    final upBias = ui.Offset(0, -(eyeBounds.height * 0.035).clamp(0.4, 2.2));
+
+    final ext1 = outer + tangent * (extLen * 0.55) + upBias;
+    final ext2 = outer + tangent * (extLen * 1.00) + upBias;
+
+    final out = List<ui.Offset>.from(upperOrdered);
+
+    if (eyeOnLeftSideOfImage) {
+      out.insert(0, ext2);
+      out.insert(0, ext1);
+    } else {
+      out.add(ext1);
+      out.add(ext2);
+    }
+
+    return out;
+  }
+
+  /// ✅ Draws a path with inner-corner taper (alpha + thickness fade-in).
+  /// We do this by stroking small sub-path segments with varying paint.
+  void _drawVariableStroke({
+    required Canvas canvas,
+    required Path path,
+    required double baseWidth,
+    required double baseAlpha,
+    required double innerTaperFrac, // e.g. 0.18 => first 18% fades in
+    required bool taperFromStart, // which end is the inner corner
+    required Paint Function(double width, double alpha) paintFactory,
+    int segments = 42, // higher = smoother taper
+  }) {
+    final metrics = path.computeMetrics().toList();
+    if (metrics.isEmpty) return;
+
+    // Combine metrics length (usually 1 metric, but safe)
+    final totalLen = metrics.fold<double>(0, (s, m) => s + m.length);
+    if (totalLen <= 1e-6) return;
+
+    // Render in normalized t along total length
+    double globalStart = 0.0;
+
+    for (final metric in metrics) {
+      final mLen = metric.length;
+      if (mLen <= 1e-6) continue;
+
+      for (int i = 0; i < segments; i++) {
+        final t0 = i / segments;
+        final t1 = (i + 1) / segments;
+
+        final s0 = metric.length * t0;
+        final s1 = metric.length * t1;
+
+        // Global normalized position along the entire path
+        final g0 = (globalStart + s0) / totalLen;
+        final g1 = (globalStart + s1) / totalLen;
+        final gMid = (g0 + g1) * 0.5;
+
+        // Determine taper factor near the INNER corner end
+        // If taperFromStart=true, inner corner is at t=0; else at t=1.
+        final innerT = taperFromStart ? gMid : (1.0 - gMid);
+
+        double taper = 1.0;
+        if (innerTaperFrac > 0) {
+          final x = (innerT / innerTaperFrac).clamp(0.0, 1.0);
+          // Smoothstep
+          taper = x * x * (3 - 2 * x);
+        }
+
+        final w = max(0.35, baseWidth * (0.25 + 0.75 * taper));
+        final a = (baseAlpha * taper).clamp(0.0, 1.0);
+
+        if (a <= 0.001) continue;
+
+        final seg = metric.extractPath(s0, s1);
+        final p = paintFactory(w, a);
+        canvas.drawPath(seg, p);
+      }
+
+      globalStart += mLen;
+    }
+  }
+
   void paint(Canvas canvas, Size size) {
     final k = intensity.clamp(0.0, 1.0);
-    if (k == 0) return;
+    if (k <= 0.0) return;
 
     void drawEyeliner(FaceContourType eyeType) {
       final eyePtsRaw = _contourPoints(eyeType);
       if (eyePtsRaw == null || eyePtsRaw.length < 6) return;
 
-      final box = face.boundingBox;
-      final faceCenterX = box.left + box.width * 0.5;
+      final faceBox = face.boundingBox;
+      final faceCenterX = faceBox.left + faceBox.width * 0.5;
+
+      final eyeBounds = _boundsOf(eyePtsRaw);
+      final eyeCenterX = eyeBounds.center.dx;
+
+      // Decide which eye is on which side in IMAGE space (handles mirroring)
+      final eyeOnLeftSideOfImage = eyeCenterX < faceCenterX;
 
       final upper = _upperLidPoints(eyePtsRaw);
       if (upper.length < 4) return;
 
-      final lift = max(0.8, (box.height * 0.003));
-      final upperLifted = upper.map((p) => ui.Offset(p.dx, p.dy - lift)).toList();
-
-      final linerPath = DrawingUtils.catmullRomToBezierPath(upperLifted, tension: 0.75);
-
-      final eyeBounds = DrawingUtils.boundsOf(eyePtsRaw);
       final openness = _eyeOpennessRatio(eyePtsRaw);
 
+      // --- Lash adhesion (geometry): sit slightly closer to lash line ---
+      // Previously you lifted upward. We'll keep a small lift, but "settle" it back down a bit.
+      final lift = max(0.6, (faceBox.height * 0.0025)); // slightly smaller than before
+      final settleDown = (eyeBounds.height * 0.013).clamp(0.4, 1.4);
+      final upperLifted = upper
+          .map((p) => ui.Offset(p.dx, p.dy - lift + settleDown))
+          .toList();
+
+      final ordered = List<ui.Offset>.from(upperLifted)
+        ..sort((a, b) => a.dx.compareTo(b.dx));
+
+      final extended = _extendUpperLid(
+        upperOrdered: ordered,
+        eyeOnLeftSideOfImage: eyeOnLeftSideOfImage,
+        eyeBounds: eyeBounds,
+        openness: openness,
+      );
+
+      final linerPath = DrawingUtils.catmullRomToBezierPath(extended, tension: 0.72);
+
+      // width based on eye size
       final baseW = (eyeBounds.height * 0.085).clamp(1.2, 4.2).toDouble();
 
-      final blurPaint = Paint()
-        ..color = Colors.black.withOpacity(0.18 * k)
+      // determine which end is INNER corner for taper
+      // If eye is on LEFT side of image, inner corner is the right end (maxX) => taperFromStart=false
+      // If eye is on RIGHT side of image, inner corner is the left end (minX) => taperFromStart=true
+      final taperFromStart = !eyeOnLeftSideOfImage;
+
+      // ✅ 1) Lash-bed tight shadow (adhesion)
+      // A slim shadow under the liner to “glue” it to lash roots.
+      final lashBedShadow = Paint()
+        ..color = Colors.black.withOpacity((0.14 * k).clamp(0.0, 0.30))
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
         ..isAntiAlias = true
-        ..strokeWidth = baseW * 2.2
-        ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 10);
+        ..strokeWidth = baseW * 1.05
+        ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 4);
+
+      // tiny downward offset to sit into lashes
+      canvas.drawPath(linerPath.shift(const Offset(0, 0.6)), lashBedShadow);
+
+      // ✅ 2) Soft blur base (keeps it skin-like)
+      final blurPaint = Paint()
+        ..color = Colors.black.withOpacity((0.16 * k).clamp(0.0, 0.32))
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..isAntiAlias = true
+        ..strokeWidth = baseW * 2.10
+        ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 9);
 
       canvas.drawPath(linerPath, blurPaint);
 
-      final lashShadowPaint = Paint()
-        ..color = Colors.black.withOpacity(0.10 * k)
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..isAntiAlias = true
-        ..strokeWidth = baseW * 0.9;
+      // ✅ 3) Core line with INNER TAPER (alpha + width fade-in)
+      const innerTaperFrac = 0.24; // first 18% fades in smoothly
 
-      canvas.drawPath(linerPath.shift(const Offset(0, 1)), lashShadowPaint);
+      _drawVariableStroke(
+        canvas: canvas,
+        path: linerPath,
+        baseWidth: baseW,
+        baseAlpha: (0.62 * k).clamp(0.0, 0.90),
+        innerTaperFrac: innerTaperFrac,
+        taperFromStart: taperFromStart,
+        segments: 46,
+        paintFactory: (w, a) {
+          return Paint()
+            ..color = Colors.black.withOpacity(a)
+            ..style = PaintingStyle.stroke
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round
+            ..isAntiAlias = true
+            ..strokeWidth = w;
+        },
+      );
 
-      final linerPaint = Paint()
-        ..color = Colors.black.withOpacity(0.62 * k)
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..isAntiAlias = true
-        ..strokeWidth = baseW;
-
-      canvas.drawPath(linerPath, linerPaint);
-
-      // Wing logic
+      // ---- Wing logic (keep stable) ----
       final allowByOpenness = openness > 0.16;
       final yaw = face.headEulerAngleY ?? 0.0;
       final roll = face.headEulerAngleZ ?? 0.0;
       final allowByPose = yaw.abs() < 18 && roll.abs() < 22;
+      if (!(allowByOpenness && allowByPose)) return;
 
-      ui.Offset outerCorner = upperLifted.first;
-      ui.Offset innerCorner = upperLifted.last;
+      final endIdx = eyeOnLeftSideOfImage ? 0 : (extended.length - 1);
+      final prevIdx = eyeOnLeftSideOfImage
+          ? min(2, extended.length - 1)
+          : max(extended.length - 3, 0);
 
-      double bestOuter = -1;
-      double bestInner = -1;
-
-      for (final p in upperLifted) {
-        final dx = (p.dx - faceCenterX).abs();
-        if (dx > bestOuter) {
-          bestOuter = dx;
-          outerCorner = p;
-        }
-      }
-
-      for (final p in upperLifted) {
-        final dx = (p.dx - faceCenterX).abs();
-        final inv = 999999 - dx;
-        if (inv > bestInner) {
-          bestInner = inv;
-          innerCorner = p;
-        }
-      }
-
-      final outwardSign = (outerCorner.dx - faceCenterX).sign;
-      if (outwardSign == 0) return;
-
-      upperLifted.sort((a, b) => a.dx.compareTo(b.dx));
-      final ordered = upperLifted;
-
-      final endIdx = outwardSign > 0 ? ordered.length - 1 : 0;
-      final prevIdx = outwardSign > 0 ? ordered.length - 2 : 1;
-
-      final end = ordered[endIdx];
-      final prev = ordered[prevIdx];
+      final end = extended[endIdx];
+      final prev = extended[prevIdx];
 
       final lidDir = ui.Offset(end.dx - prev.dx, end.dy - prev.dy);
-      final wingDirOutwardOk = lidDir.dx.sign == outwardSign;
+      final outwardSign = eyeOnLeftSideOfImage ? -1.0 : 1.0;
 
-      final droop = (outerCorner.dy - innerCorner.dy);
-      final allowByShape = droop < eyeBounds.height * 0.35;
+      if (lidDir.dx.sign != outwardSign.sign) return;
 
-      final allowWing = allowByOpenness && allowByPose && wingDirOutwardOk && allowByShape;
-
-      if (!allowWing) return;
-
-      // Draw wing
       final wingLen = (eyeBounds.width * 0.14).clamp(3.0, 14.0).toDouble();
       final wingUp = (eyeBounds.height * 0.10).clamp(1.5, 10.0).toDouble();
 
@@ -184,18 +324,18 @@ class EyelinerPainter {
         );
 
       final wingBlur = Paint()
-        ..color = Colors.black.withOpacity(0.16 * k)
+        ..color = Colors.black.withOpacity((0.14 * k).clamp(0.0, 0.28))
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
         ..isAntiAlias = true
-        ..strokeWidth = baseW * 2.0
-        ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 10);
+        ..strokeWidth = baseW * 1.9
+        ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 9);
 
       canvas.drawPath(wingPath, wingBlur);
 
       final wingPaint = Paint()
-        ..color = Colors.black.withOpacity(0.60 * k)
+        ..color = Colors.black.withOpacity((0.58 * k).clamp(0.0, 0.9))
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round

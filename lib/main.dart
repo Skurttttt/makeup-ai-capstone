@@ -2,6 +2,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'dart:math';
 
 import 'skin_analyzer.dart';
 
@@ -75,8 +76,12 @@ class _FaceScanPageState extends State<FaceScanPage> {
   static const double _minConfidenceOk = 0.45;
   static const double _minConfidenceGood = 0.60;
 
-  // ✅ NEW: captured-image scene luminance (0..1)
+  // ✅ Global luminance
   double _sceneLuminance = 0.50;
+
+  // ✅ NEW: per-cheek luminance (0..1)
+  double _leftCheekLum = 0.50;
+  double _rightCheekLum = 0.50;
 
   // ===== Live scan quality (Day 2 upgrade) =====
   bool _liveRunning = false;
@@ -156,7 +161,7 @@ class _FaceScanPageState extends State<FaceScanPage> {
     return frame.image;
   }
 
-  // ✅ UPDATED: Better scene luminance estimation with adaptive sampling
+  // ✅ Global scene luminance estimation (0..1)
   Future<double> _estimateSceneLuminance(ui.Image image) async {
     final byteData = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
     if (byteData == null) return 0.5;
@@ -165,7 +170,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
     final w = image.width;
     final h = image.height;
 
-    // Adaptive sampling: sample every ~25px
     final stepX = (w / 25).clamp(8, 40).toInt();
     final stepY = (h / 25).clamp(8, 40).toInt();
 
@@ -181,7 +185,43 @@ class _FaceScanPageState extends State<FaceScanPage> {
         final g = bytes[i + 1] / 255.0;
         final b = bytes[i + 2] / 255.0;
 
-        // Standard luminance formula
+        final lum = (0.2126 * r + 0.7152 * g + 0.0722 * b);
+        sum += lum;
+        count++;
+      }
+    }
+
+    if (count == 0) return 0.5;
+    return (sum / count).clamp(0.0, 1.0);
+  }
+
+  // ✅ NEW: average luminance inside a rectangle (0..1)
+  Future<double> _avgLuminanceInRect(ui.Image image, Rect rect) async {
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    if (byteData == null) return 0.5;
+
+    final bytes = byteData.buffer.asUint8List();
+    final w = image.width;
+    final h = image.height;
+
+    final safe = rect.intersect(Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()));
+    if (safe.isEmpty) return 0.5;
+
+    final stepX = (safe.width / 18).clamp(6, 26).toInt();
+    final stepY = (safe.height / 18).clamp(6, 26).toInt();
+
+    double sum = 0.0;
+    int count = 0;
+
+    for (int y = safe.top.toInt(); y < safe.bottom.toInt(); y += stepY) {
+      for (int x = safe.left.toInt(); x < safe.right.toInt(); x += stepX) {
+        final i = (y * w + x) * 4;
+        if (i + 2 >= bytes.length) continue;
+
+        final r = bytes[i] / 255.0;
+        final g = bytes[i + 1] / 255.0;
+        final b = bytes[i + 2] / 255.0;
+
         final lum = (0.2126 * r + 0.7152 * g + 0.0722 * b);
         sum += lum;
         count++;
@@ -205,7 +245,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
     final int uvPixelStride = image.planes[1].bytesPerPixel ?? 1;
 
     final Uint8List nv21 = Uint8List(width * height + (width * height ~/ 2));
-
     int index = 0;
 
     for (int row = 0; row < height; row++) {
@@ -222,15 +261,14 @@ class _FaceScanPageState extends State<FaceScanPage> {
       final int uvRowStart = row * uvRowStride;
       for (int col = 0; col < uvWidth; col++) {
         final int uvIndex = uvRowStart + col * uvPixelStride;
-
         final u = uPlane[uvIndex];
         final v = vPlane[uvIndex];
 
         if (_swapUV) {
-          nv21[index++] = u; // treat U as V
-          nv21[index++] = v; // treat V as U
+          nv21[index++] = u;
+          nv21[index++] = v;
         } else {
-          nv21[index++] = v; // NV21: V then U
+          nv21[index++] = v;
           nv21[index++] = u;
         }
       }
@@ -507,6 +545,8 @@ class _FaceScanPageState extends State<FaceScanPage> {
       _intensity = 0.75;
       _lipFinish = LipFinish.matte;
       _sceneLuminance = 0.50;
+      _leftCheekLum = 0.50;
+      _rightCheekLum = 0.50;
     });
 
     try {
@@ -515,13 +555,12 @@ class _FaceScanPageState extends State<FaceScanPage> {
       final file = await controller.takePicture();
       final uiImage = await _loadUiImageFromFile(file.path);
 
-      // ✅ IMPORTANT: Compute scene luminance from captured image
       final sceneLum = await _estimateSceneLuminance(uiImage);
 
       setState(() {
         _capturedFile = file;
         _capturedUiImage = uiImage;
-        _sceneLuminance = sceneLum; // Store computed luminance
+        _sceneLuminance = sceneLum;
         _status = 'Detecting face…';
       });
 
@@ -537,7 +576,33 @@ class _FaceScanPageState extends State<FaceScanPage> {
           .compareTo(a.boundingBox.width * a.boundingBox.height));
       final face = faces.first;
 
-      setState(() => _status = 'Analyzing skin tone…');
+      // ✅ NEW: per-cheek luminance sampling
+      final box = face.boundingBox;
+      final fw = box.width;
+      final fh = box.height;
+
+      final leftCheekRect = Rect.fromLTWH(
+        box.left + fw * 0.08,
+        box.top + fh * 0.45,
+        fw * 0.28,
+        fh * 0.22,
+      );
+
+      final rightCheekRect = Rect.fromLTWH(
+        box.left + fw * 0.64,
+        box.top + fh * 0.45,
+        fw * 0.28,
+        fh * 0.22,
+      );
+
+      final leftLum = await _avgLuminanceInRect(uiImage, leftCheekRect);
+      final rightLum = await _avgLuminanceInRect(uiImage, rightCheekRect);
+
+      setState(() {
+        _leftCheekLum = leftLum;
+        _rightCheekLum = rightLum;
+        _status = 'Analyzing skin tone…';
+      });
 
       final skin = await SkinAnalyzer.analyze(uiImage, face);
       final profile = FaceProfile.fromAnalysis(face, skin);
@@ -727,7 +792,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
                                 _faceProfile!.avgG,
                                 _faceProfile!.avgB,
                               ),
-                              // ✅ CRITICAL: Pass scene luminance to blush painter
                               sceneLuminance: _sceneLuminance,
                             ),
                           ),
@@ -944,7 +1008,7 @@ class _ResultsSummaryCard extends StatelessWidget {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.info_outline,
                             size: 16,
                             color: Colors.orange,

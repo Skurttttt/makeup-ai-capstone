@@ -5,11 +5,13 @@ import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 import 'utils.dart'; // LipFinish
 import 'look_engine.dart'; // FaceShape
+
 import 'lip_painter.dart';
 import 'eyeshadow_painter.dart';
 import 'eyeliner_painter.dart';
 import 'blush_painter.dart';
 import 'contour_highlight_painter.dart';
+import 'eyebrow_painter.dart'; // ✅ NEW
 
 class MakeupOverlayPainter extends CustomPainter {
   final ui.Image image;
@@ -26,12 +28,13 @@ class MakeupOverlayPainter extends CustomPainter {
   /// sampled skin color (FaceProfile avgR/G/B)
   final Color? skinColor;
 
-  /// ✅ NEW: scene luminance (0..1) from captured still image
+  /// ✅ scene luminance (0..1) from captured still image
   final double sceneLuminance;
 
   late final LipPainter _lipPainter;
   late final EyeshadowPainter _eyeshadowPainter;
   late final EyelinerPainter _eyelinerPainter;
+  late final EyebrowPainter _eyebrowPainter; // ✅ NEW
   late final BlushPainter _blushPainter;
   late final ContourHighlightPainter _contourPainter;
 
@@ -65,6 +68,18 @@ class MakeupOverlayPainter extends CustomPainter {
       intensity: intensity,
     );
 
+    // ✅ NEW: Eyebrows (painter-only, no look engine dependency)
+    // You can tweak browColor/thickness/hairStrokes anytime.
+    _eyebrowPainter = EyebrowPainter(
+      face: face,
+      browColor: const Color(0xFF2B1B14), // natural dark brown (change if you want)
+      intensity: intensity,
+      thickness: 1.05, // 0.9 natural, 1.2 medium, 1.5 bold
+      hairStrokes: true, // set false for a powder-brow look
+      sceneLuminance: sceneLuminance,
+      debugMode: false,
+    );
+
     _blushPainter = BlushPainter(
       face: face,
       blushColor: blushColor,
@@ -89,11 +104,17 @@ class MakeupOverlayPainter extends CustomPainter {
     final k = intensity.clamp(0.0, 1.0);
     if (k <= 0.0) return;
 
-    _lipPainter.paint(canvas, size);
+    // ✅ Suggested order (brows first so liner/shadow sit nicely)
+    _eyebrowPainter.paint(canvas, size);
+
     _eyeshadowPainter.paint(canvas, size);
     _eyelinerPainter.paint(canvas, size);
+
     _blushPainter.paint(canvas, size);
     _contourPainter.paint(canvas, size);
+
+    // Lips last (so they stay clean on top)
+    _lipPainter.paint(canvas, size);
   }
 
   @override
