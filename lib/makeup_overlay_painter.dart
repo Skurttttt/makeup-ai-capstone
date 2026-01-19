@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 import 'utils.dart'; // LipFinish
-import 'look_engine.dart'; // FaceShape
+import 'look_engine.dart'; // FaceShape, EyelinerStyle
 
 import 'lip_painter.dart';
 import 'eyeshadow_painter.dart';
@@ -16,13 +16,12 @@ import 'eyebrow_painter.dart'; // ✅ NEW
 class MakeupOverlayPainter extends CustomPainter {
   final ui.Image image;
   final Face face;
-
   final Color lipstickColor;
   final Color blushColor;
   final Color eyeshadowColor;
-
   final double intensity;
   final FaceShape faceShape;
+  final EyelinerStyle eyelinerStyle; // ✅ A) Added field for eyeliner style
   final LipFinish lipFinish;
 
   /// sampled skin color (FaceProfile avgR/G/B)
@@ -33,11 +32,12 @@ class MakeupOverlayPainter extends CustomPainter {
 
   late final LipPainter _lipPainter;
   late final EyeshadowPainter _eyeshadowPainter;
-  late final EyelinerPainter _eyelinerPainter;
+  late final EyelinerPainter _eyelinerPainter; // ✅ A) Added field
   late final EyebrowPainter _eyebrowPainter; // ✅ NEW
   late final BlushPainter _blushPainter;
   late final ContourHighlightPainter _contourPainter;
 
+  // ✅ B) Updated constructor with eyelinerStyle parameter
   MakeupOverlayPainter({
     required this.image,
     required this.face,
@@ -46,6 +46,7 @@ class MakeupOverlayPainter extends CustomPainter {
     required this.eyeshadowColor,
     required this.intensity,
     required this.faceShape,
+    this.eyelinerStyle = EyelinerStyle.subtle, // ✅ B) Added with default
     this.lipFinish = LipFinish.glossy,
     this.skinColor,
     this.sceneLuminance = 0.50,
@@ -63,9 +64,11 @@ class MakeupOverlayPainter extends CustomPainter {
       intensity: intensity,
     );
 
+    // ✅ C) Updated EyelinerPainter initialization
     _eyelinerPainter = EyelinerPainter(
       face: face,
       intensity: intensity,
+      style: eyelinerStyle, // ✅ C) Pass the style parameter
     );
 
     // ✅ NEW: Eyebrows (painter-only, no look engine dependency)
@@ -126,6 +129,7 @@ class MakeupOverlayPainter extends CustomPainter {
         oldDelegate.eyeshadowColor != eyeshadowColor ||
         oldDelegate.intensity != intensity ||
         oldDelegate.faceShape != faceShape ||
+        oldDelegate.eyelinerStyle != eyelinerStyle || // ✅ Added eyelinerStyle check
         oldDelegate.lipFinish != lipFinish ||
         oldDelegate.skinColor != skinColor ||
         oldDelegate.sceneLuminance != sceneLuminance;

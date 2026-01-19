@@ -5,14 +5,17 @@ import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 import 'utils.dart';
+import 'look_engine.dart'; // ✅ 1️⃣ Add EyelinerStyle import
 
 class EyelinerPainter {
   final Face face;
   final double intensity;
+  final EyelinerStyle style; // ✅ 2️⃣ Update the EyelinerPainter constructor
 
   EyelinerPainter({
     required this.face,
     required this.intensity,
+    required this.style, // ✅ 2️⃣ Add style parameter
   });
 
   List<ui.Offset>? _contourPoints(FaceContourType type) {
@@ -192,6 +195,43 @@ class EyelinerPainter {
     final k = intensity.clamp(0.0, 1.0);
     if (k <= 0.0) return;
 
+    // ✅ 3️⃣ Modify paint method to react to style + intensity
+    if (style == EyelinerStyle.none) {
+      return; // draw nothing
+    }
+
+    double baseWidth = 1.6;
+    double wingFactor = 0.0;
+    double alpha = 0.7;
+
+    // ✅ 3️⃣ style-aware + opacity-aware configuration
+    switch (style) {
+      case EyelinerStyle.none:
+        return; // already handled above
+      case EyelinerStyle.thin:
+        baseWidth = 1.2;
+        wingFactor = 0.0;
+        alpha = 0.6;
+        break;
+      case EyelinerStyle.subtle:
+        baseWidth = 1.8;
+        wingFactor = 0.15;
+        alpha = 0.75;
+        break;
+      case EyelinerStyle.emoWing: // ✅ Added for Emo look
+        baseWidth = 2.8;
+        wingFactor = 0.35;
+        alpha = 0.95;
+        break;
+    }
+
+    final basePaint = Paint()
+      ..color = Colors.black.withOpacity(alpha * k)
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..strokeWidth = baseWidth * k.clamp(0.4, 1.0);
+
     void drawEyeliner(FaceContourType eyeType) {
       final eyePtsRaw = _contourPoints(eyeType);
       if (eyePtsRaw == null || eyePtsRaw.length < 6) return;
@@ -211,8 +251,7 @@ class EyelinerPainter {
       final openness = _eyeOpennessRatio(eyePtsRaw);
 
       // --- Lash adhesion (geometry): sit slightly closer to lash line ---
-      // Previously you lifted upward. We'll keep a small lift, but "settle" it back down a bit.
-      final lift = max(0.6, (faceBox.height * 0.0025)); // slightly smaller than before
+      final lift = max(0.6, (faceBox.height * 0.0025));
       final settleDown = (eyeBounds.height * 0.013).clamp(0.4, 1.4);
       final upperLifted = upper
           .map((p) => ui.Offset(p.dx, p.dy - lift + settleDown))
@@ -234,12 +273,9 @@ class EyelinerPainter {
       final baseW = (eyeBounds.height * 0.085).clamp(1.2, 4.2).toDouble();
 
       // determine which end is INNER corner for taper
-      // If eye is on LEFT side of image, inner corner is the right end (maxX) => taperFromStart=false
-      // If eye is on RIGHT side of image, inner corner is the left end (minX) => taperFromStart=true
       final taperFromStart = !eyeOnLeftSideOfImage;
 
       // ✅ 1) Lash-bed tight shadow (adhesion)
-      // A slim shadow under the liner to “glue” it to lash roots.
       final lashBedShadow = Paint()
         ..color = Colors.black.withOpacity((0.14 * k).clamp(0.0, 0.30))
         ..style = PaintingStyle.stroke
@@ -265,7 +301,7 @@ class EyelinerPainter {
       canvas.drawPath(linerPath, blurPaint);
 
       // ✅ 3) Core line with INNER TAPER (alpha + width fade-in)
-      const innerTaperFrac = 0.24; // first 18% fades in smoothly
+      const innerTaperFrac = 0.24;
 
       _drawVariableStroke(
         canvas: canvas,
@@ -291,7 +327,11 @@ class EyelinerPainter {
       final yaw = face.headEulerAngleY ?? 0.0;
       final roll = face.headEulerAngleZ ?? 0.0;
       final allowByPose = yaw.abs() < 18 && roll.abs() < 22;
-      if (!(allowByOpenness && allowByPose)) return;
+      
+      // Only draw wing if style supports it
+      final styleAllowsWing = style == EyelinerStyle.subtle || style == EyelinerStyle.emoWing;
+      
+      if (!(allowByOpenness && allowByPose && styleAllowsWing)) return;
 
       final endIdx = eyeOnLeftSideOfImage ? 0 : (extended.length - 1);
       final prevIdx = eyeOnLeftSideOfImage
@@ -323,26 +363,69 @@ class EyelinerPainter {
           wingEnd.dy,
         );
 
-      final wingBlur = Paint()
-        ..color = Colors.black.withOpacity((0.14 * k).clamp(0.0, 0.28))
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..isAntiAlias = true
-        ..strokeWidth = baseW * 1.9
-        ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 9);
+      // ✅ 4️⃣ Add wing extension ONLY for Emo style (more dramatic)
+      if (style == EyelinerStyle.emoWing) {
+        // Make emo wing more dramatic
+        final emoWingLen = wingLen * 1.5;
+        final emoWingUp = wingUp * 1.3;
+        
+        final emoWingEnd = ui.Offset(
+          end.dx + outwardSign * emoWingLen,
+          end.dy - emoWingUp,
+        );
 
-      canvas.drawPath(wingPath, wingBlur);
+        final emoWingPath = Path()
+          ..moveTo(end.dx, end.dy)
+          ..quadraticBezierTo(
+            end.dx + outwardSign * (emoWingLen * 0.6),
+            end.dy - (emoWingUp * 0.7),
+            emoWingEnd.dx,
+            emoWingEnd.dy,
+          );
 
-      final wingPaint = Paint()
-        ..color = Colors.black.withOpacity((0.58 * k).clamp(0.0, 0.9))
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..isAntiAlias = true
-        ..strokeWidth = baseW * 0.95;
+        final emoWingBlur = Paint()
+          ..color = Colors.black.withOpacity((0.20 * k).clamp(0.0, 0.35))
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..isAntiAlias = true
+          ..strokeWidth = baseW * 2.2
+          ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 11);
 
-      canvas.drawPath(wingPath, wingPaint);
+        canvas.drawPath(emoWingPath, emoWingBlur);
+
+        final emoWingPaint = Paint()
+          ..color = Colors.black.withOpacity((0.75 * k).clamp(0.0, 0.95))
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..isAntiAlias = true
+          ..strokeWidth = baseW * 1.2;
+
+        canvas.drawPath(emoWingPath, emoWingPaint);
+      } else {
+        // Regular wing for subtle style
+        final wingBlur = Paint()
+          ..color = Colors.black.withOpacity((0.14 * k).clamp(0.0, 0.28))
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..isAntiAlias = true
+          ..strokeWidth = baseW * 1.9
+          ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 9);
+
+        canvas.drawPath(wingPath, wingBlur);
+
+        final wingPaint = Paint()
+          ..color = Colors.black.withOpacity((0.58 * k).clamp(0.0, 0.9))
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..isAntiAlias = true
+          ..strokeWidth = baseW * 0.95;
+
+        canvas.drawPath(wingPath, wingPaint);
+      }
     }
 
     drawEyeliner(FaceContourType.leftEye);

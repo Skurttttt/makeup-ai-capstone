@@ -15,6 +15,7 @@ import 'package:flutter/services.dart';
 
 import 'instructions_page.dart';
 import 'look_engine.dart';
+import 'look_picker.dart';
 import 'makeup_overlay_painter.dart';
 import 'utils.dart';
 
@@ -68,9 +69,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
   // ✅ User-controlled intensity (opacity) for makeup overlay
   double _intensity = 0.75;
 
-  // ✅ Lip finish toggle
-  LipFinish _lipFinish = LipFinish.matte;
-
   // ✅ Day 2: Post-scan quality feedback
   List<String> _warnings = [];
   static const double _minConfidenceOk = 0.45;
@@ -99,6 +97,9 @@ class _FaceScanPageState extends State<FaceScanPage> {
   // ✅ Persistence for face detection
   int _noFaceStreak = 0;
   Face? _lastDetectedFace;
+
+  // ✅ NEW: Look picker state
+  MakeupLookPreset _selectedLook = MakeupLookPreset.noMakeup;
 
   late final FaceDetector _liveFaceDetector = FaceDetector(
     options: FaceDetectorOptions(
@@ -543,7 +544,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
       _look = null;
       _warnings = [];
       _intensity = 0.75;
-      _lipFinish = LipFinish.matte;
       _sceneLuminance = 0.50;
       _leftCheekLum = 0.50;
       _rightCheekLum = 0.50;
@@ -606,7 +606,7 @@ class _FaceScanPageState extends State<FaceScanPage> {
 
       final skin = await SkinAnalyzer.analyze(uiImage, face);
       final profile = FaceProfile.fromAnalysis(face, skin);
-      final look = LookEngine.recommendLook(profile);
+      final look = LookEngine.fromPreset(_selectedLook, profile: profile);
 
       final warnings = _buildWarnings(
         face: face,
@@ -762,7 +762,7 @@ class _FaceScanPageState extends State<FaceScanPage> {
                   ),
           ),
 
-          if (showPreview)
+          if (showPreview) 
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
               child: Column(
@@ -776,24 +776,28 @@ class _FaceScanPageState extends State<FaceScanPage> {
                         child: SizedBox(
                           width: _capturedUiImage!.width.toDouble(),
                           height: _capturedUiImage!.height.toDouble(),
-                          child: CustomPaint(
-                            painter: MakeupOverlayPainter(
-                              image: _capturedUiImage!,
-                              face: _detectedFace!,
-                              lipstickColor: _look!.lipstickColor,
-                              blushColor: _look!.blushColor,
-                              eyeshadowColor: _look!.eyeshadowColor,
-                              intensity: _intensity,
-                              faceShape: _faceProfile!.faceShape,
-                              lipFinish: _lipFinish,
-                              skinColor: Color.fromARGB(
-                                255,
-                                _faceProfile!.avgR,
-                                _faceProfile!.avgG,
-                                _faceProfile!.avgB,
-                              ),
-                              sceneLuminance: _sceneLuminance,
-                            ),
+                          child: Builder(
+                            builder: (context) {
+                              return CustomPaint(
+                                painter: MakeupOverlayPainter(
+                                  image: _capturedUiImage!,
+                                  face: _detectedFace!,
+                                  lipstickColor: _look!.lipstickColor,
+                                  blushColor: _look!.blushColor,
+                                  eyeshadowColor: _look!.eyeshadowColor,
+                                  intensity: _intensity,
+                                  eyelinerStyle: LookEngine.configFromPreset(_selectedLook).eyelinerStyle,
+                                  faceShape: _faceProfile!.faceShape,
+                                  skinColor: Color.fromARGB(
+                                    255,
+                                    _faceProfile!.avgR,
+                                    _faceProfile!.avgG,
+                                    _faceProfile!.avgB,
+                                  ),
+                                  sceneLuminance: _sceneLuminance,
+                                ),
+                              );
+                            },
                           ),
                         ),
                       ),
@@ -819,27 +823,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
                         ],
                       ),
                     ),
-
-                  if (_faceProfile != null && _look != null) ...[
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Text('Lip Finish'),
-                        const SizedBox(width: 12),
-                        ChoiceChip(
-                          label: const Text('Matte'),
-                          selected: _lipFinish == LipFinish.matte,
-                          onSelected: (_) => setState(() => _lipFinish = LipFinish.matte),
-                        ),
-                        const SizedBox(width: 8),
-                        ChoiceChip(
-                          label: const Text('Glossy'),
-                          selected: _lipFinish == LipFinish.glossy,
-                          onSelected: (_) => setState(() => _lipFinish = LipFinish.glossy),
-                        ),
-                      ],
-                    ),
-                  ],
                 ],
               ),
             )
@@ -864,6 +847,15 @@ class _FaceScanPageState extends State<FaceScanPage> {
                 confidenceLabel: _confidenceLabel(_faceProfile!.skinConfidence),
               ),
             ),
+
+          // Add dropdown BEFORE "Capture & Scan"
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+            child: LookPicker(
+              value: _selectedLook,
+              onChanged: (v) => setState(() => _selectedLook = v),
+            ),
+          ),
 
           Padding(
             padding: const EdgeInsets.all(12),
