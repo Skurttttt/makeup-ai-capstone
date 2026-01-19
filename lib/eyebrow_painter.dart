@@ -28,16 +28,12 @@ class EyebrowPainter {
   /// Optional debug overlay
   final bool debugMode;
 
-  // ============================
-  // ✅ EMA SMOOTHING (Anti-jitter)
-  // ============================
-
-  /// EMA alpha:
-  /// - Lower = more stable but more lag
-  /// - Higher = more responsive but less stable
-  ///
-  /// Recommended: 0.25–0.45
+  /// ✅ Anti-jitter stabilization strength (EMA)
+  /// 0.0 = no smoothing, 0.65–0.85 = good stabilization
   final double emaAlpha;
+
+  /// ✅ How long to keep EMA cache keys (prevents memory growth)
+  final Duration emaTtl;
 
   EyebrowPainter({
     required this.face,
@@ -48,20 +44,82 @@ class EyebrowPainter {
     this.sceneLuminance = 0.50,
     this.yOffsetFactor = 0.015,
     this.debugMode = false,
-    this.emaAlpha = 0.35,
+    this.emaAlpha = 0.78,
+    this.emaTtl = const Duration(seconds: 6),
   });
 
-  // Static cache across frames (per face trackingId + side)
-  static final Map<String, _EmaState> _emaCache = {};
+  // ----------------------------
+  // EMA cache (static = shared)
+  // ----------------------------
+  static final Map<String, List<ui.Offset>> _emaCache = {};
+  static final Map<String, DateTime> _emaTouched = {};
 
-  // For cleanup
-  static int _frameCounter = 0;
-  static const int _maxIdleFrames = 60; // ~1 sec at 60fps (tweak if needed)
-  static const int _maxCacheEntries = 12;
+  String _emaKey(int? trackingId, bool isLeft) {
+    // NOTE: identityHashCode(face) is in dart:core (no import needed)
+    if (trackingId == null) {
+      return 'NO_TRACK_${isLeft ? "L" : "R"}_${identityHashCode(face)}';
+    }
+    return 'TID_${trackingId}_${isLeft ? "L" : "R"}';
+  }
+
+  void _pruneEma() {
+    final now = DateTime.now();
+    final dead = <String>[];
+    _emaTouched.forEach((k, t) {
+      if (now.difference(t) > emaTtl) dead.add(k);
+    });
+    for (final k in dead) {
+      _emaTouched.remove(k);
+      _emaCache.remove(k);
+    }
+  }
+
+  List<ui.Offset> _emaSmoothPoints({
+    required String key,
+    required List<ui.Offset> raw,
+  }) {
+    if (raw.isEmpty) return raw;
+
+    final a = emaAlpha.clamp(0.0, 0.98);
+    // If alpha is 0 => no smoothing
+    if (a <= 0.0) return raw;
+
+    final prev = _emaCache[key];
+
+    // First time: seed cache with current raw points
+    if (prev == null || prev.isEmpty) {
+      _emaCache[key] = List<ui.Offset>.from(raw);
+      _emaTouched[key] = DateTime.now();
+      return raw;
+    }
+
+    // If ML returns different count, reset (avoid index mismatch artifacts)
+    if (prev.length != raw.length) {
+      _emaCache[key] = List<ui.Offset>.from(raw);
+      _emaTouched[key] = DateTime.now();
+      return raw;
+    }
+
+    final out = <ui.Offset>[];
+    for (int i = 0; i < raw.length; i++) {
+      final p = raw[i];
+      final q = prev[i];
+      out.add(ui.Offset(
+        ui.lerpDouble(q.dx, p.dx, 1.0 - a)!,
+        ui.lerpDouble(q.dy, p.dy, 1.0 - a)!,
+      ));
+    }
+
+    _emaCache[key] = out;
+    _emaTouched[key] = DateTime.now();
+    return out;
+  }
 
   void paint(Canvas canvas, Size size) {
     final k0 = intensity.clamp(0.0, 1.0);
     if (k0 <= 0.0) return;
+
+    _pruneEma();
 
     // Get eyebrow contours (top). These exist when enableContours=true.
     final leftRaw = _contourOffsets(face.contours[FaceContourType.leftEyebrowTop]?.points);
@@ -69,8 +127,20 @@ class EyebrowPainter {
 
     if (leftRaw.length < 4 && rightRaw.length < 4) return;
 
-    _frameCounter++;
-    _cleanupEmaCacheIfNeeded();
+    // ✅ EMA stabilization (prevents shimmering)
+    final left = leftRaw.length >= 4
+        ? _emaSmoothPoints(
+            key: _emaKey(face.trackingId, true),
+            raw: leftRaw,
+          )
+        : leftRaw;
+
+    final right = rightRaw.length >= 4
+        ? _emaSmoothPoints(
+            key: _emaKey(face.trackingId, false),
+            raw: rightRaw,
+          )
+        : rightRaw;
 
     final box = face.boundingBox;
     final faceW = max(1.0, box.width);
@@ -98,23 +168,10 @@ class EyebrowPainter {
     // Apply slight brown realism: desaturate a bit
     final base = _softenColor(browColor, darkT: darkT);
 
-    // ✅ EMA smoothing keys (needs trackingId)
-    final tid = face.trackingId;
-    final leftPts = _emaSmoothIfPossible(
-      raw: leftRaw,
-      key: _emaKey(tid, 'L'),
-      alpha: emaAlpha,
-    );
-    final rightPts = _emaSmoothIfPossible(
-      raw: rightRaw,
-      key: _emaKey(tid, 'R'),
-      alpha: emaAlpha,
-    );
-
-    if (leftPts.length >= 4) {
+    if (left.length >= 4) {
       _drawBrow(
         canvas: canvas,
-        pts: leftPts,
+        pts: left,
         box: box,
         faceW: faceW,
         faceH: faceH,
@@ -127,10 +184,10 @@ class EyebrowPainter {
       );
     }
 
-    if (rightPts.length >= 4) {
+    if (right.length >= 4) {
       _drawBrow(
         canvas: canvas,
-        pts: rightPts,
+        pts: right,
         box: box,
         faceW: faceW,
         faceH: faceH,
@@ -141,76 +198,6 @@ class EyebrowPainter {
         isLeft: false,
         darkT: darkT,
       );
-    }
-  }
-
-  // ----------------------------
-  // ✅ EMA smoothing logic
-  // ----------------------------
-
-  String _emaKey(int? trackingId, String side) {
-    // If trackingId is null, smoothing becomes unreliable (different face objects),
-    // so we disable smoothing by returning a unique "no-track" key.
-    if (trackingId == null) return 'NO_TRACK_$side_${identityHashCode(face)}';
-    return 'T$trackingId-$side';
-  }
-
-  List<ui.Offset> _emaSmoothIfPossible({
-    required List<ui.Offset> raw,
-    required String key,
-    required double alpha,
-  }) {
-    if (raw.isEmpty) return raw;
-
-    final a = alpha.clamp(0.05, 0.85);
-
-    final prev = _emaCache[key];
-    if (prev == null || prev.points.length != raw.length) {
-      _emaCache[key] = _EmaState(
-        points: List<ui.Offset>.from(raw),
-        lastSeenFrame: _frameCounter,
-      );
-      return raw;
-    }
-
-    final smoothed = <ui.Offset>[];
-    for (int i = 0; i < raw.length; i++) {
-      final p = prev.points[i];
-      final r = raw[i];
-
-      // EMA: new = prev*(1-a) + raw*a
-      final x = ui.lerpDouble(p.dx, r.dx, a)!;
-      final y = ui.lerpDouble(p.dy, r.dy, a)!;
-      smoothed.add(ui.Offset(x, y));
-    }
-
-    prev.points = smoothed;
-    prev.lastSeenFrame = _frameCounter;
-
-    return smoothed;
-  }
-
-  void _cleanupEmaCacheIfNeeded() {
-    if (_emaCache.isEmpty) return;
-
-    // 1) Remove old entries that haven't been used in a while
-    final toRemove = <String>[];
-    _emaCache.forEach((k, v) {
-      if ((_frameCounter - v.lastSeenFrame) > _maxIdleFrames) toRemove.add(k);
-    });
-    for (final k in toRemove) {
-      _emaCache.remove(k);
-    }
-
-    // 2) Hard cap to prevent runaway growth (rare, but safe)
-    if (_emaCache.length > _maxCacheEntries) {
-      // remove oldest
-      final entries = _emaCache.entries.toList()
-        ..sort((a, b) => a.value.lastSeenFrame.compareTo(b.value.lastSeenFrame));
-      final extra = _emaCache.length - _maxCacheEntries;
-      for (int i = 0; i < extra; i++) {
-        _emaCache.remove(entries[i].key);
-      }
     }
   }
 
@@ -272,7 +259,7 @@ class EyebrowPainter {
         ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, blur * 0.75),
     );
 
-    // PASS 3 (optional): micro hair strokes
+    // PASS 3 (optional): micro hair strokes (stable seed)
     if (hairStrokes) {
       _drawHairStrokes(
         canvas: canvas,
@@ -314,11 +301,7 @@ class EyebrowPainter {
   }) {
     if (curve.length < 6) return;
 
-    // ✅ IMPORTANT:
-    // Use deterministic RNG so hair placement is stable frame-to-frame.
-    // If you randomize every frame, smoothing won't fully fix shimmer.
-    //
-    // Use trackingId if available, else fallback.
+    // ✅ Deterministic seed (prevents flicker/shimmer across frames)
     final seed = (face.trackingId ?? 7) * 1000 + (isLeft ? 13 : 29);
     final rng = Random(seed);
 
@@ -426,14 +409,4 @@ class EyebrowPainter {
     final l = (hsl.lightness * ui.lerpDouble(1.00, 0.92, darkT)!).clamp(0.0, 1.0);
     return hsl.withSaturation(s).withLightness(l).toColor();
   }
-}
-
-class _EmaState {
-  List<ui.Offset> points;
-  int lastSeenFrame;
-
-  _EmaState({
-    required this.points,
-    required this.lastSeenFrame,
-  });
 }
