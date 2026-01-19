@@ -16,7 +16,7 @@ import 'package:flutter/services.dart';
 import 'instructions_page.dart';
 import 'look_engine.dart';
 import 'look_picker.dart';
-import 'makeup_overlay_painter.dart';
+import 'painters/makeup_overlay_painter.dart';
 import 'utils.dart';
 
 Future<void> main() async {
