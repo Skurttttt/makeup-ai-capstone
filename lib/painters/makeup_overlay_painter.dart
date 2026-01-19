@@ -3,8 +3,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
-import 'utils.dart'; // LipFinish
-import 'look_engine.dart'; // FaceShape, EyelinerStyle
+import '../utils.dart'; // LipFinish
+import '../look_engine.dart'; // FaceShape, EyelinerStyle
 
 import 'lip_painter.dart';
 import 'eyeshadow_painter.dart';

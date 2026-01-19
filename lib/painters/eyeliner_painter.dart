@@ -4,8 +4,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
-import 'utils.dart';
-import 'look_engine.dart'; // ✅ 1️⃣ Add EyelinerStyle import
+import '../utils.dart';
+import '../look_engine.dart'; // ✅ 1️⃣ Add EyelinerStyle import
 
 class EyelinerPainter {
   final Face face;

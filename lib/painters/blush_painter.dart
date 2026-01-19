@@ -4,7 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
-import 'look_engine.dart';
+import '../look_engine.dart';
 
 /// Configuration for blush style per look
 class BlushStyleProfile {

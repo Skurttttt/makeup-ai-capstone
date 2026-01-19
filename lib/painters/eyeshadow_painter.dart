@@ -2,8 +2,8 @@ import 'dart:ui' as ui;
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
-import 'utils.dart';
-import 'look_engine.dart';
+import '../utils.dart';
+import '../look_engine.dart';
 
 class EyeshadowPainter {
   final Face face;

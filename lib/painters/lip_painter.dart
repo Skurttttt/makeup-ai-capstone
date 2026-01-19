@@ -3,7 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
-import 'utils.dart'; // ✅ single source of truth for LipFinish + DrawingUtils
+import '../utils.dart'; // ✅ single source of truth for LipFinish + DrawingUtils
 
 class LipPainter {
   final Face face;
