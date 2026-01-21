@@ -1,4 +1,3 @@
-// lib/main.dart
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -762,6 +761,15 @@ class _FaceScanPageState extends State<FaceScanPage> {
                   ),
           ),
 
+          // Add dropdown BEFORE "Capture & Scan"
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+            child: LookPicker(
+              value: _selectedLook,
+              onChanged: (v) => setState(() => _selectedLook = v),
+            ),
+          ),
+
           if (showPreview) 
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
@@ -778,6 +786,9 @@ class _FaceScanPageState extends State<FaceScanPage> {
                           height: _capturedUiImage!.height.toDouble(),
                           child: Builder(
                             builder: (context) {
+                              // Calculate debug mode
+                              final bool isDebug = _selectedLook == MakeupLookPreset.debugPainterTest;
+                              
                               return CustomPaint(
                                 painter: MakeupOverlayPainter(
                                   image: _capturedUiImage!,
@@ -786,8 +797,11 @@ class _FaceScanPageState extends State<FaceScanPage> {
                                   blushColor: _look!.blushColor,
                                   eyeshadowColor: _look!.eyeshadowColor,
                                   intensity: _intensity,
-                                  eyelinerStyle: LookEngine.configFromPreset(_selectedLook).eyelinerStyle,
                                   faceShape: _faceProfile!.faceShape,
+                                  preset: _selectedLook,
+                                  debugMode: isDebug,
+                                  isLiveMode: false,
+                                  eyelinerStyle: LookEngine.configFromPreset(_selectedLook).eyelinerStyle,
                                   skinColor: Color.fromARGB(
                                     255,
                                     _faceProfile!.avgR,
@@ -795,6 +809,8 @@ class _FaceScanPageState extends State<FaceScanPage> {
                                     _faceProfile!.avgB,
                                   ),
                                   sceneLuminance: _sceneLuminance,
+                                  leftCheekLuminance: _leftCheekLum,
+                                  rightCheekLuminance: _rightCheekLum,
                                 ),
                               );
                             },
@@ -847,15 +863,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
                 confidenceLabel: _confidenceLabel(_faceProfile!.skinConfidence),
               ),
             ),
-
-          // Add dropdown BEFORE "Capture & Scan"
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-            child: LookPicker(
-              value: _selectedLook,
-              onChanged: (v) => setState(() => _selectedLook = v),
-            ),
-          ),
 
           Padding(
             padding: const EdgeInsets.all(12),

@@ -350,4 +350,22 @@ class LookEngine {
         return EyelinerStyle.emoWing; // Use dramatic eyeliner for debugging
     }
   }
+
+  /// ✅ NEW: Get blush style string from preset
+  static String blushStyleFromPreset(MakeupLookPreset preset) {
+    switch (preset) {
+      case MakeupLookPreset.noMakeup:
+        return 'natural';
+      case MakeupLookPreset.everydayFresh:
+        return 'soft';
+      case MakeupLookPreset.officeProfessional:
+        return 'natural';
+      case MakeupLookPreset.cleanGirl:
+        return 'soft';
+      case MakeupLookPreset.emo:
+        return 'emo';
+      case MakeupLookPreset.debugPainterTest:
+        return 'bold'; // or 'debug' depending on your BlushPainter implementation
+    }
+  }
 }

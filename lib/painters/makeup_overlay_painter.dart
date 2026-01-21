@@ -1,43 +1,48 @@
-// lib/makeup_overlay_painter.dart
+// lib/painters/makeup_overlay_painter.dart
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
-import '../utils.dart'; // LipFinish
-import '../look_engine.dart'; // FaceShape, EyelinerStyle
+import '../utils.dart';
+import '../look_engine.dart';
 
 import 'lip_painter.dart';
 import 'eyeshadow_painter.dart';
 import 'eyeliner_painter.dart';
 import 'blush_painter.dart';
 import 'contour_highlight_painter.dart';
-import 'eyebrow_painter.dart'; // ✅ NEW
+import 'eyebrow_painter.dart';
 
 class MakeupOverlayPainter extends CustomPainter {
   final ui.Image image;
   final Face face;
+
   final Color lipstickColor;
   final Color blushColor;
   final Color eyeshadowColor;
+
   final double intensity;
   final FaceShape faceShape;
-  final EyelinerStyle eyelinerStyle; // ✅ A) Added field for eyeliner style
+  final EyelinerStyle eyelinerStyle;
   final LipFinish lipFinish;
 
-  /// sampled skin color (FaceProfile avgR/G/B)
   final Color? skinColor;
-
-  /// ✅ scene luminance (0..1) from captured still image
   final double sceneLuminance;
+
+  // ✅ NEW
+  final MakeupLookPreset preset;
+  final bool debugMode;
+  final bool isLiveMode;
+  final double? leftCheekLuminance;
+  final double? rightCheekLuminance;
 
   late final LipPainter _lipPainter;
   late final EyeshadowPainter _eyeshadowPainter;
-  late final EyelinerPainter _eyelinerPainter; // ✅ A) Added field
-  late final EyebrowPainter _eyebrowPainter; // ✅ NEW
+  late final EyelinerPainter _eyelinerPainter;
+  late final EyebrowPainter _eyebrowPainter;
   late final BlushPainter _blushPainter;
   late final ContourHighlightPainter _contourPainter;
 
-  // ✅ B) Updated constructor with eyelinerStyle parameter
   MakeupOverlayPainter({
     required this.image,
     required this.face,
@@ -46,11 +51,36 @@ class MakeupOverlayPainter extends CustomPainter {
     required this.eyeshadowColor,
     required this.intensity,
     required this.faceShape,
-    this.eyelinerStyle = EyelinerStyle.subtle, // ✅ B) Added with default
+    required this.preset, // ✅ REQUIRED
+
+    this.eyelinerStyle = EyelinerStyle.subtle,
     this.lipFinish = LipFinish.glossy,
     this.skinColor,
-    this.sceneLuminance = 0.50,
+    this.sceneLuminance = 0.5,
+
+    // ✅ NEW
+    this.debugMode = false,
+    this.isLiveMode = false,
+    this.leftCheekLuminance,
+    this.rightCheekLuminance,
   }) {
+    debugPrint('🎨 MakeupOverlayPainter created');
+    debugPrint('🎨 Eyeshadow color: $eyeshadowColor');
+    debugPrint('🎨 Intensity: $intensity');
+    debugPrint('🎨 Face tracking ID: ${face.trackingId}');
+    debugPrint('🎨 FaceShape: $faceShape');
+    debugPrint('🎨 EyelinerStyle: $eyelinerStyle');
+    debugPrint('🎨 LipFinish: $lipFinish');
+    debugPrint('🎨 Lipstick color: $lipstickColor');
+    debugPrint('🎨 Blush color: $blushColor');
+    debugPrint('🎨 Scene luminance: $sceneLuminance');
+    debugPrint('🎨 Preset: $preset');
+    debugPrint('🎨 Debug mode: $debugMode');
+    debugPrint('🎨 Is live mode: $isLiveMode');
+    if (leftCheekLuminance != null && rightCheekLuminance != null) {
+      debugPrint('🎨 Cheek luminance: L=$leftCheekLuminance, R=$rightCheekLuminance');
+    }
+
     _lipPainter = LipPainter(
       face: face,
       lipstickColor: lipstickColor,
@@ -64,23 +94,20 @@ class MakeupOverlayPainter extends CustomPainter {
       intensity: intensity,
     );
 
-    // ✅ C) Updated EyelinerPainter initialization
     _eyelinerPainter = EyelinerPainter(
       face: face,
       intensity: intensity,
-      style: eyelinerStyle, // ✅ C) Pass the style parameter
+      style: eyelinerStyle,
     );
 
-    // ✅ NEW: Eyebrows (painter-only, no look engine dependency)
-    // You can tweak browColor/thickness/hairStrokes anytime.
     _eyebrowPainter = EyebrowPainter(
       face: face,
-      browColor: const Color(0xFF2B1B14), // natural dark brown (change if you want)
+      browColor: const Color(0xFF2B1B14),
       intensity: intensity,
-      thickness: 1.05, // 0.9 natural, 1.2 medium, 1.5 bold
-      hairStrokes: true, // set false for a powder-brow look
+      thickness: 1.05,
+      hairStrokes: true,
       sceneLuminance: sceneLuminance,
-      debugMode: false,
+      debugMode: debugMode,
     );
 
     _blushPainter = BlushPainter(
@@ -91,47 +118,89 @@ class MakeupOverlayPainter extends CustomPainter {
       skinColor: skinColor,
       sceneLuminance: sceneLuminance,
       faceId: face.trackingId ?? -1,
-    );
 
+      // ✅ required
+      isLiveMode: true,
+
+      // ✅ required
+      lookStyle: 'natural', // or 'glam', 'emo', 'soft', 'bold'
+
+      debugMode: false,
+    );
+    
     _contourPainter = ContourHighlightPainter(
       face: face,
       intensity: intensity,
       faceShape: faceShape,
     );
+
+    debugPrint('✅ All painters initialized');
   }
 
   @override
   void paint(Canvas canvas, Size size) {
+    debugPrint('🎨 MakeupOverlayPainter.paint() called, size: $size');
+    
+    // Draw the base image
     canvas.drawImage(image, Offset.zero, Paint());
+    
+    // Draw a green debug square if in debug mode
+    if (debugMode) {
+      canvas.drawRect(
+        Rect.fromLTWH(20, 20, 60, 60),
+        Paint()
+          ..color = Colors.green.withOpacity(0.8)
+          ..style = PaintingStyle.fill,
+      );
+      debugPrint('🟢 GREEN SQUARE drawn at (20,20) size 60x60');
+    }
 
-    final k = intensity.clamp(0.0, 1.0);
-    if (k <= 0.0) return;
+    if (intensity <= 0) {
+      debugPrint('⚠️ Skipping makeup - intensity is 0');
+      return;
+    }
 
-    // ✅ Suggested order (brows first so liner/shadow sit nicely)
+    final effectiveIntensity = intensity.clamp(0.0, 1.0);
+    debugPrint('🎨 Effective intensity: $effectiveIntensity');
+
+    // Paint in correct order (back to front)
+    debugPrint('🎨 Drawing eyebrows...');
     _eyebrowPainter.paint(canvas, size);
-
+    
+    debugPrint('🎨 Drawing eyeshadow...');
     _eyeshadowPainter.paint(canvas, size);
+    
+    debugPrint('🎨 Drawing eyeliner...');
     _eyelinerPainter.paint(canvas, size);
-
+    
+    debugPrint('🎨 Drawing blush...');
     _blushPainter.paint(canvas, size);
+    
+    debugPrint('🎨 Drawing contour/highlight...');
     _contourPainter.paint(canvas, size);
-
-    // Lips last (so they stay clean on top)
+    
+    debugPrint('🎨 Drawing lips...');
     _lipPainter.paint(canvas, size);
+    
+    debugPrint('✅ All makeup drawn');
   }
 
   @override
-  bool shouldRepaint(covariant MakeupOverlayPainter oldDelegate) {
-    return oldDelegate.image != image ||
-        oldDelegate.face != face ||
-        oldDelegate.lipstickColor != lipstickColor ||
-        oldDelegate.blushColor != blushColor ||
-        oldDelegate.eyeshadowColor != eyeshadowColor ||
-        oldDelegate.intensity != intensity ||
-        oldDelegate.faceShape != faceShape ||
-        oldDelegate.eyelinerStyle != eyelinerStyle || // ✅ Added eyelinerStyle check
-        oldDelegate.lipFinish != lipFinish ||
-        oldDelegate.skinColor != skinColor ||
-        oldDelegate.sceneLuminance != sceneLuminance;
+  bool shouldRepaint(covariant MakeupOverlayPainter old) {
+    final shouldRepaint = 
+        old.image != image ||
+        old.face != face ||
+        old.intensity != intensity ||
+        old.faceShape != faceShape ||
+        old.eyelinerStyle != eyelinerStyle ||
+        old.preset != preset ||
+        old.debugMode != debugMode ||
+        old.isLiveMode != isLiveMode ||
+        old.leftCheekLuminance != leftCheekLuminance ||
+        old.rightCheekLuminance != rightCheekLuminance ||
+        old.sceneLuminance != sceneLuminance;
+    
+    debugPrint('🎨 shouldRepaint: $shouldRepaint');
+    return shouldRepaint;
   }
 }
