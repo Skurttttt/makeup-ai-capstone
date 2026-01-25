@@ -29,6 +29,14 @@ class EyeshadowPainter {
     return pts.map((p) => ui.Offset(p.x.toDouble(), p.y.toDouble())).toList();
   }
 
+  List<ui.Offset>? _eyebrowTop(FaceContourType type) {
+    final pts = face.contours[type]?.points;
+    if (pts == null || pts.length < 3) return null;
+    return pts
+        .map((p) => ui.Offset(p.x.toDouble(), p.y.toDouble()))
+        .toList();
+  }
+
   ui.Offset _normalize(ui.Offset v) {
     final len = math.sqrt(v.dx * v.dx + v.dy * v.dy);
     if (len < 1e-6) return const ui.Offset(0, -1);
@@ -62,39 +70,61 @@ class EyeshadowPainter {
 
   // ----------------- EYE GEOMETRY -----------------
 
-  /// Pick stable upper-lid points:
-  /// - Use the upper band of the eye contour
-  /// - Sort by X
-  /// - Smooth & downsample
+  /// Industry standard approach for full coverage:
+  /// X-binning across the whole eye width + forced corner lid points
   List<ui.Offset> _getUpperLidCurve(List<ui.Offset> eyePoints) {
-    if (eyePoints.length < 8) return eyePoints;
+    final b = DrawingUtils.boundsOf(eyePoints);
+    final width = b.width;
+    if (width < 4) return eyePoints;
 
-    double minY = double.infinity, maxY = -double.infinity;
-    for (final p in eyePoints) {
-      minY = math.min(minY, p.dy);
-      maxY = math.max(maxY, p.dy);
+    // Adaptive bins (denser = better coverage)
+    final bins = math.max(10, math.min(18, (width / 5).round()));
+    final binW = width / bins;
+
+    // Helper: pick top-most point inside x-range
+    ui.Offset? pickTop(double x0, double x1) {
+      ui.Offset? best;
+      for (final p in eyePoints) {
+        if (p.dx >= x0 && p.dx <= x1) {
+          if (best == null || p.dy < best.dy) best = p;
+        }
+      }
+      return best;
     }
 
-    final upperThreshold = minY + (maxY - minY) * 0.45; // slightly wider than 0.40
-    var upper = eyePoints.where((p) => p.dy <= upperThreshold).toList();
+    // Force lid corners (most important fix)
+    final edgeBand = width * 0.18;
+    final leftCorner = pickTop(b.left, b.left + edgeBand);
+    final rightCorner = pickTop(b.right - edgeBand, b.right);
 
-    if (upper.length < 3) {
-      final avgY = (minY + maxY) / 2;
-      upper = eyePoints.where((p) => p.dy <= avgY).toList();
+    // Bin picks across width
+    final picked = <ui.Offset>[];
+    for (int i = 0; i < bins; i++) {
+      final x0 = b.left + i * binW;
+      final x1 = x0 + binW;
+      final best = pickTop(x0, x1);
+      if (best != null) picked.add(best);
     }
 
-    upper.sort((a, b) => a.dx.compareTo(b.dx));
-    upper = _smoothMovingAverage(upper, 2);
+    // Merge + sort by X
+    final all = <ui.Offset>[
+      if (leftCorner != null) leftCorner,
+      ...picked,
+      if (rightCorner != null) rightCorner,
+    ]..sort((a, b) => a.dx.compareTo(b.dx));
 
-    // Downsample to ~7 points for stability
-    final target = 7;
-    if (upper.length <= target) return upper;
+    // Smooth for stability
+    final smoothed = _smoothMovingAverage(all, 2);
+
+    // Resample to stable point count for consistent region
+    const target = 11;
+    if (smoothed.length <= target) return smoothed;
 
     final out = <ui.Offset>[];
     for (int i = 0; i < target; i++) {
       final t = i / (target - 1);
-      final idx = (t * (upper.length - 1)).round();
-      out.add(upper[idx]);
+      final idx = (t * (smoothed.length - 1)).round();
+      out.add(smoothed[idx]);
     }
     return out;
   }
@@ -107,7 +137,6 @@ class EyeshadowPainter {
       if (p.dx < minX.dx) minX = p;
       if (p.dx > maxX.dx) maxX = p;
     }
-    // NOTE: "inner/outer" depends on left/right eye, but for axis direction it doesn't matter.
     return (minX, maxX);
   }
 
@@ -155,16 +184,33 @@ class EyeshadowPainter {
     return out;
   }
 
+  /// Fix the "paint on the eye" issue properly (robust eye-hole path)
   Path _eyeClosedPath(List<ui.Offset> eyePoints) {
-    final p = Path();
-    p.moveTo(eyePoints.first.dx, eyePoints.first.dy);
-    for (int i = 1; i < eyePoints.length; i++) {
-      p.lineTo(eyePoints[i].dx, eyePoints[i].dy);
+    // Sort points around centroid to avoid self-intersecting polygons
+    double cx = 0, cy = 0;
+    for (final p in eyePoints) {
+      cx += p.dx;
+      cy += p.dy;
+    }
+    cx /= eyePoints.length;
+    cy /= eyePoints.length;
+
+    final sorted = List<ui.Offset>.from(eyePoints)
+      ..sort((a, b) {
+        final aa = math.atan2(a.dy - cy, a.dx - cx);
+        final bb = math.atan2(b.dy - cy, b.dx - cx);
+        return aa.compareTo(bb);
+      });
+
+    final p = Path()..moveTo(sorted.first.dx, sorted.first.dy);
+    for (int i = 1; i < sorted.length; i++) {
+      p.lineTo(sorted[i].dx, sorted[i].dy);
     }
     p.close();
     return p;
   }
 
+  /// STEP 1A: Update function signature
   /// Creates eyelid region *oriented to the eye tilt*
   Path _createEyelidRegionOriented({
     required List<ui.Offset> upperLid,
@@ -172,6 +218,7 @@ class EyeshadowPainter {
     required ui.Rect eyeBounds,
     required ui.Offset axisDir,
     required ui.Offset normalUp,
+    required double maxCreaseLift, // ✅ NEW
   }) {
     if (upperLid.length < 3) {
       // fallback: simple region
@@ -191,19 +238,22 @@ class EyeshadowPainter {
         ..close();
     }
 
+    // STEP 4 — Use maxCreaseLift inside _createEyelidRegionOriented
     final eyeH = eyeBounds.height;
 
-    // These are the key tuning knobs for “sits on lid”
-    final lashLift = math.max(eyeH * 0.06, 2.0);  // small lift from lash line
-    final creaseLift = math.max(eyeH * 0.55, 10.0); // lid height / crease area
+    // keep close to lash line
+    final lashLift = math.max(eyeH * 0.02, 1.2);
+
+    // ✅ brow-aware crease height
+    final creaseLift = math.max(maxCreaseLift, eyeH * 0.70);
 
     var lower = _shiftAlongNormal(upperLid, normalUp, lashLift);
     var upper = _shiftAlongNormal(upperLid, normalUp, creaseLift);
 
-    // Taper the ends so it blends better in corners
-    final taper = math.max(eyeBounds.width * 0.06, 2.0);
-    lower = _taperEnds(lower, axisDir, taper);
-    upper = _taperEnds(upper, axisDir, taper * 0.8);
+    // Keep taper disabled for now
+    // final taper = math.max(eyeBounds.width * 0.06, 2.0);
+    // lower = _taperEnds(lower, axisDir, taper);
+    // upper = _taperEnds(upper, axisDir, taper * 0.8);
 
     // Smooth more to remove jitter
     lower = _smoothMovingAverage(lower, 2);
@@ -249,10 +299,50 @@ class EyeshadowPainter {
     // Eye axis & normal (tilt-aware)
     final (c0, c1) = _eyeCorners(eyePoints);
     var axisDir = _normalize(ui.Offset(c1.dx - c0.dx, c1.dy - c0.dy));
+    
+    // STEP 2 — Make the normal ALWAYS point toward the eyebrow
     var normal = _perp(axisDir);
 
-    // Make sure normal points "up" (negative y in screen coords)
-    if (normal.dy > 0) normal = ui.Offset(-normal.dx, -normal.dy);
+    // ✅ Brow-aware normal orientation (industry-standard stability)
+    final browPoints = eyeType == FaceContourType.leftEye
+        ? _eyebrowTop(FaceContourType.leftEyebrowTop)
+        : _eyebrowTop(FaceContourType.rightEyebrowTop);
+
+    final eyeCenter = eyeBounds.center;
+
+    // If we have brow points, use them to force normal direction
+    if (browPoints != null && browPoints.isNotEmpty) {
+      // brow "closest to eyelid" = max Y (lower brow edge)
+      final browY = browPoints.map((p) => p.dy).reduce(math.max);
+      final browX = browPoints.map((p) => p.dx).reduce((a, b) => a + b) / browPoints.length;
+
+      final browPoint = ui.Offset(browX, browY);
+      final toBrow = _normalize(ui.Offset(browPoint.dx - eyeCenter.dx, browPoint.dy - eyeCenter.dy));
+
+      // If normal points away from brow, flip it
+      final dot = normal.dx * toBrow.dx + normal.dy * toBrow.dy;
+      if (dot < 0) normal = ui.Offset(-normal.dx, -normal.dy);
+    } else {
+      // fallback: keep normal going upward on screen
+      if (normal.dy > 0) normal = ui.Offset(-normal.dx, -normal.dy);
+    }
+
+    // ✅ This guarantees "normalUp" is actually toward brow bone, not randomly up/down.
+
+    // STEP 3 — Compute maxCreaseLift correctly (and pass it)
+    double maxCreaseLift;
+    if (browPoints != null && browPoints.isNotEmpty) {
+      // closest brow edge to eyelid = maxY
+      final browY = browPoints.map((p) => p.dy).reduce(math.max);
+
+      // distance from eyelid top to brow underside
+      maxCreaseLift = (browY - eyeBounds.top) * 0.78;
+
+      // safety clamp
+      maxCreaseLift = maxCreaseLift.clamp(eyeH * 0.55, eyeH * 1.10);
+    } else {
+      maxCreaseLift = (eyeH * 0.95);
+    }
 
     // Region
     final region = _createEyelidRegionOriented(
@@ -261,6 +351,7 @@ class EyeshadowPainter {
       eyeBounds: eyeBounds,
       axisDir: axisDir,
       normalUp: normal,
+      maxCreaseLift: maxCreaseLift, // ✅ NEW
     );
 
     // Tight clip (bigger than bounds to allow blur)
@@ -285,8 +376,22 @@ class EyeshadowPainter {
         ..strokeWidth = 2.0
         ..isAntiAlias = true;
 
+      // Draw eyebrow points if available
+      if (browPoints != null) {
+        for (final point in browPoints) {
+          canvas.drawCircle(point, 1.5, p..color = Colors.red);
+        }
+      }
+      
       canvas.drawRect(clipRect, p..color = Colors.cyan.withOpacity(0.5));
       canvas.drawPath(region, p..color = Colors.green.withOpacity(0.8));
+      
+      // Draw normal direction for debugging
+      final normalEnd = ui.Offset(
+        eyeCenter.dx + normal.dx * 20,
+        eyeCenter.dy + normal.dy * 20,
+      );
+      canvas.drawLine(eyeCenter, normalEnd, p..color = Colors.orange..strokeWidth = 2.0);
     }
 
     // Draw in a layer so blend/blur feels like skin (and not sticker paint)
@@ -295,15 +400,15 @@ class EyeshadowPainter {
 
     // Gradient direction: along the normal (lash -> crease)
     final lashPoint = ui.Offset(
-      eyeBounds.center.dx - normal.dx * (eyeH * 0.10),
-      eyeBounds.center.dy - normal.dy * (eyeH * 0.10),
+      eyeCenter.dx - normal.dx * (eyeH * 0.10),
+      eyeCenter.dy - normal.dy * (eyeH * 0.10),
     );
     final creasePoint = ui.Offset(
-      eyeBounds.center.dx + normal.dx * (eyeH * 0.85),
-      eyeBounds.center.dy + normal.dy * (eyeH * 0.85),
+      eyeCenter.dx + normal.dx * (eyeH * 0.85),
+      eyeCenter.dy + normal.dy * (eyeH * 0.85),
     );
 
-    // PASS 1: Base multiply gradient (gives “pigment in skin” feel)
+    // PASS 1: Base multiply gradient (gives "pigment in skin" feel)
     final baseShader = ui.Gradient.linear(
       lashPoint,
       creasePoint,
@@ -345,9 +450,9 @@ class EyeshadowPainter {
 
     canvas.drawPath(region, feather);
 
-    // PASS 4: Subtle center “diffusion” blob (prevents banding)
+    // PASS 4: Subtle center "diffusion" blob (prevents banding)
     final blobCenter = ui.Offset(
-      eyeBounds.center.dx,
+      eyeCenter.dx,
       eyeBounds.top - eyeH * 0.10,
     );
 
