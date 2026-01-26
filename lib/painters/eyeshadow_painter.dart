@@ -10,71 +10,127 @@ class EyeshadowPainter {
   final Color eyeshadowColor;
   final double intensity;
 
-  /// 👇 NEW (optional-safe)
-  /// Pass the eyeliner path (upper lash/liner path) if available.
-  final Path? eyelinerPath;
+  // ✅ per-eye eyeliner boundary
+  final Path? leftEyelinerPath;
+  final Path? rightEyelinerPath;
+
+  // ✅ fix your compile error: supports debugMode named param
+  final bool debugMode;
 
   EyeshadowPainter({
     required this.face,
     required this.eyeshadowColor,
     required this.intensity,
-    this.eyelinerPath,
+    this.leftEyelinerPath,
+    this.rightEyelinerPath,
+    this.debugMode = false,
   });
 
   void paint(Canvas canvas, Size size) {
     if (intensity <= 0) return;
+
+    _paintEye(
+      canvas: canvas,
+      eyeType: FaceContourType.leftEye,
+      eyelinerPath: leftEyelinerPath,
+    );
+
+    _paintEye(
+      canvas: canvas,
+      eyeType: FaceContourType.rightEye,
+      eyelinerPath: rightEyelinerPath,
+    );
+  }
+
+  void _paintEye({
+    required Canvas canvas,
+    required FaceContourType eyeType,
+    required Path? eyelinerPath,
+  }) {
     if (eyelinerPath == null) return;
 
-    // NOTE: This version uses LEFT eye contour for bounds reference
-    // (matches your snippet exactly).
-    final eyePts = face.contours[FaceContourType.leftEye]?.points;
-    if (eyePts == null || eyePts.length < 3) return;
+    final pts = face.contours[eyeType]?.points;
+    if (pts == null || pts.length < 6) return;
 
-    final eyeOffsets = eyePts
-        .map((p) => Offset(p.x.toDouble(), p.y.toDouble()))
-        .toList();
-
+    final eyeOffsets = pts.map((p) => Offset(p.x.toDouble(), p.y.toDouble())).toList();
     final eyeBounds = DrawingUtils.boundsOf(eyeOffsets);
+
+    final eyeW = eyeBounds.width;
     final eyeH = eyeBounds.height;
 
-    // 🔒 Upper expansion only (eyelid)
-    final shadowRegion = Path.from(eyelinerPath!);
+    // ✅ 1) Region above eyeliner (eyelid area) - then subtract eyeball hole
+    final region = Path.from(eyelinerPath);
 
-    shadowRegion.addRect(
-      Rect.fromLTRB(
-        eyeBounds.left,
-        eyeBounds.top - eyeH * 1.2, // 👈 FULL eyelid height
-        eyeBounds.right,
-        eyeBounds.top + eyeH * 0.05,
+    region.addRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTRB(
+          eyeBounds.left - eyeW * 0.08,
+          eyeBounds.top - eyeH * 1.35,
+          eyeBounds.right + eyeW * 0.08,
+          eyeBounds.top + eyeH * 0.12,
+        ),
+        Radius.circular(eyeH * 0.35),
       ),
     );
 
-    // 🚫 Subtract eyeball
     final eyeHole = DrawingUtils.pathFromPoints(eyeOffsets);
-    final finalRegion =
-        Path.combine(PathOperation.difference, shadowRegion, eyeHole);
+    final finalRegion = Path.combine(PathOperation.difference, region, eyeHole);
 
-    final paint = Paint()
-      ..shader = ui.Gradient.linear(
-        Offset(eyeBounds.center.dx, eyeBounds.top),
-        Offset(eyeBounds.center.dx, eyeBounds.top - eyeH),
-        [
-          eyeshadowColor.withOpacity(0.45 * intensity),
-          eyeshadowColor.withOpacity(0.15 * intensity),
-          Colors.transparent,
-        ],
-        const [0.0, 0.6, 1.0],
-      )
+    // ✅ 2) Main lid wash (realistic, not muddy)
+    final lidShader = ui.Gradient.linear(
+      Offset(eyeBounds.center.dx, eyeBounds.top + eyeH * 0.25),
+      Offset(eyeBounds.center.dx, eyeBounds.top - eyeH * 1.05),
+      [
+        eyeshadowColor.withOpacity(0.30 * intensity),
+        eyeshadowColor.withOpacity(0.16 * intensity),
+        Colors.transparent,
+      ],
+      const [0.0, 0.55, 1.0],
+    );
+
+    final lidPaint = Paint()
+      ..shader = lidShader
+      ..blendMode = BlendMode.softLight
+      ..isAntiAlias = true
+      ..maskFilter = ui.MaskFilter.blur(
+        ui.BlurStyle.normal,
+        (eyeH * 0.55).clamp(4.0, 18.0),
+      );
+
+    canvas.drawPath(finalRegion, lidPaint);
+
+    // ✅ 3) Crease depth (industry/capstone realism)
+    final isLeft = eyeType == FaceContourType.leftEye;
+    final outerX = isLeft ? eyeBounds.left : eyeBounds.right;
+
+    final creaseShader = ui.Gradient.radial(
+      Offset(outerX, eyeBounds.top - eyeH * 0.25),
+      (eyeW * 0.95).clamp(18.0, 90.0),
+      [
+        eyeshadowColor.withOpacity(0.18 * intensity),
+        eyeshadowColor.withOpacity(0.06 * intensity),
+        Colors.transparent,
+      ],
+      const [0.0, 0.55, 1.0],
+    );
+
+    final creasePaint = Paint()
+      ..shader = creaseShader
       ..blendMode = BlendMode.multiply
-      ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 1);
+      ..isAntiAlias = true
+      ..maskFilter = ui.MaskFilter.blur(
+        ui.BlurStyle.normal,
+        (eyeH * 0.40).clamp(3.0, 14.0),
+      );
 
-    // If you want blur to scale with the eye height (like your snippet),
-    // use this instead of the line above:
-    // ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, eyeH * 0.4);
+    canvas.drawPath(finalRegion, creasePaint);
 
-    // But to match your snippet exactly, we'll set it properly:
-    paint.maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, eyeH * 0.4);
-
-    canvas.drawPath(finalRegion, paint);
+    if (debugMode) {
+      final dbg = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0
+        ..color = Colors.green.withOpacity(0.7);
+      canvas.drawRect(eyeBounds, dbg);
+    }
   }
 }

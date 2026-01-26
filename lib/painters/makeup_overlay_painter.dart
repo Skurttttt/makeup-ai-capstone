@@ -36,9 +36,6 @@ class MakeupOverlayPainter extends CustomPainter {
   final double? leftCheekLuminance;
   final double? rightCheekLuminance;
 
-  // Track eyeliner path for eyeshadow integration
-  Path? _eyelinerPath;
-
   MakeupOverlayPainter({
     required this.image,
     required this.face,
@@ -105,33 +102,31 @@ class MakeupOverlayPainter extends CustomPainter {
     final effectiveIntensity = intensity.clamp(0.0, 1.0);
     debugPrint('🎨 Effective intensity: $effectiveIntensity');
 
-    // ✅ KEY INTEGRATION: Create painters in correct order
-    
-    // 1️⃣ Create and paint eyeliner FIRST (to get the path)
+    // ✅ 1️⃣ Create eyeliner painter and build paths first (NO DRAW YET)
     debugPrint('🎨 Creating eyeliner painter...');
     final eyelinerPainter = EyelinerPainter(
       face: face,
       intensity: effectiveIntensity,
       style: eyelinerStyle,
     );
-    
-    debugPrint('🎨 Drawing eyeliner...');
-    eyelinerPainter.paint(canvas, size);
-    
-    // Store the eyeliner path for eyeshadow
-    _eyelinerPath = eyelinerPainter.lastEyelinerPath;
-    debugPrint('🎨 Eyeliner path captured: ${_eyelinerPath != null}');
 
-    // 2️⃣ Create eyeshadow painter USING eyeliner path as lower boundary
-    debugPrint('🎨 Creating eyeshadow painter with eyeliner path...');
+    // ✅ IMPORTANT: Build paths first (NO DRAW YET)
+    debugPrint('🎨 Building eyeliner paths...');
+    final paths = eyelinerPainter.buildPaths();
+    debugPrint('🎨 Eyeliner paths built: left=${paths.left != null}, right=${paths.right != null}');
+
+    // ✅ 2️⃣ Create eyeshadow painter with BOTH eye paths
+    debugPrint('🎨 Creating eyeshadow painter with eyeliner paths...');
     final eyeshadowPainter = EyeshadowPainter(
       face: face,
       eyeshadowColor: eyeshadowColor,
       intensity: effectiveIntensity,
-      eyelinerPath: _eyelinerPath, // 👈 KEY LINE
+      leftEyelinerPath: paths.left,
+      rightEyelinerPath: paths.right,
+      //debugMode: debugMode,
     );
 
-    // 3️⃣ Create other painters
+    // ✅ 3️⃣ Create other painters
     debugPrint('🎨 Creating eyebrow painter...');
     final eyebrowPainter = EyebrowPainter(
       face: face,
@@ -152,9 +147,9 @@ class MakeupOverlayPainter extends CustomPainter {
       skinColor: skinColor,
       sceneLuminance: sceneLuminance,
       faceId: face.trackingId ?? -1,
-      isLiveMode: true,
+      isLiveMode: isLiveMode,
       lookStyle: 'natural', // or 'glam', 'emo', 'soft', 'bold'
-      debugMode: false,
+      debugMode: debugMode,
     );
     
     debugPrint('🎨 Creating contour/highlight painter...');
@@ -172,32 +167,30 @@ class MakeupOverlayPainter extends CustomPainter {
       lipFinish: lipFinish,
     );
 
-    // Paint in correct order (back to front)
+    // ✅ Paint in correct order for realism:
     debugPrint('🎨 Drawing makeup layers...');
     
-    // Background layers first
-    debugPrint('🎨 1. Drawing eyebrows...');
+    // 1) Brows (behind)
+    debugPrint('🎨 1. Drawing eyebrows (behind)...');
     eyebrowPainter.paint(canvas, size);
-    
-    // ✅ Eyeshadow uses eyeliner path as lower boundary
-    if (_eyelinerPath != null) {
-      debugPrint('🎨 2. Drawing eyeshadow with eyeliner boundary...');
-      eyeshadowPainter.paint(canvas, size);
-    } else {
-      debugPrint('⚠️ Skipping eyeshadow - no eyeliner path available');
-    }
-    
-    // Foreground layers
-    debugPrint('🎨 3. Drawing blush...');
+
+    // 2) Eyeshadow (BEHIND eyeliner, using eyeliner paths as boundaries)
+    debugPrint('🎨 2. Drawing eyeshadow (behind eyeliner)...');
+    eyeshadowPainter.paint(canvas, size);
+
+    // 3) Eyeliner (TOP layer, crisp - doesn't get washed out)
+    debugPrint('🎨 3. Drawing eyeliner (top layer)...');
+    eyelinerPainter.paint(canvas, size);
+
+    // 4) Blush, contour, lips (foreground)
+    debugPrint('🎨 4. Drawing blush...');
     blushPainter.paint(canvas, size);
     
-    debugPrint('🎨 4. Drawing contour/highlight...');
+    debugPrint('🎨 5. Drawing contour/highlight...');
     contourPainter.paint(canvas, size);
     
-    debugPrint('🎨 5. Drawing lips...');
+    debugPrint('🎨 6. Drawing lips...');
     lipPainter.paint(canvas, size);
-    
-    // Note: Eyeliner was already painted first
     
     debugPrint('✅ All makeup drawn');
   }
