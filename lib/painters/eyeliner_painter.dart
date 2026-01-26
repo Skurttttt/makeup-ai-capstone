@@ -5,17 +5,20 @@ import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 import '../utils.dart';
-import '../look_engine.dart'; // ✅ 1️⃣ Add EyelinerStyle import
+import '../look_engine.dart';
 
 class EyelinerPainter {
   final Face face;
   final double intensity;
-  final EyelinerStyle style; // ✅ 2️⃣ Update the EyelinerPainter constructor
+  final EyelinerStyle style;
+  
+  /// 👇 ADD THIS - Exposes the last drawn eyeliner path
+  Path? lastEyelinerPath;
 
   EyelinerPainter({
     required this.face,
     required this.intensity,
-    required this.style, // ✅ 2️⃣ Add style parameter
+    required this.style,
   });
 
   List<ui.Offset>? _contourPoints(FaceContourType type) {
@@ -192,6 +195,9 @@ class EyelinerPainter {
   }
 
   void paint(Canvas canvas, Size size) {
+    // Reset the lastEyelinerPath at the beginning of each paint
+    lastEyelinerPath = null;
+    
     final k = intensity.clamp(0.0, 1.0);
     if (k <= 0.0) return;
 
@@ -232,6 +238,9 @@ class EyelinerPainter {
       ..strokeJoin = StrokeJoin.round
       ..strokeWidth = baseWidth * k.clamp(0.4, 1.0);
 
+    // Create a combined path to store all eyeliner paths
+    final combinedPath = Path();
+
     void drawEyeliner(FaceContourType eyeType) {
       final eyePtsRaw = _contourPoints(eyeType);
       if (eyePtsRaw == null || eyePtsRaw.length < 6) return;
@@ -268,6 +277,9 @@ class EyelinerPainter {
       );
 
       final linerPath = DrawingUtils.catmullRomToBezierPath(extended, tension: 0.72);
+      
+      // Add this path to the combined path
+      combinedPath.addPath(linerPath, Offset.zero);
 
       // width based on eye size
       final baseW = (eyeBounds.height * 0.085).clamp(1.2, 4.2).toDouble();
@@ -362,6 +374,9 @@ class EyelinerPainter {
           wingEnd.dx,
           wingEnd.dy,
         );
+      
+      // Add wing path to combined path
+      combinedPath.addPath(wingPath, Offset.zero);
 
       // ✅ 4️⃣ Add wing extension ONLY for Emo style (more dramatic)
       if (style == EyelinerStyle.emoWing) {
@@ -382,6 +397,9 @@ class EyelinerPainter {
             emoWingEnd.dx,
             emoWingEnd.dy,
           );
+        
+        // Add emo wing path to combined path
+        combinedPath.addPath(emoWingPath, Offset.zero);
 
         final emoWingBlur = Paint()
           ..color = Colors.black.withOpacity((0.20 * k).clamp(0.0, 0.35))
@@ -430,5 +448,8 @@ class EyelinerPainter {
 
     drawEyeliner(FaceContourType.leftEye);
     drawEyeliner(FaceContourType.rightEye);
+    
+    // Store the combined path after painting
+    lastEyelinerPath = combinedPath;
   }
 }

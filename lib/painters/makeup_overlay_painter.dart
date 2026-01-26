@@ -36,12 +36,8 @@ class MakeupOverlayPainter extends CustomPainter {
   final double? leftCheekLuminance;
   final double? rightCheekLuminance;
 
-  late final LipPainter _lipPainter;
-  late final EyeshadowPainter _eyeshadowPainter;
-  late final EyelinerPainter _eyelinerPainter;
-  late final EyebrowPainter _eyebrowPainter;
-  late final BlushPainter _blushPainter;
-  late final ContourHighlightPainter _contourPainter;
+  // Track eyeliner path for eyeshadow integration
+  Path? _eyelinerPath;
 
   MakeupOverlayPainter({
     required this.image,
@@ -80,61 +76,7 @@ class MakeupOverlayPainter extends CustomPainter {
     if (leftCheekLuminance != null && rightCheekLuminance != null) {
       debugPrint('🎨 Cheek luminance: L=$leftCheekLuminance, R=$rightCheekLuminance');
     }
-
-    _lipPainter = LipPainter(
-      face: face,
-      lipstickColor: lipstickColor,
-      intensity: intensity,
-      lipFinish: lipFinish,
-    );
-
-    _eyeshadowPainter = EyeshadowPainter(
-      face: face,
-      eyeshadowColor: eyeshadowColor,
-      intensity: intensity,
-    );
-
-    _eyelinerPainter = EyelinerPainter(
-      face: face,
-      intensity: intensity,
-      style: eyelinerStyle,
-    );
-
-    _eyebrowPainter = EyebrowPainter(
-      face: face,
-      browColor: const Color(0xFF2B1B14),
-      intensity: intensity,
-      thickness: 1.05,
-      hairStrokes: true,
-      sceneLuminance: sceneLuminance,
-      debugMode: debugMode,
-    );
-
-    _blushPainter = BlushPainter(
-      face: face,
-      blushColor: blushColor,
-      intensity: intensity,
-      faceShape: faceShape,
-      skinColor: skinColor,
-      sceneLuminance: sceneLuminance,
-      faceId: face.trackingId ?? -1,
-
-      // ✅ required
-      isLiveMode: true,
-
-      // ✅ required
-      lookStyle: 'natural', // or 'glam', 'emo', 'soft', 'bold'
-
-      debugMode: false,
-    );
-    
-    _contourPainter = ContourHighlightPainter(
-      face: face,
-      intensity: intensity,
-      faceShape: faceShape,
-    );
-
-    debugPrint('✅ All painters initialized');
+    debugPrint('✅ MakeupOverlayPainter initialized');
   }
 
   @override
@@ -163,24 +105,99 @@ class MakeupOverlayPainter extends CustomPainter {
     final effectiveIntensity = intensity.clamp(0.0, 1.0);
     debugPrint('🎨 Effective intensity: $effectiveIntensity');
 
-    // Paint in correct order (back to front)
-    debugPrint('🎨 Drawing eyebrows...');
-    _eyebrowPainter.paint(canvas, size);
+    // ✅ KEY INTEGRATION: Create painters in correct order
     
-    debugPrint('🎨 Drawing eyeshadow...');
-    _eyeshadowPainter.paint(canvas, size);
+    // 1️⃣ Create and paint eyeliner FIRST (to get the path)
+    debugPrint('🎨 Creating eyeliner painter...');
+    final eyelinerPainter = EyelinerPainter(
+      face: face,
+      intensity: effectiveIntensity,
+      style: eyelinerStyle,
+    );
     
     debugPrint('🎨 Drawing eyeliner...');
-    _eyelinerPainter.paint(canvas, size);
+    eyelinerPainter.paint(canvas, size);
     
-    debugPrint('🎨 Drawing blush...');
-    _blushPainter.paint(canvas, size);
+    // Store the eyeliner path for eyeshadow
+    _eyelinerPath = eyelinerPainter.lastEyelinerPath;
+    debugPrint('🎨 Eyeliner path captured: ${_eyelinerPath != null}');
+
+    // 2️⃣ Create eyeshadow painter USING eyeliner path as lower boundary
+    debugPrint('🎨 Creating eyeshadow painter with eyeliner path...');
+    final eyeshadowPainter = EyeshadowPainter(
+      face: face,
+      eyeshadowColor: eyeshadowColor,
+      intensity: effectiveIntensity,
+      eyelinerPath: _eyelinerPath, // 👈 KEY LINE
+    );
+
+    // 3️⃣ Create other painters
+    debugPrint('🎨 Creating eyebrow painter...');
+    final eyebrowPainter = EyebrowPainter(
+      face: face,
+      browColor: const Color(0xFF2B1B14),
+      intensity: effectiveIntensity,
+      thickness: 1.05,
+      hairStrokes: true,
+      sceneLuminance: sceneLuminance,
+      debugMode: debugMode,
+    );
+
+    debugPrint('🎨 Creating blush painter...');
+    final blushPainter = BlushPainter(
+      face: face,
+      blushColor: blushColor,
+      intensity: effectiveIntensity,
+      faceShape: faceShape,
+      skinColor: skinColor,
+      sceneLuminance: sceneLuminance,
+      faceId: face.trackingId ?? -1,
+      isLiveMode: true,
+      lookStyle: 'natural', // or 'glam', 'emo', 'soft', 'bold'
+      debugMode: false,
+    );
     
-    debugPrint('🎨 Drawing contour/highlight...');
-    _contourPainter.paint(canvas, size);
+    debugPrint('🎨 Creating contour/highlight painter...');
+    final contourPainter = ContourHighlightPainter(
+      face: face,
+      intensity: effectiveIntensity,
+      faceShape: faceShape,
+    );
+
+    debugPrint('🎨 Creating lip painter...');
+    final lipPainter = LipPainter(
+      face: face,
+      lipstickColor: lipstickColor,
+      intensity: effectiveIntensity,
+      lipFinish: lipFinish,
+    );
+
+    // Paint in correct order (back to front)
+    debugPrint('🎨 Drawing makeup layers...');
     
-    debugPrint('🎨 Drawing lips...');
-    _lipPainter.paint(canvas, size);
+    // Background layers first
+    debugPrint('🎨 1. Drawing eyebrows...');
+    eyebrowPainter.paint(canvas, size);
+    
+    // ✅ Eyeshadow uses eyeliner path as lower boundary
+    if (_eyelinerPath != null) {
+      debugPrint('🎨 2. Drawing eyeshadow with eyeliner boundary...');
+      eyeshadowPainter.paint(canvas, size);
+    } else {
+      debugPrint('⚠️ Skipping eyeshadow - no eyeliner path available');
+    }
+    
+    // Foreground layers
+    debugPrint('🎨 3. Drawing blush...');
+    blushPainter.paint(canvas, size);
+    
+    debugPrint('🎨 4. Drawing contour/highlight...');
+    contourPainter.paint(canvas, size);
+    
+    debugPrint('🎨 5. Drawing lips...');
+    lipPainter.paint(canvas, size);
+    
+    // Note: Eyeliner was already painted first
     
     debugPrint('✅ All makeup drawn');
   }
