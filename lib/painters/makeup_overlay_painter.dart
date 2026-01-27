@@ -123,8 +123,12 @@ class MakeupOverlayPainter extends CustomPainter {
       intensity: effectiveIntensity,
       leftEyelinerPath: paths.left,
       rightEyelinerPath: paths.right,
-      //debugMode: debugMode,
+      // debug parameter might not exist in EyeshadowPainter - removed
     );
+
+    // ✅ 3️⃣ Create other painters
+    debugPrint('🎨 Creating eyebrow painter...');
+    // In lib/painters/makeup_overlay_painter.dart, update the eyebrow painter instantiation:
 
     // ✅ 3️⃣ Create other painters
     debugPrint('🎨 Creating eyebrow painter...');
@@ -133,9 +137,28 @@ class MakeupOverlayPainter extends CustomPainter {
       browColor: const Color(0xFF2B1B14),
       intensity: effectiveIntensity,
       thickness: 1.05,
+      
+      // ✅ Compatibility param (kept so your call compiles; ignored for now)
       hairStrokes: true,
+      
       sceneLuminance: sceneLuminance,
       debugMode: debugMode,
+      
+      // ✅ NEW: Control debug point visibility
+      debugShowPoints: false, // ✅ OFF = no dots, cleaner debug
+      
+      // ✅ Debug brow color (dark brown for realistic debug look)
+      debugBrowColor: const Color(0xFF1A0E0A), // super dark brown
+      debugBrowOpacity: 0.55,
+      
+      // ✅ IMPORTANT: set this correctly based on your camera preview pipeline
+      // If you mirror the preview (common for front camera), set true.
+      // If your ML input is already mirrored-corrected, set false.
+      isMirrored: isLiveMode, // <-- best guess if live/front cam; adjust if needed
+      
+      // Optional stability tuning (safe defaults)
+      emaAlpha: 0.84,
+      holdLastGood: const Duration(milliseconds: 250),
     );
 
     debugPrint('🎨 Creating blush painter...');
