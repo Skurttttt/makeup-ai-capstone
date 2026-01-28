@@ -476,7 +476,7 @@ class LookEngine {
         return const LookResult(
           lookName: '🔧 Debug Painter Test',
           lipstickColor: Color(0xFFFF0000),
-          blushColor: Color(0xFFFF00FF),
+          blushColor: Color.fromARGB(102, 255, 112, 195), // ✅ soft pink w/ alpha (smooth on camera)
           eyeshadowColor: Color(0xFF0000FF),
           steps: [
             'This is a DEBUG mode to test all painters.',
