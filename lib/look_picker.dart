@@ -13,33 +13,14 @@ class LookPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // A) Add it to the dropdown list
-    final looks = [
-      MakeupLookPreset.noMakeup,
-      MakeupLookPreset.everydayFresh,
-      MakeupLookPreset.officeProfessional,
-      MakeupLookPreset.cleanGirl,
+    final looks = const [
+      MakeupLookPreset.softGlam,
+      MakeupLookPreset.dollKBeauty,
+      MakeupLookPreset.bronzedGoddess,
       MakeupLookPreset.emo,
-      MakeupLookPreset.debugPainterTest, // 🔧 TEMPORARY - Added debug preset
+      MakeupLookPreset.boldEditorial,
+      MakeupLookPreset.debugPainterTest, // 🔧 keep visible
     ];
-
-    // B) Add a visible label helper function
-    String labelFor(MakeupLookPreset preset) {
-      switch (preset) {
-        case MakeupLookPreset.noMakeup:
-          return 'No-Makeup Look';
-        case MakeupLookPreset.everydayFresh:
-          return 'Everyday Fresh';
-        case MakeupLookPreset.officeProfessional:
-          return 'Office / Professional';
-        case MakeupLookPreset.cleanGirl:
-          return 'Clean Girl';
-        case MakeupLookPreset.emo:
-          return 'Emo Look';
-        case MakeupLookPreset.debugPainterTest:
-          return '🔧 Debug – Painter Test'; // ⚠️ VERY OBVIOUS
-      }
-    }
 
     return DropdownButtonFormField<MakeupLookPreset>(
       value: value,
@@ -48,10 +29,12 @@ class LookPicker extends StatelessWidget {
         border: OutlineInputBorder(),
       ),
       items: looks
-          .map((p) => DropdownMenuItem(
-                value: p,
-                child: Text(labelFor(p)),
-              ))
+          .map(
+            (p) => DropdownMenuItem(
+              value: p,
+              child: Text(p.label), // ✅ reuse label extension
+            ),
+          )
           .toList(),
       onChanged: (v) {
         if (v != null) onChanged(v);

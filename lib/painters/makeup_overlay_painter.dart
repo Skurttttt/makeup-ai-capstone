@@ -29,12 +29,15 @@ class MakeupOverlayPainter extends CustomPainter {
   final Color? skinColor;
   final double sceneLuminance;
 
-  // ✅ NEW
+  // ✅ Look info
   final MakeupLookPreset preset;
   final bool debugMode;
   final bool isLiveMode;
   final double? leftCheekLuminance;
   final double? rightCheekLuminance;
+
+  // ✅ NEW (minimal): allow palette to adapt using user traits
+  final FaceProfile? profile;
 
   MakeupOverlayPainter({
     required this.image,
@@ -44,18 +47,20 @@ class MakeupOverlayPainter extends CustomPainter {
     required this.eyeshadowColor,
     required this.intensity,
     required this.faceShape,
-    required this.preset, // ✅ REQUIRED
+    required this.preset,
 
     this.eyelinerStyle = EyelinerStyle.subtle,
     this.lipFinish = LipFinish.glossy,
     this.skinColor,
     this.sceneLuminance = 0.5,
 
-    // ✅ NEW
     this.debugMode = false,
     this.isLiveMode = false,
     this.leftCheekLuminance,
     this.rightCheekLuminance,
+
+    // ✅ optional, compile-safe (no call-site break)
+    this.profile,
   }) {
     debugPrint('🎨 MakeupOverlayPainter created');
     debugPrint('🎨 Eyeshadow color: $eyeshadowColor');
@@ -79,11 +84,11 @@ class MakeupOverlayPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     debugPrint('🎨 MakeupOverlayPainter.paint() called, size: $size');
-    
+
     // Draw the base image
     canvas.drawImage(image, Offset.zero, Paint());
-    
-    // Draw a green debug square if in debug mode
+
+    // Debug marker
     if (debugMode) {
       canvas.drawRect(
         Rect.fromLTWH(20, 20, 60, 60),
@@ -102,7 +107,7 @@ class MakeupOverlayPainter extends CustomPainter {
     final effectiveIntensity = intensity.clamp(0.0, 1.0);
     debugPrint('🎨 Effective intensity: $effectiveIntensity');
 
-    // ✅ 1️⃣ Create eyeliner painter and build paths first (NO DRAW YET)
+    // ✅ Eyeliner painter (build paths first)
     debugPrint('🎨 Creating eyeliner painter...');
     final eyelinerPainter = EyelinerPainter(
       face: face,
@@ -110,12 +115,11 @@ class MakeupOverlayPainter extends CustomPainter {
       style: eyelinerStyle,
     );
 
-    // ✅ IMPORTANT: Build paths first (NO DRAW YET)
     debugPrint('🎨 Building eyeliner paths...');
     final paths = eyelinerPainter.buildPaths();
     debugPrint('🎨 Eyeliner paths built: left=${paths.left != null}, right=${paths.right != null}');
 
-    // ✅ 2️⃣ Create eyeshadow painter with BOTH eye paths
+    // ✅ Eyeshadow painter (uses eyeliner paths)
     debugPrint('🎨 Creating eyeshadow painter with eyeliner paths...');
     final eyeshadowPainter = EyeshadowPainter(
       face: face,
@@ -123,40 +127,36 @@ class MakeupOverlayPainter extends CustomPainter {
       intensity: effectiveIntensity,
       leftEyelinerPath: paths.left,
       rightEyelinerPath: paths.right,
-      // debug parameter might not exist in EyeshadowPainter - removed
     );
 
-    // ✅ 3️⃣ Create other painters
-    debugPrint('🎨 Creating eyebrow painter...');
-    // In lib/painters/makeup_overlay_painter.dart, update the eyebrow painter instantiation:
+    // ✅ Palette-driven brow color (NO hardcoding)
+    final browColor = LookEngine.browColorFromPreset(
+      preset,
+      profile: profile,
+    );
 
-    // ✅ 3️⃣ Create other painters
     debugPrint('🎨 Creating eyebrow painter...');
     final eyebrowPainter = EyebrowPainter(
       face: face,
-      browColor: const Color(0xFF2B1B14),
+      browColor: browColor,
       intensity: effectiveIntensity,
       thickness: 1.05,
-      
+
       // ✅ Compatibility param (kept so your call compiles; ignored for now)
       hairStrokes: true,
-      
+
       sceneLuminance: sceneLuminance,
       debugMode: debugMode,
-      
-      // ✅ NEW: Control debug point visibility
-      debugShowPoints: false, // ✅ OFF = no dots, cleaner debug
-      
-      // ✅ Debug brow color (dark brown for realistic debug look)
-      debugBrowColor: const Color(0xFF1A0E0A), // super dark brown
+
+      // ✅ Debug point visibility
+      debugShowPoints: false,
+
+      // ✅ Keep your existing debug settings (separate from actual browColor)
+      debugBrowColor: const Color(0xFF1A0E0A),
       debugBrowOpacity: 0.55,
-      
-      // ✅ IMPORTANT: set this correctly based on your camera preview pipeline
-      // If you mirror the preview (common for front camera), set true.
-      // If your ML input is already mirrored-corrected, set false.
-      isMirrored: isLiveMode, // <-- best guess if live/front cam; adjust if needed
-      
-      // Optional stability tuning (safe defaults)
+
+      isMirrored: isLiveMode,
+
       emaAlpha: 0.84,
       holdLastGood: const Duration(milliseconds: 250),
     );
@@ -171,10 +171,10 @@ class MakeupOverlayPainter extends CustomPainter {
       sceneLuminance: sceneLuminance,
       faceId: face.trackingId ?? -1,
       isLiveMode: isLiveMode,
-      lookStyle: 'natural', // or 'glam', 'emo', 'soft', 'bold'
+      lookStyle: LookEngine.blushStyleFromPreset(preset),
       debugMode: debugMode,
     );
-    
+
     debugPrint('🎨 Creating contour/highlight painter...');
     final contourPainter = ContourHighlightPainter(
       face: face,
@@ -190,37 +190,37 @@ class MakeupOverlayPainter extends CustomPainter {
       lipFinish: lipFinish,
     );
 
-    // ✅ Paint in correct order for realism:
+    // ✅ Paint order for realism:
     debugPrint('🎨 Drawing makeup layers...');
-    
-    // 1) Brows (behind)
+
+    // 1) Brows
     debugPrint('🎨 1. Drawing eyebrows (behind)...');
     eyebrowPainter.paint(canvas, size);
 
-    // 2) Eyeshadow (BEHIND eyeliner, using eyeliner paths as boundaries)
+    // 2) Eyeshadow
     debugPrint('🎨 2. Drawing eyeshadow (behind eyeliner)...');
     eyeshadowPainter.paint(canvas, size);
 
-    // 3) Eyeliner (TOP layer, crisp - doesn't get washed out)
+    // 3) Eyeliner
     debugPrint('🎨 3. Drawing eyeliner (top layer)...');
     eyelinerPainter.paint(canvas, size);
 
-    // 4) Blush, contour, lips (foreground)
+    // 4) Blush, contour, lips
     debugPrint('🎨 4. Drawing blush...');
     blushPainter.paint(canvas, size);
-    
+
     debugPrint('🎨 5. Drawing contour/highlight...');
     contourPainter.paint(canvas, size);
-    
+
     debugPrint('🎨 6. Drawing lips...');
     lipPainter.paint(canvas, size);
-    
+
     debugPrint('✅ All makeup drawn');
   }
 
   @override
   bool shouldRepaint(covariant MakeupOverlayPainter old) {
-    final shouldRepaint = 
+    final shouldRepaint =
         old.image != image ||
         old.face != face ||
         old.intensity != intensity ||
@@ -231,8 +231,9 @@ class MakeupOverlayPainter extends CustomPainter {
         old.isLiveMode != isLiveMode ||
         old.leftCheekLuminance != leftCheekLuminance ||
         old.rightCheekLuminance != rightCheekLuminance ||
-        old.sceneLuminance != sceneLuminance;
-    
+        old.sceneLuminance != sceneLuminance ||
+        old.profile != profile; // ✅ so brows adapt when profile changes
+
     debugPrint('🎨 shouldRepaint: $shouldRepaint');
     return shouldRepaint;
   }

@@ -99,7 +99,7 @@ class _FaceScanPageState extends State<FaceScanPage> {
   Face? _lastDetectedFace;
 
   // ✅ NEW: Look picker state
-  MakeupLookPreset _selectedLook = MakeupLookPreset.noMakeup;
+  MakeupLookPreset _selectedLook = MakeupLookPreset.softGlam;
 
   late final FaceDetector _liveFaceDetector = FaceDetector(
     options: FaceDetectorOptions(
@@ -802,7 +802,9 @@ class _FaceScanPageState extends State<FaceScanPage> {
                                   preset: _selectedLook,
                                   debugMode: isDebug,
                                   isLiveMode: false,
-                                  eyelinerStyle: LookEngine.configFromPreset(_selectedLook).eyelinerStyle,
+                                  eyelinerStyle: LookEngine
+                                  .configFromPreset(_selectedLook, profile: _faceProfile)
+                                  .eyelinerStyle,
                                   skinColor: Color.fromARGB(
                                     255,
                                     _faceProfile!.avgR,
