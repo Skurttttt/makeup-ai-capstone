@@ -365,7 +365,12 @@ class EyebrowPainter {
   }
 
   // ---------------------------------------------------------------------------
-  // ✅ UPDATED _drawBrow() METHOD WITH ALL 5 FIXES + MIN SPACING PATCH
+  // ✅ UPDATED _drawBrow() METHOD
+  // - Centerline drives everything (corridor rebuilt from center)
+  // - Powder base (gradient + blur) (lighting-aware)
+  // - Top edge soft fade, bottom edge grounded
+  // - Hair strokes (controlled, curved, direction varies)
+  // - Clip safety (mandatory)
   // ---------------------------------------------------------------------------
 
   void _drawBrow({
@@ -386,11 +391,15 @@ class EyebrowPainter {
     // Need corridor data
     if (centerPts.length < 4 || topPts.length < 4 || bottomPts.length < 4) return;
 
-    // Stable geometry counts
+    // ✅ STEP 1 - REBUILD CORRIDOR FROM CENTERLINE
     const int n = 24;
     final c = _resampleAny(centerPts, n);
-    final t = _resampleAny(topPts, n);
-    final b = _resampleAny(bottomPts, n);
+    final tRaw = _resampleAny(topPts, n);
+    final bRaw = _resampleAny(bottomPts, n);
+
+    final rebuilt = _rebuildCorridorFromCenter(c, tRaw, bRaw);
+    final t = rebuilt.$1;
+    final b = rebuilt.$2;
 
     // Bounds for layer (tight, fast)
     final bounds = _boundsOf3(c, t, b).inflate(max(14.0, strokeW * 10));
@@ -440,16 +449,13 @@ class EyebrowPainter {
     final visibleMaster = intensity >= 0.90 ? max(master, 0.085) : master;
     if (visibleMaster < 0.004) return;
 
-    // Closed corridor path (top + reversed bottom)
     final corridorPath = _buildCorridorClosedPath(top: t, bottom: b);
 
-    // ✅ FIX #5: Slight asymmetry between brows (subtle)
-    // Change RNG seed with extra skew for left/right
+    // Stable RNG per brow
     final seed = (face.trackingId ?? 7) * 10007 + (isLeft ? 31 : 97) + (isLeft ? 13 : 29);
     final rng = Random(seed);
 
-    // Hair count (target 120–280 total per brow, device-safe)
-    // FaceW scales it, intensity scales it a bit, but we keep clamps.
+    // Hair count (120–280 max per brow)
     final targetHairCount = ((150 + faceW * 1.15) * ui.lerpDouble(0.85, 1.15, intensity.clamp(0.0, 1.0))!)
         .round()
         .clamp(120, 280);
@@ -461,7 +467,7 @@ class EyebrowPainter {
     }
     avgThick = (avgThick / n).clamp(3.0, 26.0);
 
-    // ✅ PATCH: prevent overlapping "one-line" stacking
+    // Prevent “one-line stacking” at starts
     final starts = <ui.Offset>[];
     final minStartDist = (avgThick * 0.18).clamp(1.2, 3.2);
 
@@ -472,8 +478,7 @@ class EyebrowPainter {
       return false;
     }
 
-    // Choose blend mode for base depending on exposure:
-    // brighter scenes => multiply looks too harsh, softLight is safer.
+    // Choose blend mode for base depending on exposure
     final baseBlend = (sceneLuminance >= 0.52) ? BlendMode.softLight : BlendMode.multiply;
 
     // ---- Layer for brow (clip everything to corridor) ----
@@ -482,7 +487,7 @@ class EyebrowPainter {
     canvas.clipPath(corridorPath);
 
     // =====================================================
-    // 1) POWDER MASS (blurred gradient fill) — FIX #1
+    // 1) POWDER BASE (soft blurred fill + lighting-aware blend)
     // =====================================================
     final corridorCenter = _corridorCenter(t, b);
     final head = corridorCenter.first;
@@ -492,13 +497,9 @@ class EyebrowPainter {
       head,
       tail,
       [
-        // ✅ FIX #1: Make powder base 2× stronger
-        // INNER
-        color.withOpacity(visibleMaster * 0.18 * safetyOpacity),
-        // MID
-        color.withOpacity(visibleMaster * 0.24 * safetyOpacity),
-        // TAIL
-        color.withOpacity(visibleMaster * 0.30 * safetyOpacity),
+        color.withOpacity(visibleMaster * 0.18 * safetyOpacity), // inner
+        color.withOpacity(visibleMaster * 0.24 * safetyOpacity), // mid
+        color.withOpacity(visibleMaster * 0.30 * safetyOpacity), // tail
       ],
       [0.0, 0.55, 1.0],
     );
@@ -508,16 +509,14 @@ class EyebrowPainter {
       ..style = PaintingStyle.fill
       ..shader = grad
       ..blendMode = baseBlend
-      // ✅ FIX #1: Slightly increase blur
       ..maskFilter = ui.MaskFilter.blur(
         ui.BlurStyle.normal,
-        (avgThick * 0.30).clamp(0.9, 3.2), // Changed from 0.22 to 0.30
+        (avgThick * 0.30).clamp(0.9, 3.2),
       );
 
-    // Slightly "inflate" powder by drawing path twice with tiny offset blur feel
     canvas.drawPath(corridorPath, powderPaint);
 
-    // Tail deepen (very subtle) — keeps cosmetic gradient logic
+    // Tail deepen (subtle)
     final tailDeepen = Paint()
       ..isAntiAlias = true
       ..style = PaintingStyle.fill
@@ -528,16 +527,14 @@ class EyebrowPainter {
     final tailZone = _tailZonePath(corridorCenter, t, b, startU: 0.68);
     canvas.drawPath(tailZone, tailDeepen);
 
-    // ✅ FIX #4: Add micro blur pass ONLY at head (before hairs)
+    // Head soften (micro blur pass)
     if (corridorCenter.length > 5) {
-      // Find the head region (u < 0.22)
       final headStartIndex = (0.22 * (corridorCenter.length - 1)).floor().clamp(0, corridorCenter.length - 1);
-      
+
       if (headStartIndex > 0) {
-        // Create a path for just the head region
         final headTop = t.sublist(0, headStartIndex + 1);
         final headBottom = b.sublist(0, headStartIndex + 1).reversed.toList();
-        
+
         final headPath = Path();
         if (headTop.isNotEmpty && headBottom.isNotEmpty) {
           headPath.moveTo(headTop.first.dx, headTop.first.dy);
@@ -548,12 +545,12 @@ class EyebrowPainter {
             headPath.lineTo(headBottom[i].dx, headBottom[i].dy);
           }
           headPath.close();
-          
+
           canvas.drawPath(
             headPath,
             Paint()
               ..blendMode = BlendMode.softLight
-              ..maskFilter = MaskFilter.blur(BlurStyle.normal, avgThick * 0.35)
+              ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, (avgThick * 0.35).clamp(0.9, 3.6))
               ..color = color.withOpacity(visibleMaster * 0.06 * safetyOpacity),
           );
         }
@@ -561,7 +558,23 @@ class EyebrowPainter {
     }
 
     // =====================================================
-    // 2) HAIR STROKES (quadratic beziers, seeded, clipped)
+    // EDGE BEHAVIOR (required)
+    // - TOP edge: soft fade into skin
+    // - BOTTOM edge: defined anchor
+    // =====================================================
+    _drawEdgeBehavior(
+      canvas: canvas,
+      top: t,
+      bottom: b,
+      avgThick: avgThick,
+      color: color,
+      visibleMaster: visibleMaster,
+      safetyOpacity: safetyOpacity,
+      isBrightScene: sceneLuminance >= 0.52,
+    );
+
+    // =====================================================
+    // 2) HAIR STROKES (curved, clipped, stable)
     // =====================================================
     final hairPaint = Paint()
       ..isAntiAlias = true
@@ -570,67 +583,45 @@ class EyebrowPainter {
       ..strokeJoin = StrokeJoin.round
       ..blendMode = BlendMode.multiply;
 
-    // Optional soft diffusion pass (keeps hairs from looking "stamped")
     final hairHaze = Paint()
       ..isAntiAlias = true
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..blendMode = BlendMode.softLight
-      // ✅ FIX #2: Reduce haze slightly
       ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, (avgThick * 0.14).clamp(0.6, 1.8));
 
-    // Hair thickness (realistic)
     final minW = (strokeW * 0.10).clamp(0.40, 0.70);
     final maxW = (strokeW * 0.18).clamp(0.55, 1.10);
 
-    // Density logic: head lighter, mid densest, tail darker/defined
     double densityAt(double u) {
-      // head very light
       if (u < 0.18) return ui.lerpDouble(0.35, 0.75, u / 0.18)!;
-      // mid/arch dense
       if (u < 0.70) return ui.lerpDouble(0.85, 1.00, (u - 0.18) / (0.70 - 0.18))!;
-      // tail still dense but not "blocky"
       return ui.lerpDouble(0.95, 0.90, (u - 0.70) / (1.0 - 0.70))!;
     }
 
     double shadeAt(double u) {
-      // cosmetic gradient: inner lighter, tail darker
       return ui.lerpDouble(0.62, 1.25, pow(u, 1.35).toDouble())!;
     }
 
-    // Generate hairs (stable order => no sparkle)
     for (int k = 0; k < targetHairCount; k++) {
-      // ✅ PATCH: stratified u (even distribution + tiny jitter)
       final baseU = (k + 0.5) / targetHairCount;
       final u = (baseU + (rng.nextDouble() - 0.5) * 0.02).clamp(0.0, 1.0);
 
-      // ✅ FIX #3: Kill structure at brow head
-      // Fade out head hairs aggressively
-      final headFade = u < 0.20
-        ? ui.lerpDouble(0.25, 1.0, u / 0.20)!
-        : 1.0;
+      final headFade = u < 0.20 ? ui.lerpDouble(0.25, 1.0, u / 0.20)! : 1.0;
 
-      // v: inside corridor (0=bottom, 1=top)
-      // keep inside boundaries; also bias toward center so hairs don't leak.
       final rv = rng.nextDouble();
       final v = (0.18 + rv * 0.64); // [0.18..0.82]
 
-      // Apply density gating (head fewer hairs)
       if (rng.nextDouble() > densityAt(u)) continue;
 
-      // Sample corridor at u (interpolate indices)
       final p = _sampleCorridorPoint(t, b, u, v);
-
-      // Direction logic: inner more vertical, mid angled, tail more horizontal
       final dir = _hairDirectionAtU(c, u, isLeft: isLeft);
 
-      // Length logic: head shorter, mid medium, tail slightly longer
       final baseLen = ui.lerpDouble(1.8, 5.2, sin(pi * u))!;
       final tailBonus = ui.lerpDouble(0.0, 1.4, pow(u, 1.6).toDouble())!;
       final len = (baseLen + tailBonus + rng.nextDouble() * 1.9) * (0.85 + 0.25 * shadeAt(u));
 
-      // Slight curve + jitter
       final jitter = (rng.nextDouble() - 0.5);
       final curveAmt = (avgThick * 0.10).clamp(0.4, 1.4);
 
@@ -639,27 +630,20 @@ class EyebrowPainter {
         p.dy + jitter * curveAmt * 0.45,
       );
 
-      // ✅ PATCH: skip if this start would overlap a previous hair start
       if (tooClose(start)) continue;
       starts.add(start);
 
-      // end point
       final end = ui.Offset(start.dx + dir.dx * len, start.dy + dir.dy * len);
 
-      // control point (quadratic) => realistic arc, not a straight line
       final ctrl = ui.Offset(
         (start.dx + end.dx) * 0.5 + (-dir.dy) * (jitter * curveAmt * 0.8),
         (start.dy + end.dy) * 0.5 + (dir.dx) * (jitter * curveAmt * 0.35),
       );
 
-      // ✅ FIX #2: Reduce hair dominance (very important)
-      // Change hair alpha multiplier
-      final a = (visibleMaster * 
-          // ✅ OLD: ui.lerpDouble(0.12, 0.34, pow(u, 1.15).toDouble())
-          // ✅ NEW: Reduce hair alpha
-          ui.lerpDouble(0.08, 0.26, pow(u, 1.15).toDouble())! * 
-          safetyOpacity * 
-          headFade) // ✅ FIX #3: Apply head fade
+      final a = (visibleMaster *
+              ui.lerpDouble(0.08, 0.26, pow(u, 1.15).toDouble())! *
+              safetyOpacity *
+              headFade)
           .clamp(0.03, 0.36);
 
       final w = ui.lerpDouble(minW, maxW, pow(u, 0.9).toDouble())!;
@@ -669,8 +653,7 @@ class EyebrowPainter {
 
       hairHaze
         ..strokeWidth = w * 1.35
-        // ✅ FIX #2: Reduce haze opacity
-        ..color = color.withOpacity(a * 0.28); // Changed from 0.40 to 0.28
+        ..color = color.withOpacity(a * 0.28);
 
       final hairPath = Path()
         ..moveTo(start.dx, start.dy)
@@ -680,17 +663,24 @@ class EyebrowPainter {
       canvas.drawPath(hairPath, hairHaze);
     }
 
+    // Optional: a tiny post-pass bottom anchor to “ground” hairs into skin
+    _drawBottomAnchorPostPass(
+      canvas: canvas,
+      bottom: b,
+      avgThick: avgThick,
+      color: color,
+      visibleMaster: visibleMaster,
+      safetyOpacity: safetyOpacity,
+    );
+
     // =====================================================
-    // 3) MICRO-GRAIN (optional, ultra subtle)
+    // 3) MICRO TEXTURE (optional, ultra subtle)
     // =====================================================
-    // Use only when you want "powder grain", not visible dots.
-    // Keep it extremely subtle.
     final enableGrain = true;
     if (enableGrain && visibleMaster > 0.02) {
       final grainSeed = seed * 31 + 11;
       final grng = Random(grainSeed);
 
-      // A small number is enough; too many becomes visible "dots".
       final grainCount = (80 + avgThick * 10).round().clamp(90, 180);
 
       final grainPaint = Paint()
@@ -700,13 +690,11 @@ class EyebrowPainter {
         ..strokeWidth = 1.0
         ..color = Colors.white.withOpacity((visibleMaster * 0.018).clamp(0.0, 0.03) * safetyOpacity);
 
-      // Scatter within corridor using u,v sampling (stable)
       for (int i = 0; i < grainCount; i++) {
         final u = grng.nextDouble();
         final v = 0.22 + grng.nextDouble() * 0.56;
         final p = _sampleCorridorPoint(t, b, u, v);
 
-        // Tiny jitter
         final jx = (grng.nextDouble() - 0.5) * 1.2;
         final jy = (grng.nextDouble() - 0.5) * 1.0;
 
@@ -724,20 +712,177 @@ class EyebrowPainter {
   }
 
   // ---------------------------------------------------------------------------
-  // ✅ HELPER FUNCTIONS (NEW - ADDED BELOW)
+  // ✅ EDGE BEHAVIOR HELPERS
+  // ---------------------------------------------------------------------------
+
+  void _drawEdgeBehavior({
+    required Canvas canvas,
+    required List<ui.Offset> top,
+    required List<ui.Offset> bottom,
+    required double avgThick,
+    required Color color,
+    required double visibleMaster,
+    required double safetyOpacity,
+    required bool isBrightScene,
+  }) {
+    // TOP: feather into skin (blur + softLight)
+    final topFeather = Paint()
+      ..isAntiAlias = true
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..blendMode = BlendMode.softLight
+      ..strokeWidth = (avgThick * 0.95).clamp(3.0, 12.0)
+      ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, (avgThick * 0.55).clamp(1.2, 4.6))
+      ..color = color.withOpacity((visibleMaster * (isBrightScene ? 0.10 : 0.08)).clamp(0.02, 0.14) * safetyOpacity);
+
+    canvas.drawPath(_buildSmoothOpenPath(top), topFeather);
+
+    // BOTTOM: grounded anchor (sharper + multiply)
+    final bottomAnchor = Paint()
+      ..isAntiAlias = true
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..blendMode = BlendMode.multiply
+      ..strokeWidth = (avgThick * 0.30).clamp(1.2, 4.0)
+      ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, (avgThick * 0.10).clamp(0.5, 1.2))
+      ..color = Colors.black.withOpacity((visibleMaster * 0.14).clamp(0.03, 0.16) * safetyOpacity);
+
+    canvas.drawPath(_buildSmoothOpenPath(bottom), bottomAnchor);
+  }
+
+  void _drawBottomAnchorPostPass({
+    required Canvas canvas,
+    required List<ui.Offset> bottom,
+    required double avgThick,
+    required Color color,
+    required double visibleMaster,
+    required double safetyOpacity,
+  }) {
+    // A very subtle, thin pass after hairs to prevent “floating”
+    final post = Paint()
+      ..isAntiAlias = true
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..blendMode = BlendMode.multiply
+      ..strokeWidth = (avgThick * 0.18).clamp(0.9, 2.4)
+      ..color = color.withOpacity((visibleMaster * 0.06).clamp(0.01, 0.08) * safetyOpacity);
+
+    canvas.drawPath(_buildSmoothOpenPath(bottom), post);
+  }
+
+  // ---------------------------------------------------------------------------
+  // ✅ CORRIDOR REBUILD HELPER (Added for drift fix)
+  // ---------------------------------------------------------------------------
+
+  (List<ui.Offset>, List<ui.Offset>) _rebuildCorridorFromCenter(
+    List<ui.Offset> c,
+    List<ui.Offset> tRaw,
+    List<ui.Offset> bRaw,
+  ) {
+    final n = min(c.length, min(tRaw.length, bRaw.length));
+    if (n < 4) return (tRaw, bRaw);
+
+    double dot(ui.Offset a, ui.Offset b) => a.dx * b.dx + a.dy * b.dy;
+
+    final up = List<double>.filled(n, 0.0);
+    final dn = List<double>.filled(n, 0.0);
+
+    double fallbackHalf = 0.0;
+    for (int i = 0; i < n; i++) {
+      fallbackHalf += (tRaw[i] - bRaw[i]).distance * 0.5;
+    }
+    fallbackHalf = (fallbackHalf / n).clamp(2.0, 14.0);
+
+    for (int i = 0; i < n; i++) {
+      final prev = c[max(0, i - 1)];
+      final next = c[min(n - 1, i + 1)];
+      final tan = next - prev;
+      final tanLen = tan.distance + 1e-6;
+
+      final normal = ui.Offset(-tan.dy / tanLen, tan.dx / tanLen);
+
+      final vTop = tRaw[i] - c[i];
+      final vBot = bRaw[i] - c[i];
+
+      double dTop = dot(vTop, normal);
+      double dBot = dot(vBot, normal);
+
+      dTop = dTop.abs();
+      dBot = dBot.abs();
+
+      final fullRaw = (tRaw[i] - bRaw[i]).distance;
+      final maxHalf = (fullRaw * 0.60).clamp(3.0, 16.0);
+      final minHalf = 1.8;
+
+      final dTopSafe = dTop.isFinite ? dTop.clamp(minHalf, maxHalf) : fallbackHalf;
+      final dBotSafe = dBot.isFinite ? dBot.clamp(minHalf, maxHalf) : fallbackHalf;
+
+      up[i] = dTopSafe;
+      dn[i] = dBotSafe;
+    }
+
+    List<double> smooth1D(List<double> arr, {int passes = 2}) {
+      var cur = List<double>.from(arr);
+      for (int p = 0; p < passes; p++) {
+        final out = List<double>.from(cur);
+        for (int i = 1; i < cur.length - 1; i++) {
+          out[i] = (cur[i - 1] + 2 * cur[i] + cur[i + 1]) / 4.0;
+        }
+        cur = out;
+      }
+      return cur;
+    }
+
+    final upS = smooth1D(up, passes: 2);
+    final dnS = smooth1D(dn, passes: 2);
+
+    // Asymmetric thickness: more below, less above
+    const topBias = 0.42;
+    const bottomBias = 0.58;
+
+    final outTop = <ui.Offset>[];
+    final outBot = <ui.Offset>[];
+
+    for (int i = 0; i < n; i++) {
+      final prev = c[max(0, i - 1)];
+      final next = c[min(n - 1, i + 1)];
+      final tan = next - prev;
+      final tanLen = tan.distance + 1e-6;
+      final normal = ui.Offset(-tan.dy / tanLen, tan.dx / tanLen);
+
+      final half = ((upS[i] + dnS[i]) * 0.5).clamp(2.0, 14.0);
+
+      final upHalf = (half * topBias).clamp(1.4, 9.0);
+      final dnHalf = (half * bottomBias).clamp(1.6, 11.0);
+
+      final topP = c[i] + ui.Offset(normal.dx * upHalf, normal.dy * upHalf);
+      final botP = c[i] - ui.Offset(normal.dx * dnHalf, normal.dy * dnHalf);
+
+      outTop.add(topP);
+      outBot.add(botP);
+    }
+
+    return (outTop, outBot);
+  }
+
+  // ---------------------------------------------------------------------------
+  // ✅ HELPER FUNCTIONS
   // ---------------------------------------------------------------------------
 
   Path _buildCorridorClosedPath({
     required List<ui.Offset> top,
     required List<ui.Offset> bottom,
   }) {
-    // Smooth both edges then close
+    // Keep your existing smooth edges; close as a corridor.
+    // Note: addPath contains moveTo; we still close, and clip remains correct.
     final tPath = _buildSmoothOpenPath(top);
     final bRev = bottom.reversed.toList();
     final bPath = _buildSmoothOpenPath(bRev);
 
     final m = Path()..addPath(tPath, ui.Offset.zero);
-    // Connect end of top to start of reversed bottom
     if (bRev.isNotEmpty) {
       m.lineTo(bRev.first.dx, bRev.first.dy);
     }
@@ -756,7 +901,6 @@ class EyebrowPainter {
     });
   }
 
-  /// Small zone path near tail for subtle deepening.
   Path _tailZonePath(List<ui.Offset> center, List<ui.Offset> top, List<ui.Offset> bottom, {required double startU}) {
     final n = min(min(center.length, top.length), bottom.length);
     final startI = (startU.clamp(0.0, 1.0) * (n - 1)).floor().clamp(0, n - 2);
@@ -778,7 +922,6 @@ class EyebrowPainter {
     return p;
   }
 
-  /// Sample inside corridor at normalized u (0..1 along length) and v (0..1 bottom->top).
   ui.Offset _sampleCorridorPoint(List<ui.Offset> top, List<ui.Offset> bottom, double u, double v) {
     final n = min(top.length, bottom.length);
     if (n <= 1) return top.isNotEmpty ? top.first : const ui.Offset(0, 0);
@@ -804,10 +947,6 @@ class EyebrowPainter {
     );
   }
 
-  /// Hair direction changes across the brow:
-  /// - head: more vertical-ish
-  /// - mid: angled
-  /// - tail: more horizontal-ish
   ui.Offset _hairDirectionAtU(List<ui.Offset> center, double u, {required bool isLeft}) {
     final n = center.length;
     if (n < 3) return ui.Offset(isLeft ? -0.6 : 0.6, -0.8);
@@ -815,7 +954,6 @@ class EyebrowPainter {
     final fu = u.clamp(0.0, 1.0) * (n - 1);
     final i = fu.floor().clamp(1, n - 2);
 
-    // Local tangent (along brow)
     final prev = center[i - 1];
     final next = center[i + 1];
     final tan = next - prev;
@@ -823,29 +961,20 @@ class EyebrowPainter {
     final tx = tan.dx / tanLen;
     final ty = tan.dy / tanLen;
 
-    // Normal (perpendicular)
     final nx = -ty;
     final ny = tx;
 
-    // Outward depends on side
     final outward = isLeft ? -1.0 : 1.0;
 
-    // Blend weights:
-    // head: more vertical/up
-    // mid: mix normal + slight tangent
-    // tail: more tangent-ish, less vertical
-    final headT = (1.0 - (u / 0.25).clamp(0.0, 1.0)); // 1 at u=0, 0 by u=0.25
-    final tailT = ((u - 0.65) / 0.35).clamp(0.0, 1.0); // 0 until 0.65, 1 at 1.0
+    final headT = (1.0 - (u / 0.25).clamp(0.0, 1.0));
+    final tailT = ((u - 0.65) / 0.35).clamp(0.0, 1.0);
 
-    // Base direction: outward-normal + upward bias
     double dx = nx * (0.85 * outward) + tx * 0.18;
     double dy = ny * 0.55 + ty * 0.10 - 0.40;
 
-    // Head: more vertical (reduce horizontal drift)
     dx = ui.lerpDouble(dx, 0.10 * outward, headT)!;
     dy = ui.lerpDouble(dy, -0.95, headT)!;
 
-    // Tail: more horizontal (align to brow length)
     dx = ui.lerpDouble(dx, tx, tailT)!;
     dy = ui.lerpDouble(dy, ty * 0.15 - 0.20, tailT)!;
 
@@ -876,7 +1005,6 @@ class EyebrowPainter {
       final p2 = pts[i + 1];
       final p3 = (i + 2 < pts.length) ? pts[i + 2] : pts[i + 1];
 
-      // Catmull-Rom to Bezier
       final c1 = ui.Offset(
         p1.dx + (p2.dx - p0.dx) / 6.0,
         p1.dy + (p2.dy - p0.dy) / 6.0,
@@ -905,7 +1033,6 @@ class EyebrowPainter {
 
     bool good = raw.length >= minPoints;
 
-    // Also reject if points collapse to a tiny span (often garbage)
     if (good) {
       final spanX = _spanX(raw);
       final spanY = _spanY(raw);
@@ -919,7 +1046,6 @@ class EyebrowPainter {
       return _Validated(points: raw, opacityFactor: 1.0);
     }
 
-    // Missing / unstable: use last-good briefly, fade out smoothly
     final last = _lastGood[key];
     final lastT = _lastGoodTouched[key];
 
@@ -935,7 +1061,6 @@ class EyebrowPainter {
     final miss = (_missingFrames[key] ?? 0) + 1;
     _missingFrames[key] = miss;
 
-    // Fade down as it keeps missing within hold window
     final fade = (1.0 - (miss / 6.0)).clamp(0.15, 0.85);
 
     return _Validated(points: last, opacityFactor: fade);
@@ -946,71 +1071,63 @@ class EyebrowPainter {
   // ---------------------------------------------------------------------------
 
   List<ui.Offset> _orderBrowPoints(
-  List<ui.Offset> pts, {
-  required bool isLeft,
-  required bool mirrorOrdering,
-}) {
-  if (pts.length <= 2) return pts;
+    List<ui.Offset> pts, {
+    required bool isLeft,
+    required bool mirrorOrdering,
+  }) {
+    if (pts.length <= 2) return pts;
 
-  final p = List<ui.Offset>.from(pts);
+    final p = List<ui.Offset>.from(pts);
 
-  // 1) Estimate brow axis from extremes (more robust than X-only)
-  // Use the two farthest points as endpoints.
-  int aIdx = 0;
-  int bIdx = 0;
-  double bestD = -1;
+    int aIdx = 0;
+    int bIdx = 0;
+    double bestD = -1;
 
-  for (int i = 0; i < p.length; i++) {
-    for (int j = i + 1; j < p.length; j++) {
-      final d = (p[i] - p[j]).distanceSquared;
-      if (d > bestD) {
-        bestD = d;
-        aIdx = i;
-        bIdx = j;
+    for (int i = 0; i < p.length; i++) {
+      for (int j = i + 1; j < p.length; j++) {
+        final d = (p[i] - p[j]).distanceSquared;
+        if (d > bestD) {
+          bestD = d;
+          aIdx = i;
+          bIdx = j;
+        }
       }
     }
+
+    final A = p[aIdx];
+    final B = p[bIdx];
+    final axis = B - A;
+    final axisLen = axis.distance + 1e-6;
+    final ux = axis.dx / axisLen;
+    final uy = axis.dy / axisLen;
+
+    final scored = p.map((pt) {
+      final vx = pt.dx - A.dx;
+      final vy = pt.dy - A.dy;
+      final s = vx * ux + vy * uy;
+      return (pt: pt, s: s);
+    }).toList()
+      ..sort((m, n) => m.s.compareTo(n.s));
+
+    var ordered = scored.map((e) => e.pt).toList();
+
+    final start = ordered.first;
+    final end = ordered.last;
+
+    bool startLooksInner;
+    if (!mirrorOrdering) {
+      startLooksInner = isLeft ? (start.dx > end.dx) : (start.dx < end.dx);
+    } else {
+      startLooksInner = isLeft ? (start.dx < end.dx) : (start.dx > end.dx);
+    }
+
+    if (!startLooksInner) {
+      ordered = ordered.reversed.toList();
+    }
+
+    return _spatialSmooth(ordered, passes: 1);
   }
 
-  final A = p[aIdx];
-  final B = p[bIdx];
-  final axis = B - A;
-  final axisLen = axis.distance + 1e-6;
-  final ux = axis.dx / axisLen;
-  final uy = axis.dy / axisLen;
-
-  // 2) Project each point onto the axis and sort by that projection
-  // This preserves curve progression even if X is not monotonic.
-  final scored = p.map((pt) {
-    final vx = pt.dx - A.dx;
-    final vy = pt.dy - A.dy;
-    final s = vx * ux + vy * uy; // scalar projection along axis
-    return (pt: pt, s: s);
-  }).toList()
-    ..sort((m, n) => m.s.compareTo(n.s));
-
-  var ordered = scored.map((e) => e.pt).toList();
-
-  // 3) Enforce inner -> tail direction based on side + mirroring
-  // Decide if inner should be near face center:
-  // Non-mirrored: left inner generally has higher X than tail; right inner lower X than tail.
-  // Mirrored flips this logic.
-  final start = ordered.first;
-  final end = ordered.last;
-
-  bool startLooksInner;
-  if (!mirrorOrdering) {
-    startLooksInner = isLeft ? (start.dx > end.dx) : (start.dx < end.dx);
-  } else {
-    startLooksInner = isLeft ? (start.dx < end.dx) : (start.dx > end.dx);
-  }
-
-  if (!startLooksInner) {
-    ordered = ordered.reversed.toList();
-  }
-
-  // 4) Smooth to remove zig-zag noise
-  return _spatialSmooth(ordered, passes: 1);
-}
   // ---------------------------------------------------------------------------
   // CONSTRAINT: keep brow above eye, avoid forehead drift
   // ---------------------------------------------------------------------------
@@ -1023,37 +1140,27 @@ class EyebrowPainter {
   }) {
     if (brow.isEmpty) return brow;
 
-    // If eye is missing, fallback to "reasonable" zone in face box
     final fallbackEyeTop = faceBox.top + faceH * 0.35;
-
     final eyeTopY = eye.isEmpty ? fallbackEyeTop : eye.map((p) => p.dy).reduce(min);
     final browMinY = brow.map((p) => p.dy).reduce(min);
 
-    // Margin above eye (prevents drifting into eyelids)
     final margin = (faceH * 0.035).clamp(6.0, 16.0);
-
-    // Desired max brow y (must be ABOVE eyeTopY - margin)
     final maxAllowedY = eyeTopY - margin;
 
-    // Also prevent going too high into forehead:
     final minAllowedY = faceBox.top + faceH * 0.06;
 
-    // If brow is too low, shift up
     double shiftY = 0.0;
     if (browMinY > maxAllowedY) {
-      shiftY = maxAllowedY - browMinY; // negative => move up
+      shiftY = maxAllowedY - browMinY;
     }
 
     final shifted = brow.map((p) => ui.Offset(p.dx, p.dy + shiftY)).toList();
 
-    // Clamp each point into [minAllowedY, maxAllowedY + small slack]
     final slack = (faceH * 0.015).clamp(2.0, 6.0);
     final topClamp = minAllowedY;
     final bottomClamp = maxAllowedY + slack;
 
-    return shifted
-        .map((p) => ui.Offset(p.dx, p.dy.clamp(topClamp, bottomClamp)))
-        .toList();
+    return shifted.map((p) => ui.Offset(p.dx, p.dy.clamp(topClamp, bottomClamp))).toList();
   }
 
   // ---------------------------------------------------------------------------
@@ -1081,7 +1188,6 @@ class EyebrowPainter {
       return raw;
     }
 
-    // EMA: out = a*prev + (1-a)*raw
     final out = <ui.Offset>[];
     for (int i = 0; i < raw.length; i++) {
       final p = raw[i];
@@ -1101,7 +1207,6 @@ class EyebrowPainter {
   // ✅ NEW HELPER FUNCTIONS (Corridor management)
   // ---------------------------------------------------------------------------
 
-  /// Applies the SAME eye constraint shift + clamp to center/top/bottom so the corridor stays aligned.
   _CorridorConstrained _constrainBrowCorridorAboveEye({
     required List<ui.Offset> center,
     required List<ui.Offset> top,
@@ -1134,9 +1239,7 @@ class EyebrowPainter {
     final bottomClamp = maxAllowedY + slack;
 
     List<ui.Offset> apply(List<ui.Offset> pts) {
-      return pts
-          .map((p) => ui.Offset(p.dx, (p.dy + shiftY).clamp(topClamp, bottomClamp)))
-          .toList();
+      return pts.map((p) => ui.Offset(p.dx, (p.dy + shiftY).clamp(topClamp, bottomClamp))).toList();
     }
 
     return _CorridorConstrained(
@@ -1146,7 +1249,6 @@ class EyebrowPainter {
     );
   }
 
-  /// Resample that works for BOTH downsample and upsample.
   List<ui.Offset> _resampleAny(List<ui.Offset> pts, int n) {
     if (pts.isEmpty) return pts;
     if (n <= 2) return [pts.first, pts.last];
