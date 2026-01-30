@@ -68,7 +68,7 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Welcome back! Please login to continue',
+                  'Welcome! Please login to continue',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 14,

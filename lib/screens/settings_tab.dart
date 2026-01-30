@@ -44,7 +44,7 @@ class SettingsTab extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'Beauty User',
+                            'Style Enthusiast',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w600,
@@ -53,7 +53,7 @@ class SettingsTab extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'beauty@example.com',
+                            'user@example.com',
                             style: TextStyle(
                               fontSize: 14,
                               color: Colors.grey[700],
@@ -76,6 +76,9 @@ class SettingsTab extends StatelessWidget {
             _buildSection('My Beauty', [
               _buildSettingItem(context, Icons.favorite_outline, 'Saved Looks', () {
                 _showSavedLooksDialog(context);
+              }),
+              _buildSettingItem(context, Icons.palette, 'Current Products', () {
+                _showCurrentProductsDialog(context);
               }),
             ]),
 
@@ -325,6 +328,145 @@ class SettingsTab extends StatelessWidget {
             child: const Text(
               'Close',
               style: TextStyle(color: Color(0xFFFF4D97)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCurrentProductsDialog(BuildContext context) {
+    final currentProducts = [
+      {
+        'name': 'Ruby Red Lipstick',
+        'category': 'Lips',
+        'brand': 'Glamour Beauty',
+        'icon': Icons.color_lens,
+        'color': Colors.red,
+      },
+      {
+        'name': 'Shimmer Eyeshadow Palette',
+        'category': 'Eyes',
+        'brand': 'Eye Couture',
+        'icon': Icons.remove_red_eye,
+        'color': Colors.purple,
+      },
+      {
+        'name': 'Perfect Coverage Foundation',
+        'category': 'Foundation',
+        'brand': 'Pro Base',
+        'icon': Icons.face,
+        'color': Colors.amber,
+      },
+      {
+        'name': 'Rose Blush',
+        'category': 'Blush',
+        'brand': 'Cheek Perfection',
+        'icon': Icons.favorite,
+        'color': Colors.pink,
+      },
+    ];
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.palette, color: Color(0xFFFF4D97)),
+            const SizedBox(width: 8),
+            const Text(
+              'Current Products',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: currentProducts.length,
+            separatorBuilder: (context, index) => const Divider(),
+            itemBuilder: (context, index) {
+              final product = currentProducts[index];
+              return ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: (product['color'] as Color).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    product['icon'] as IconData,
+                    color: product['color'] as Color,
+                  ),
+                ),
+                title: Text(
+                  product['name'] as String,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                  ),
+                ),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 4),
+                    Text(
+                      '${product['category']} • ${product['brand']}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined, size: 20),
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Editing ${product['name']}'),
+                            backgroundColor: const Color(0xFFFF4D97),
+                          ),
+                        );
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('${product['name']} removed'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+            },
+            child: const Text(
+              'Add Product',
+              style: TextStyle(color: Color(0xFFFF4D97)),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'Close',
+              style: TextStyle(color: Colors.grey),
             ),
           ),
         ],
