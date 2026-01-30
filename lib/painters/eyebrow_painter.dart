@@ -14,18 +14,15 @@ class _Validated {
   const _Validated({required this.points, required this.opacityFactor});
 }
 
-class _BrowAnchors {
-  final ui.Offset head;
-  final ui.Offset arch;
-  final ui.Offset tail;
-  const _BrowAnchors(this.head, this.arch, this.tail);
-}
-
 class _CorridorConstrained {
   final List<ui.Offset> center;
   final List<ui.Offset> top;
   final List<ui.Offset> bottom;
-  const _CorridorConstrained({required this.center, required this.top, required this.bottom});
+  const _CorridorConstrained({
+    required this.center,
+    required this.top,
+    required this.bottom,
+  });
 }
 
 class EyebrowPainter {
@@ -113,7 +110,8 @@ class EyebrowPainter {
   // ✅ FIX #2: Use braces for string interpolation
   String _key(String side) {
     final tid = face.trackingId;
-    if (tid == null) return 'NO_TRACK_${side}_${identityHashCode(face)}'; // ✅ FIXED
+    if (tid == null)
+      return 'NO_TRACK_${side}_${identityHashCode(face)}'; // ✅ FIXED
     return 'TID_${tid}_$side';
   }
 
@@ -153,21 +151,34 @@ class EyebrowPainter {
     _pruneCaches();
 
     // Fetch TOP + BOTTOM contours
-    var leftTop = _contourOffsets(face.contours[FaceContourType.leftEyebrowTop]?.points);
-    var leftBot = _contourOffsets(face.contours[FaceContourType.leftEyebrowBottom]?.points);
+    var leftTop = _contourOffsets(
+      face.contours[FaceContourType.leftEyebrowTop]?.points,
+    );
+    var leftBot = _contourOffsets(
+      face.contours[FaceContourType.leftEyebrowBottom]?.points,
+    );
 
-    var rightTop = _contourOffsets(face.contours[FaceContourType.rightEyebrowTop]?.points);
-    var rightBot = _contourOffsets(face.contours[FaceContourType.rightEyebrowBottom]?.points);
+    var rightTop = _contourOffsets(
+      face.contours[FaceContourType.rightEyebrowTop]?.points,
+    );
+    var rightBot = _contourOffsets(
+      face.contours[FaceContourType.rightEyebrowBottom]?.points,
+    );
 
     // Centerlines
     var leftTrace = _browCenterline(top: leftTop, bottom: leftBot, t: 0.65);
     var rightTrace = _browCenterline(top: rightTop, bottom: rightBot, t: 0.65);
 
     // Eye contours for constraints
-    var leftEye = _contourOffsets(face.contours[FaceContourType.leftEye]?.points);
-    var rightEye = _contourOffsets(face.contours[FaceContourType.rightEye]?.points);
+    var leftEye = _contourOffsets(
+      face.contours[FaceContourType.leftEye]?.points,
+    );
+    var rightEye = _contourOffsets(
+      face.contours[FaceContourType.rightEye]?.points,
+    );
 
-    final hasAny = leftTrace.length >= minPoints || rightTrace.length >= minPoints;
+    final hasAny =
+        leftTrace.length >= minPoints || rightTrace.length >= minPoints;
     final hasAnyCached = _lastGood.isNotEmpty;
     if (!hasAny && !hasAnyCached) return;
 
@@ -337,7 +348,8 @@ class EyebrowPainter {
     final maxBrowOpacity = 0.22; // slightly higher so it won't vanish
     final lightingFactor = ui.lerpDouble(1.0, 0.88, darkT)!;
 
-    var opacity = (eased * maxBrowOpacity * lightingFactor * safetyOpacity).clamp(0.0, 1.0);
+    var opacity = (eased * maxBrowOpacity * lightingFactor * safetyOpacity)
+        .clamp(0.0, 1.0);
 
     // ✅ FORCE VISIBILITY when user slider is high (tuning safety)
     // This prevents the "eyebrows disappear at 100%" problem.
@@ -389,7 +401,8 @@ class EyebrowPainter {
     required double safetyOpacity,
   }) {
     // Need corridor data
-    if (centerPts.length < 4 || topPts.length < 4 || bottomPts.length < 4) return;
+    if (centerPts.length < 4 || topPts.length < 4 || bottomPts.length < 4)
+      return;
 
     // ✅ STEP 1 - REBUILD CORRIDOR FROM CENTERLINE
     const int n = 24;
@@ -409,19 +422,24 @@ class EyebrowPainter {
     // -------------------------
     if (debugMode) {
       final debugMaster =
-          (pow(intensity.clamp(0.0, 1.0), 1.2).toDouble() * debugBrowOpacity).clamp(0.0, debugBrowOpacity);
+          (pow(intensity.clamp(0.0, 1.0), 1.2).toDouble() * debugBrowOpacity)
+              .clamp(0.0, debugBrowOpacity);
 
       final corridorPaintTop = Paint()
         ..isAntiAlias = true
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.3
-        ..color = debugBrowColor.withOpacity(debugMaster * 0.85 * safetyOpacity);
+        ..color = debugBrowColor.withOpacity(
+          debugMaster * 0.85 * safetyOpacity,
+        );
 
       final corridorPaintBottom = Paint()
         ..isAntiAlias = true
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.3
-        ..color = debugBrowColor.withOpacity(debugMaster * 0.65 * safetyOpacity);
+        ..color = debugBrowColor.withOpacity(
+          debugMaster * 0.65 * safetyOpacity,
+        );
 
       final centerPaint = Paint()
         ..isAntiAlias = true
@@ -434,7 +452,8 @@ class EyebrowPainter {
       canvas.drawPath(_buildSmoothOpenPath(c), centerPaint);
 
       if (debugShowPoints) {
-        final dot = Paint()..color = Colors.white.withOpacity(0.85 * safetyOpacity);
+        final dot = Paint()
+          ..color = Colors.white.withOpacity(0.85 * safetyOpacity);
         for (final pt in c) {
           canvas.drawCircle(pt, 2.0, dot);
         }
@@ -452,13 +471,18 @@ class EyebrowPainter {
     final corridorPath = _buildCorridorClosedPath(top: t, bottom: b);
 
     // Stable RNG per brow
-    final seed = (face.trackingId ?? 7) * 10007 + (isLeft ? 31 : 97) + (isLeft ? 13 : 29);
+    final seed =
+        (face.trackingId ?? 7) * 10007 +
+        (isLeft ? 31 : 97) +
+        (isLeft ? 13 : 29);
     final rng = Random(seed);
 
     // Hair count (120–280 max per brow)
-    final targetHairCount = ((150 + faceW * 1.15) * ui.lerpDouble(0.85, 1.15, intensity.clamp(0.0, 1.0))!)
-        .round()
-        .clamp(120, 280);
+    final targetHairCount =
+        ((150 + faceW * 1.15) *
+                ui.lerpDouble(0.85, 1.15, intensity.clamp(0.0, 1.0))!)
+            .round()
+            .clamp(120, 280);
 
     // Corridor thickness reference (for blur + lengths)
     double avgThick = 0.0;
@@ -479,7 +503,9 @@ class EyebrowPainter {
     }
 
     // Choose blend mode for base depending on exposure
-    final baseBlend = (sceneLuminance >= 0.52) ? BlendMode.softLight : BlendMode.multiply;
+    final baseBlend = (sceneLuminance >= 0.52)
+        ? BlendMode.softLight
+        : BlendMode.multiply;
 
     // ---- Layer for brow (clip everything to corridor) ----
     canvas.saveLayer(bounds, Paint());
@@ -521,15 +547,23 @@ class EyebrowPainter {
       ..isAntiAlias = true
       ..style = PaintingStyle.fill
       ..blendMode = BlendMode.multiply
-      ..color = Colors.black.withOpacity((visibleMaster * 0.035).clamp(0.0, 0.07) * safetyOpacity)
-      ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, (avgThick * 0.18).clamp(0.7, 2.4));
+      ..color = Colors.black.withOpacity(
+        (visibleMaster * 0.035).clamp(0.0, 0.07) * safetyOpacity,
+      )
+      ..maskFilter = ui.MaskFilter.blur(
+        ui.BlurStyle.normal,
+        (avgThick * 0.18).clamp(0.7, 2.4),
+      );
 
     final tailZone = _tailZonePath(corridorCenter, t, b, startU: 0.68);
     canvas.drawPath(tailZone, tailDeepen);
 
     // Head soften (micro blur pass)
     if (corridorCenter.length > 5) {
-      final headStartIndex = (0.22 * (corridorCenter.length - 1)).floor().clamp(0, corridorCenter.length - 1);
+      final headStartIndex = (0.22 * (corridorCenter.length - 1)).floor().clamp(
+        0,
+        corridorCenter.length - 1,
+      );
 
       if (headStartIndex > 0) {
         final headTop = t.sublist(0, headStartIndex + 1);
@@ -550,7 +584,10 @@ class EyebrowPainter {
             headPath,
             Paint()
               ..blendMode = BlendMode.softLight
-              ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, (avgThick * 0.35).clamp(0.9, 3.6))
+              ..maskFilter = ui.MaskFilter.blur(
+                ui.BlurStyle.normal,
+                (avgThick * 0.35).clamp(0.9, 3.6),
+              )
               ..color = color.withOpacity(visibleMaster * 0.06 * safetyOpacity),
           );
         }
@@ -589,14 +626,18 @@ class EyebrowPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..blendMode = BlendMode.softLight
-      ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, (avgThick * 0.14).clamp(0.6, 1.8));
+      ..maskFilter = ui.MaskFilter.blur(
+        ui.BlurStyle.normal,
+        (avgThick * 0.14).clamp(0.6, 1.8),
+      );
 
     final minW = (strokeW * 0.10).clamp(0.40, 0.70);
     final maxW = (strokeW * 0.18).clamp(0.55, 1.10);
 
     double densityAt(double u) {
       if (u < 0.18) return ui.lerpDouble(0.35, 0.75, u / 0.18)!;
-      if (u < 0.70) return ui.lerpDouble(0.85, 1.00, (u - 0.18) / (0.70 - 0.18))!;
+      if (u < 0.70)
+        return ui.lerpDouble(0.85, 1.00, (u - 0.18) / (0.70 - 0.18))!;
       return ui.lerpDouble(0.95, 0.90, (u - 0.70) / (1.0 - 0.70))!;
     }
 
@@ -620,7 +661,9 @@ class EyebrowPainter {
 
       final baseLen = ui.lerpDouble(1.8, 5.2, sin(pi * u))!;
       final tailBonus = ui.lerpDouble(0.0, 1.4, pow(u, 1.6).toDouble())!;
-      final len = (baseLen + tailBonus + rng.nextDouble() * 1.9) * (0.85 + 0.25 * shadeAt(u));
+      final len =
+          (baseLen + tailBonus + rng.nextDouble() * 1.9) *
+          (0.85 + 0.25 * shadeAt(u));
 
       final jitter = (rng.nextDouble() - 0.5);
       final curveAmt = (avgThick * 0.10).clamp(0.4, 1.4);
@@ -640,11 +683,12 @@ class EyebrowPainter {
         (start.dy + end.dy) * 0.5 + (dir.dx) * (jitter * curveAmt * 0.35),
       );
 
-      final a = (visibleMaster *
-              ui.lerpDouble(0.08, 0.26, pow(u, 1.15).toDouble())! *
-              safetyOpacity *
-              headFade)
-          .clamp(0.03, 0.36);
+      final a =
+          (visibleMaster *
+                  ui.lerpDouble(0.08, 0.26, pow(u, 1.15).toDouble())! *
+                  safetyOpacity *
+                  headFade)
+              .clamp(0.03, 0.36);
 
       final w = ui.lerpDouble(minW, maxW, pow(u, 0.9).toDouble())!;
       hairPaint
@@ -688,7 +732,9 @@ class EyebrowPainter {
         ..blendMode = BlendMode.softLight
         ..strokeCap = StrokeCap.round
         ..strokeWidth = 1.0
-        ..color = Colors.white.withOpacity((visibleMaster * 0.018).clamp(0.0, 0.03) * safetyOpacity);
+        ..color = Colors.white.withOpacity(
+          (visibleMaster * 0.018).clamp(0.0, 0.03) * safetyOpacity,
+        );
 
       for (int i = 0; i < grainCount; i++) {
         final u = grng.nextDouble();
@@ -698,11 +744,9 @@ class EyebrowPainter {
         final jx = (grng.nextDouble() - 0.5) * 1.2;
         final jy = (grng.nextDouble() - 0.5) * 1.0;
 
-        canvas.drawPoints(
-          ui.PointMode.points,
-          [ui.Offset(p.dx + jx, p.dy + jy)],
-          grainPaint,
-        );
+        canvas.drawPoints(ui.PointMode.points, [
+          ui.Offset(p.dx + jx, p.dy + jy),
+        ], grainPaint);
       }
     }
 
@@ -733,8 +777,14 @@ class EyebrowPainter {
       ..strokeJoin = StrokeJoin.round
       ..blendMode = BlendMode.softLight
       ..strokeWidth = (avgThick * 0.95).clamp(3.0, 12.0)
-      ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, (avgThick * 0.55).clamp(1.2, 4.6))
-      ..color = color.withOpacity((visibleMaster * (isBrightScene ? 0.10 : 0.08)).clamp(0.02, 0.14) * safetyOpacity);
+      ..maskFilter = ui.MaskFilter.blur(
+        ui.BlurStyle.normal,
+        (avgThick * 0.55).clamp(1.2, 4.6),
+      )
+      ..color = color.withOpacity(
+        (visibleMaster * (isBrightScene ? 0.10 : 0.08)).clamp(0.02, 0.14) *
+            safetyOpacity,
+      );
 
     canvas.drawPath(_buildSmoothOpenPath(top), topFeather);
 
@@ -746,8 +796,13 @@ class EyebrowPainter {
       ..strokeJoin = StrokeJoin.round
       ..blendMode = BlendMode.multiply
       ..strokeWidth = (avgThick * 0.30).clamp(1.2, 4.0)
-      ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, (avgThick * 0.10).clamp(0.5, 1.2))
-      ..color = Colors.black.withOpacity((visibleMaster * 0.14).clamp(0.03, 0.16) * safetyOpacity);
+      ..maskFilter = ui.MaskFilter.blur(
+        ui.BlurStyle.normal,
+        (avgThick * 0.10).clamp(0.5, 1.2),
+      )
+      ..color = Colors.black.withOpacity(
+        (visibleMaster * 0.14).clamp(0.03, 0.16) * safetyOpacity,
+      );
 
     canvas.drawPath(_buildSmoothOpenPath(bottom), bottomAnchor);
   }
@@ -768,7 +823,9 @@ class EyebrowPainter {
       ..strokeJoin = StrokeJoin.round
       ..blendMode = BlendMode.multiply
       ..strokeWidth = (avgThick * 0.18).clamp(0.9, 2.4)
-      ..color = color.withOpacity((visibleMaster * 0.06).clamp(0.01, 0.08) * safetyOpacity);
+      ..color = color.withOpacity(
+        (visibleMaster * 0.06).clamp(0.01, 0.08) * safetyOpacity,
+      );
 
     canvas.drawPath(_buildSmoothOpenPath(bottom), post);
   }
@@ -817,8 +874,12 @@ class EyebrowPainter {
       final maxHalf = (fullRaw * 0.60).clamp(3.0, 16.0);
       final minHalf = 1.8;
 
-      final dTopSafe = dTop.isFinite ? dTop.clamp(minHalf, maxHalf) : fallbackHalf;
-      final dBotSafe = dBot.isFinite ? dBot.clamp(minHalf, maxHalf) : fallbackHalf;
+      final dTopSafe = dTop.isFinite
+          ? dTop.clamp(minHalf, maxHalf)
+          : fallbackHalf;
+      final dBotSafe = dBot.isFinite
+          ? dBot.clamp(minHalf, maxHalf)
+          : fallbackHalf;
 
       up[i] = dTopSafe;
       dn[i] = dBotSafe;
@@ -901,7 +962,12 @@ class EyebrowPainter {
     });
   }
 
-  Path _tailZonePath(List<ui.Offset> center, List<ui.Offset> top, List<ui.Offset> bottom, {required double startU}) {
+  Path _tailZonePath(
+    List<ui.Offset> center,
+    List<ui.Offset> top,
+    List<ui.Offset> bottom, {
+    required double startU,
+  }) {
     final n = min(min(center.length, top.length), bottom.length);
     final startI = (startU.clamp(0.0, 1.0) * (n - 1)).floor().clamp(0, n - 2);
 
@@ -922,7 +988,12 @@ class EyebrowPainter {
     return p;
   }
 
-  ui.Offset _sampleCorridorPoint(List<ui.Offset> top, List<ui.Offset> bottom, double u, double v) {
+  ui.Offset _sampleCorridorPoint(
+    List<ui.Offset> top,
+    List<ui.Offset> bottom,
+    double u,
+    double v,
+  ) {
     final n = min(top.length, bottom.length);
     if (n <= 1) return top.isNotEmpty ? top.first : const ui.Offset(0, 0);
 
@@ -947,7 +1018,11 @@ class EyebrowPainter {
     );
   }
 
-  ui.Offset _hairDirectionAtU(List<ui.Offset> center, double u, {required bool isLeft}) {
+  ui.Offset _hairDirectionAtU(
+    List<ui.Offset> center,
+    double u, {
+    required bool isLeft,
+  }) {
     final n = center.length;
     if (n < 3) return ui.Offset(isLeft ? -0.6 : 0.6, -0.8);
 
@@ -1106,8 +1181,7 @@ class EyebrowPainter {
       final vy = pt.dy - A.dy;
       final s = vx * ux + vy * uy;
       return (pt: pt, s: s);
-    }).toList()
-      ..sort((m, n) => m.s.compareTo(n.s));
+    }).toList()..sort((m, n) => m.s.compareTo(n.s));
 
     var ordered = scored.map((e) => e.pt).toList();
 
@@ -1126,41 +1200,6 @@ class EyebrowPainter {
     }
 
     return _spatialSmooth(ordered, passes: 1);
-  }
-
-  // ---------------------------------------------------------------------------
-  // CONSTRAINT: keep brow above eye, avoid forehead drift
-  // ---------------------------------------------------------------------------
-
-  List<ui.Offset> _constrainAboveEye({
-    required List<ui.Offset> brow,
-    required List<ui.Offset> eye,
-    required Rect faceBox,
-    required double faceH,
-  }) {
-    if (brow.isEmpty) return brow;
-
-    final fallbackEyeTop = faceBox.top + faceH * 0.35;
-    final eyeTopY = eye.isEmpty ? fallbackEyeTop : eye.map((p) => p.dy).reduce(min);
-    final browMinY = brow.map((p) => p.dy).reduce(min);
-
-    final margin = (faceH * 0.035).clamp(6.0, 16.0);
-    final maxAllowedY = eyeTopY - margin;
-
-    final minAllowedY = faceBox.top + faceH * 0.06;
-
-    double shiftY = 0.0;
-    if (browMinY > maxAllowedY) {
-      shiftY = maxAllowedY - browMinY;
-    }
-
-    final shifted = brow.map((p) => ui.Offset(p.dx, p.dy + shiftY)).toList();
-
-    final slack = (faceH * 0.015).clamp(2.0, 6.0);
-    final topClamp = minAllowedY;
-    final bottomClamp = maxAllowedY + slack;
-
-    return shifted.map((p) => ui.Offset(p.dx, p.dy.clamp(topClamp, bottomClamp))).toList();
   }
 
   // ---------------------------------------------------------------------------
@@ -1192,10 +1231,9 @@ class EyebrowPainter {
     for (int i = 0; i < raw.length; i++) {
       final p = raw[i];
       final q = prev[i];
-      out.add(ui.Offset(
-        q.dx * a + p.dx * (1.0 - a),
-        q.dy * a + p.dy * (1.0 - a),
-      ));
+      out.add(
+        ui.Offset(q.dx * a + p.dx * (1.0 - a), q.dy * a + p.dy * (1.0 - a)),
+      );
     }
 
     _emaCache[key] = out;
@@ -1220,7 +1258,9 @@ class EyebrowPainter {
     }
 
     final fallbackEyeTop = faceBox.top + faceH * 0.35;
-    final eyeTopY = eye.isEmpty ? fallbackEyeTop : eye.map((p) => p.dy).reduce(min);
+    final eyeTopY = eye.isEmpty
+        ? fallbackEyeTop
+        : eye.map((p) => p.dy).reduce(min);
 
     final browMinY = center.map((p) => p.dy).reduce(min);
 
@@ -1239,7 +1279,12 @@ class EyebrowPainter {
     final bottomClamp = maxAllowedY + slack;
 
     List<ui.Offset> apply(List<ui.Offset> pts) {
-      return pts.map((p) => ui.Offset(p.dx, (p.dy + shiftY).clamp(topClamp, bottomClamp))).toList();
+      return pts
+          .map(
+            (p) =>
+                ui.Offset(p.dx, (p.dy + shiftY).clamp(topClamp, bottomClamp)),
+          )
+          .toList();
     }
 
     return _CorridorConstrained(
@@ -1265,10 +1310,12 @@ class EyebrowPainter {
       final pa = pts[a];
       final pb = pts[b];
 
-      out.add(ui.Offset(
-        ui.lerpDouble(pa.dx, pb.dx, t)!,
-        ui.lerpDouble(pa.dy, pb.dy, t)!,
-      ));
+      out.add(
+        ui.Offset(
+          ui.lerpDouble(pa.dx, pb.dx, t)!,
+          ui.lerpDouble(pa.dy, pb.dy, t)!,
+        ),
+      );
     }
     return out;
   }
@@ -1289,20 +1336,6 @@ class EyebrowPainter {
     for (final p in c) eat(p);
 
     return Rect.fromLTRB(minX, minY, maxX, maxY);
-  }
-
-  ui.Offset _clampEndToCorridor(ui.Offset end, ui.Offset top, ui.Offset bottom, {required double maxOvershoot}) {
-    final cx = ui.lerpDouble(bottom.dx, top.dx, 0.5)!;
-    final cy = ui.lerpDouble(bottom.dy, top.dy, 0.5)!;
-    final center = ui.Offset(cx, cy);
-
-    final v = end - center;
-    final dist = v.distance;
-
-    if (dist <= maxOvershoot) return end;
-
-    final scale = maxOvershoot / max(1e-6, dist);
-    return center + ui.Offset(v.dx * scale, v.dy * scale);
   }
 
   // ---------------------------------------------------------------------------
@@ -1351,10 +1384,12 @@ class EyebrowPainter {
         final a = cur[i - 1];
         final b = cur[i];
         final c = cur[i + 1];
-        out.add(ui.Offset(
-          (a.dx + 2 * b.dx + c.dx) / 4.0,
-          (a.dy + 2 * b.dy + c.dy) / 4.0,
-        ));
+        out.add(
+          ui.Offset(
+            (a.dx + 2 * b.dx + c.dx) / 4.0,
+            (a.dy + 2 * b.dy + c.dy) / 4.0,
+          ),
+        );
       }
       out.add(cur.last);
       cur = out;
@@ -1364,14 +1399,16 @@ class EyebrowPainter {
   }
 
   // ✅ Keep both resample methods for compatibility
-  List<ui.Offset> _resample(List<ui.Offset> pts, int n) {
-    return _resampleAny(pts, n);
-  }
-
   Color _softenColor(Color c, {required double darkT}) {
     final hsl = HSLColor.fromColor(c);
-    final s = (hsl.saturation * ui.lerpDouble(0.95, 0.85, darkT)!).clamp(0.0, 1.0);
-    final l = (hsl.lightness * ui.lerpDouble(1.00, 0.92, darkT)!).clamp(0.0, 1.0);
+    final s = (hsl.saturation * ui.lerpDouble(0.95, 0.85, darkT)!).clamp(
+      0.0,
+      1.0,
+    );
+    final l = (hsl.lightness * ui.lerpDouble(1.00, 0.92, darkT)!).clamp(
+      0.0,
+      1.0,
+    );
     return hsl.withSaturation(s).withLightness(l).toColor();
   }
 }
@@ -1380,12 +1417,3 @@ class EyebrowPainter {
 // CORRIDOR HELPER (Added at bottom of file)
 // -----------------------------------------------------------------------------
 
-bool _insideCorridor(
-  ui.Offset p,
-  ui.Offset top,
-  ui.Offset bottom,
-) {
-  final minY = min(top.dy, bottom.dy);
-  final maxY = max(top.dy, bottom.dy);
-  return p.dy >= minY && p.dy <= maxY;
-}

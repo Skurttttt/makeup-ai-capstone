@@ -1,7 +1,7 @@
 // lib/look_engine.dart
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
-import 'package:flutter_application_1/skin_analyzer.dart';
+import 'skin_analyzer.dart';
 
 enum FaceShape { oval, round, square, heart, unknown }
 
@@ -329,7 +329,6 @@ class LookEngine {
       case Undertone.cool:
         return pal.cool;
       case Undertone.neutral:
-      default:
         return pal.neutral;
     }
   }
@@ -571,7 +570,6 @@ class LookEngine {
       case Undertone.cool:
         return 'Undertone: cool → leaning rose/mauve/plum where it fits the look.';
       case Undertone.neutral:
-      default:
         return 'Undertone: neutral → using balanced shades.';
     }
   }
