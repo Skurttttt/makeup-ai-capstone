@@ -24,7 +24,7 @@ class HomeTab extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Hello, Beauty! 👋',
+                          'Welcome! 👋',
                           style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
@@ -33,7 +33,7 @@ class HomeTab extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Discover your perfect look',
+                          'Express your unique style',
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.grey[600],
@@ -49,6 +49,13 @@ class HomeTab extends StatelessWidget {
                   ],
                 ),
               ),
+
+              // Temperature Card
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _buildTemperatureCard(),
+              ),
+              const SizedBox(height: 24),
 
               // Latest Look Section
               Padding(
@@ -287,21 +294,21 @@ class HomeTab extends StatelessWidget {
     return Column(
       children: [
         _buildBeautyTipCard(
-          'Hydrate Your Skin',
-          'Drink plenty of water for glowing skin',
-          Icons.water_drop,
+          'Skin Care First',
+          'Healthy skin is the best canvas',
+          Icons.clean_hands,
           Colors.blue,
         ),
         _buildBeautyTipCard(
           'Protect from Sun',
-          'Always use SPF 30+ sunscreen',
+          'Always use SPF 30+ sunscreen daily',
           Icons.wb_sunny,
           Colors.orange,
         ),
         _buildBeautyTipCard(
-          'Remove Makeup',
-          'Never sleep with makeup on',
-          Icons.clean_hands,
+          'Proper Hydration',
+          'Drink water and use moisturizer',
+          Icons.water_drop,
           Colors.purple,
         ),
       ],
@@ -352,6 +359,83 @@ class HomeTab extends StatelessWidget {
             ),
           ),
           Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey[400]),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTemperatureCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFFFF4D97).withOpacity(0.1),
+            const Color(0xFFFF4D97).withOpacity(0.05),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFFFF4D97).withOpacity(0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFF4D97),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.wb_sunny, color: Colors.white, size: 32),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Today\'s Weather',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Text(
+                      '28°C',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFFF4D97),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Sunny',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[700],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Text(
+            '↗ 5%',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+            ),
+          ),
         ],
       ),
     );

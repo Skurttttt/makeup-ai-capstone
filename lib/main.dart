@@ -2,6 +2,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'dart:math' show cos, sin;
 
 import 'skin_analyzer.dart';
 
@@ -40,7 +41,7 @@ class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'FaceTune Beauty',
+      title: 'FaceTune - Beauty & Style',
       theme: ThemeData(
         useMaterial3: true,
         primaryColor: const Color(0xFFFF4D97),
@@ -58,7 +59,8 @@ class App extends StatelessWidget {
 // Camera Screen widget for use in navigation
 class CameraScreen extends StatefulWidget {
   final CameraDescription camera;
-  const CameraScreen({super.key, required this.camera});
+  final String? scannedItem;
+  const CameraScreen({super.key, required this.camera, this.scannedItem});
 
   @override
   State<CameraScreen> createState() => _CameraScreenState();
@@ -67,13 +69,14 @@ class CameraScreen extends StatefulWidget {
 class _CameraScreenState extends State<CameraScreen> {
   @override
   Widget build(BuildContext context) {
-    return FaceScanPage(camera: widget.camera);
+    return FaceScanPage(camera: widget.camera, scannedItem: widget.scannedItem);
   }
 }
 
 class FaceScanPage extends StatefulWidget {
   final CameraDescription camera;
-  const FaceScanPage({super.key, required this.camera});
+  final String? scannedItem;
+  const FaceScanPage({super.key, required this.camera, this.scannedItem});
 
   @override
   State<FaceScanPage> createState() => _FaceScanPageState();
@@ -81,7 +84,9 @@ class FaceScanPage extends StatefulWidget {
 
 class _FaceScanPageState extends State<FaceScanPage> {
   CameraController? _controller;
+  CameraDescription? _currentCamera;
   bool _busy = false;
+  bool _isFrontCamera = true;
 
   // ignore: unused_field
   XFile? _capturedFile;
@@ -158,17 +163,79 @@ class _FaceScanPageState extends State<FaceScanPage> {
   Future<void> _initCamera() async {
     final controller = CameraController(
       widget.camera,
-      ResolutionPreset.medium,
+      ResolutionPreset.high,
       enableAudio: false,
+      imageFormatGroup: ImageFormatGroup.bgra8888,
     );
 
     try {
       await controller.initialize();
+      await controller.setFlashMode(FlashMode.off);
+      await controller.setFocusMode(FocusMode.auto);
       if (!mounted) return;
-      setState(() => _controller = controller);
+      setState(() {
+        _controller = controller;
+        _currentCamera = widget.camera;
+        _isFrontCamera = widget.camera.lensDirection == CameraLensDirection.front;
+      });
       await _startLiveQuality(controller);
     } catch (e) {
       setState(() => _status = 'Camera init error: $e');
+    }
+  }
+
+  Future<void> _switchCamera() async {
+    try {
+      // Dispose old controller
+      await _controller?.dispose();
+      _stopLiveQuality();
+
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        setState(() => _status = 'No camera available');
+        return;
+      }
+
+      CameraDescription newCamera;
+
+      if (_isFrontCamera) {
+        // Switch to back camera
+        final backCam = cameras.firstWhere(
+          (c) => c.lensDirection == CameraLensDirection.back,
+          orElse: () => cameras[0],
+        );
+        newCamera = backCam;
+      } else {
+        // Switch to front camera
+        final frontCam = cameras.firstWhere(
+          (c) => c.lensDirection == CameraLensDirection.front,
+          orElse: () => cameras[0],
+        );
+        newCamera = frontCam;
+      }
+
+      final controller = CameraController(
+        newCamera,
+        ResolutionPreset.high,
+        enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.bgra8888,
+      );
+
+      await controller.initialize();
+      await controller.setFlashMode(FlashMode.off);
+      await controller.setFocusMode(FocusMode.auto);
+
+      if (!mounted) return;
+      setState(() {
+        _controller = controller;
+        _currentCamera = newCamera;
+        _isFrontCamera = newCamera.lensDirection == CameraLensDirection.front;
+        _status = _isFrontCamera ? 'Switched to Front Camera' : 'Switched to Back Camera';
+      });
+
+      await _startLiveQuality(controller);
+    } catch (e) {
+      setState(() => _status = 'Camera switch error: $e');
     }
   }
 
@@ -674,7 +741,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
   @override
   Widget build(BuildContext context) {
     final controller = _controller;
-
     final bool showPreview = _capturedUiImage != null && _detectedFace != null && _look != null;
     final bool showSlider = showPreview && _faceProfile != null;
 
@@ -686,106 +752,179 @@ class _FaceScanPageState extends State<FaceScanPage> {
             child: controller == null || !controller.value.isInitialized
                 ? const Center(child: CircularProgressIndicator())
                 : Stack(
+                    fit: StackFit.expand,
                     children: [
-                      CameraPreview(controller),
-                      Align(
-                        alignment: Alignment.topCenter,
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.55),
-                              borderRadius: BorderRadius.circular(12),
+                      // Camera preview - maintain aspect ratio without distortion
+                      FittedBox(
+                        fit: BoxFit.cover,
+                        child: SizedBox(
+                          width: controller.value.previewSize!.height,
+                          height: controller.value.previewSize!.width,
+                          child: CameraPreview(controller),
+                        ),
+                      ),
+                              
+                      // Face guide overlay
+                      Center(
+                        child: Container(
+                          width: 280,
+                          height: 280,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: const Color(0xFFFF4D97),
+                              width: 3,
                             ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        'Live Scan Quality: $_liveQualityLabel',
-                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-                                      ),
-                                    ),
-                                    TextButton(
-                                      onPressed: _toggleLiveRotation,
-                                      style: TextButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                        minimumSize: Size.zero,
-                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                      ),
-                                      child: Text(
-                                        'Rot: ${_liveRotation == InputImageRotation.rotation90deg ? '90°' : '270°'}',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                          ),
+                          child: CustomPaint(
+                            painter: FaceGuidePainter(),
+                          ),
+                        ),
+                      ),
+                              
+                      // Face scan instruction overlay
+                      Positioned(
+                        top: 40,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFF4D97),
+                              borderRadius: BorderRadius.circular(25),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.3),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
                                 ),
-                                if (_liveWarnings.isNotEmpty) ...[
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    _liveWarnings.take(2).map((e) => '• $e').join('\n'),
-                                    style: const TextStyle(color: Colors.white),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.face, color: Colors.white, size: 20),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'Position your face in the circle',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
                                   ),
-                                ],
+                                ),
                               ],
                             ),
                           ),
                         ),
                       ),
-                      Align(
-                        alignment: Alignment.topCenter,
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 70),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              ElevatedButton(
-                                onPressed: _toggleLiveRotation,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.black.withOpacity(0.7),
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                ),
-                                child: Text(
-                                  'Rot: ${_liveRotation == InputImageRotation.rotation90deg ? '90°' : '270°'}',
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              ElevatedButton(
-                                onPressed: _toggleUVSwap,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.black.withOpacity(0.7),
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                ),
-                                child: Text(
-                                  'UV: ${_swapUV ? 'Swapped' : 'Normal'}',
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                              
+                      // Corner borders for camera frame
+                      CustomPaint(
+                        painter: CameraFramePainter(),
+                        child: Container(),
                       ),
+                              
                       if (_busy)
                         const Align(
-                          alignment: Alignment.topCenter,
-                          child: Padding(
-                            padding: EdgeInsets.all(12),
-                            child: LinearProgressIndicator(),
+                          alignment: Alignment.center,
+                          child: CircularProgressIndicator(
+                            color: Color(0xFFFF4D97),
                           ),
                         ),
                     ],
                   ),
+          ),
+          // Overlay UI outside camera to avoid blocking face
+          Container(
+            color: Colors.black.withOpacity(0.8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Quality: $_liveQualityLabel',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                          if (_liveWarnings.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              _liveWarnings.take(1).join(' • '),
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ElevatedButton(
+                          onPressed: _toggleLiveRotation,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.grey[800],
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            minimumSize: const Size(0, 0),
+                          ),
+                          child: Text(
+                            'Rot: ${_liveRotation == InputImageRotation.rotation90deg ? '90°' : '270°'}',
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: _toggleUVSwap,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.grey[800],
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            minimumSize: const Size(0, 0),
+                          ),
+                          child: Text(
+                            'UV: ${_swapUV ? 'Swap' : 'Norm'}',
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton.icon(
+                          onPressed: _switchCamera,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFF4D97),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            minimumSize: const Size(0, 0),
+                          ),
+                          icon: Icon(
+                            _isFrontCamera ? Icons.camera_front : Icons.camera_rear,
+                            size: 16,
+                          ),
+                          label: Text(
+                            _isFrontCamera ? 'Front' : 'Back',
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
 
           // Add dropdown BEFORE "Capture & Scan"
@@ -932,7 +1071,7 @@ class _FaceScanPageState extends State<FaceScanPage> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const ScanResultPage(),
+                      builder: (context) => ScanResultPage(scannedItem: widget.scannedItem),
                     ),
                   );
                 },
@@ -1086,4 +1225,100 @@ class _ResultsSummaryCard extends StatelessWidget {
       ),
     );
   }
+}
+
+// Face Guide Painter - draws guide dots around the face circle
+class FaceGuidePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withOpacity(0.6)
+      ..style = PaintingStyle.fill;
+
+    // Draw guide dots around the circle
+    const dotRadius = 4.0;
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+
+    // Draw dots at key positions (top, bottom, left, right, and diagonals)
+    final positions = [
+      0, 45, 90, 135, 180, 225, 270, 315
+    ];
+
+    for (final angle in positions) {
+      final radian = angle * 3.14159 / 180;
+      final x = center.dx + radius * cos(radian);
+      final y = center.dy + radius * sin(radian);
+      canvas.drawCircle(Offset(x, y), dotRadius, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => false;
+}
+
+// Camera Frame Painter - draws corner borders
+class CameraFramePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFFFF4D97).withOpacity(0.8)
+      ..strokeWidth = 4
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    const cornerLength = 40.0;
+    const margin = 20.0;
+
+    // Top-left corner
+    canvas.drawLine(
+      const Offset(margin, margin),
+      const Offset(margin + cornerLength, margin),
+      paint,
+    );
+    canvas.drawLine(
+      const Offset(margin, margin),
+      const Offset(margin, margin + cornerLength),
+      paint,
+    );
+
+    // Top-right corner
+    canvas.drawLine(
+      Offset(size.width - margin, margin),
+      Offset(size.width - margin - cornerLength, margin),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(size.width - margin, margin),
+      Offset(size.width - margin, margin + cornerLength),
+      paint,
+    );
+
+    // Bottom-left corner
+    canvas.drawLine(
+      Offset(margin, size.height - margin),
+      Offset(margin + cornerLength, size.height - margin),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(margin, size.height - margin),
+      Offset(margin, size.height - margin - cornerLength),
+      paint,
+    );
+
+    // Bottom-right corner
+    canvas.drawLine(
+      Offset(size.width - margin, size.height - margin),
+      Offset(size.width - margin - cornerLength, size.height - margin),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(size.width - margin, size.height - margin),
+      Offset(size.width - margin, size.height - margin - cornerLength),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => false;
 }

@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 
 class ScanResultPage extends StatefulWidget {
   final String? scannedImagePath;
+  final String? scannedItem;
 
-  const ScanResultPage({Key? key, this.scannedImagePath}) : super(key: key);
+  const ScanResultPage({Key? key, this.scannedImagePath, this.scannedItem}) : super(key: key);
 
   @override
   State<ScanResultPage> createState() => _ScanResultPageState();
@@ -26,7 +27,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          'Scan Face Result',
+          'Style Preview',
           style: TextStyle(
             color: Colors.black,
             fontSize: 20,
@@ -62,6 +63,22 @@ class _ScanResultPageState extends State<ScanResultPage> {
 
                   // How to Apply Section
                   _buildHowToApplySection(),
+                  const SizedBox(height: 32),
+
+                  // Recommended Products Section
+                  if (widget.scannedItem != null) ...[
+                    Text(
+                      'Recommended Products for ${widget.scannedItem}',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildRecommendedProducts(),
+                  ],
+
                   const SizedBox(height: 80), // Space for bottom button
                 ],
               ),
@@ -114,7 +131,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Your Scanned Photo',
+            'Your Photo Preview',
             style: TextStyle(
               fontSize: 16,
               color: Colors.grey[600],
@@ -364,6 +381,290 @@ class _ScanResultPageState extends State<ScanResultPage> {
         ],
       ),
     );
+  }
+
+  Widget _buildRecommendedProducts() {
+    final products = _getProductsByItem(widget.scannedItem ?? '');
+    
+    return Column(
+      children: List.generate(
+        products.length,
+        (index) {
+          final product = products[index];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey[200]!),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: (product['color'] as Color).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      product['icon'] as IconData,
+                      size: 40,
+                      color: product['color'] as Color,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          product['name'] as String,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          product['brand'] as String,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Icon(Icons.star, size: 14, color: Colors.amber),
+                            const SizedBox(width: 4),
+                            Text(
+                              product['rating'] as String,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              product['price'] as String,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFFFF4D97),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('${product['name']} added to cart'),
+                          backgroundColor: const Color(0xFFFF4D97),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF4D97),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    child: const Text(
+                      'Add',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  List<Map<String, dynamic>> _getProductsByItem(String item) {
+    final productMap = {
+      'Lips': [
+        {
+          'name': 'Ruby Red Lipstick',
+          'brand': 'Glamour Beauty',
+          'price': '\$24.99',
+          'rating': '4.8',
+          'icon': Icons.color_lens,
+          'color': Colors.red,
+        },
+        {
+          'name': 'Rosy Pink Matte',
+          'brand': 'Elegant Cosmetics',
+          'price': '\$19.99',
+          'rating': '4.7',
+          'icon': Icons.color_lens,
+          'color': Colors.pink,
+        },
+        {
+          'name': 'Nude Bliss',
+          'brand': 'Natural Beauty',
+          'price': '\$22.99',
+          'rating': '4.6',
+          'icon': Icons.color_lens,
+          'color': Colors.brown,
+        },
+      ],
+      'Eyes': [
+        {
+          'name': 'Shimmer Eyeshadow Palette',
+          'brand': 'Eye Couture',
+          'price': '\$34.99',
+          'rating': '4.9',
+          'icon': Icons.remove_red_eye,
+          'color': Colors.purple,
+        },
+        {
+          'name': 'Golden Hour Palette',
+          'brand': 'Sun Glow',
+          'price': '\$29.99',
+          'rating': '4.8',
+          'icon': Icons.remove_red_eye,
+          'color': Colors.amber,
+        },
+        {
+          'name': 'Smokey Noir Set',
+          'brand': 'Dark Matter',
+          'price': '\$27.99',
+          'rating': '4.7',
+          'icon': Icons.remove_red_eye,
+          'color': Colors.grey,
+        },
+      ],
+      'Foundation': [
+        {
+          'name': 'Perfect Coverage Foundation',
+          'brand': 'Pro Base',
+          'price': '\$39.99',
+          'rating': '4.8',
+          'icon': Icons.face,
+          'color': Colors.amber,
+        },
+        {
+          'name': 'Flawless Finish',
+          'brand': 'Skin Perfect',
+          'price': '\$35.99',
+          'rating': '4.7',
+          'icon': Icons.face,
+          'color': Colors.orange,
+        },
+        {
+          'name': 'Natural Glow Base',
+          'brand': 'Pure Beauty',
+          'price': '\$32.99',
+          'rating': '4.6',
+          'icon': Icons.face,
+          'color': Colors.brown,
+        },
+      ],
+      'Blush': [
+        {
+          'name': 'Rose Blush',
+          'brand': 'Cheek Perfection',
+          'price': '\$22.99',
+          'rating': '4.8',
+          'icon': Icons.favorite,
+          'color': Colors.pink,
+        },
+        {
+          'name': 'Coral Peach Blush',
+          'brand': 'Warm Tones',
+          'price': '\$21.99',
+          'rating': '4.7',
+          'icon': Icons.favorite,
+          'color': Colors.deepOrange,
+        },
+        {
+          'name': 'Sunset Bronze',
+          'brand': 'Bronzer Blend',
+          'price': '\$24.99',
+          'rating': '4.9',
+          'icon': Icons.favorite,
+          'color': Colors.brown,
+        },
+      ],
+      'Eyebrow': [
+        {
+          'name': 'Brow Defining Pencil',
+          'brand': 'Brow Expert',
+          'price': '\$18.99',
+          'rating': '4.7',
+          'icon': Icons.edit,
+          'color': Colors.brown,
+        },
+        {
+          'name': 'Micro Brow Pen',
+          'brand': 'Precision Beauty',
+          'price': '\$21.99',
+          'rating': '4.8',
+          'icon': Icons.edit,
+          'color': Colors.grey,
+        },
+        {
+          'name': 'Brow Filler Gel',
+          'brand': 'Hold Strong',
+          'price': '\$17.99',
+          'rating': '4.6',
+          'icon': Icons.edit,
+          'color': Colors.blueGrey,
+        },
+      ],
+      'Eyeliner': [
+        {
+          'name': 'Waterproof Liquid Eyeliner',
+          'brand': 'Line Perfect',
+          'price': '\$16.99',
+          'rating': '4.8',
+          'icon': Icons.brush,
+          'color': Colors.black,
+        },
+        {
+          'name': 'Gel Eyeliner',
+          'brand': 'Smooth Lines',
+          'price': '\$19.99',
+          'rating': '4.7',
+          'icon': Icons.brush,
+          'color': Colors.indigo,
+        },
+        {
+          'name': 'Felt Tip Eyeliner',
+          'brand': 'Precision Ink',
+          'price': '\$18.99',
+          'rating': '4.9',
+          'icon': Icons.brush,
+          'color': Colors.black87,
+        },
+      ],
+    };
+
+    return productMap[item] ?? [];
   }
 
   void _showBuyProductDialog() {
