@@ -300,8 +300,8 @@ class EyelinerPainter {
     leftPath = buildForEye(FaceContourType.leftEye);
     rightPath = buildForEye(FaceContourType.rightEye);
 
-    if (leftPath != null) combined.addPath(leftPath!, Offset.zero);
-    if (rightPath != null) combined.addPath(rightPath!, Offset.zero);
+    if (leftPath != null) combined.addPath(leftPath, Offset.zero);
+    if (rightPath != null) combined.addPath(rightPath, Offset.zero);
 
     lastLeftEyelinerPath = leftPath;
     lastRightEyelinerPath = rightPath;
@@ -323,7 +323,9 @@ class EyelinerPainter {
     }
 
     // your existing style config stays the same
+    // ignore: unused_local_variable
     double baseWidth = 1.6;
+    // ignore: unused_local_variable
     double alpha = 0.7;
 
     switch (style) {

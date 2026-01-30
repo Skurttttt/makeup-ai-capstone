@@ -2,7 +2,6 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import 'dart:math';
 
 import 'skin_analyzer.dart';
 
@@ -17,7 +16,9 @@ import 'instructions_page.dart';
 import 'look_engine.dart';
 import 'look_picker.dart';
 import 'painters/makeup_overlay_painter.dart';
-import 'utils.dart';
+import 'scan_result_page.dart';
+import 'auth/login_page.dart';
+import 'home_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,11 +40,34 @@ class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Makeup AI Capstone',
-      theme: ThemeData(useMaterial3: true),
-      home: FaceScanPage(camera: frontCamera),
+      title: 'FaceTune Beauty',
+      theme: ThemeData(
+        useMaterial3: true,
+        primaryColor: const Color(0xFFFF4D97),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFFFF4D97),
+          primary: const Color(0xFFFF4D97),
+        ),
+      ),
+      home: const LoginPage(),
       debugShowCheckedModeBanner: false,
     );
+  }
+}
+
+// Camera Screen widget for use in navigation
+class CameraScreen extends StatefulWidget {
+  final CameraDescription camera;
+  const CameraScreen({super.key, required this.camera});
+
+  @override
+  State<CameraScreen> createState() => _CameraScreenState();
+}
+
+class _CameraScreenState extends State<CameraScreen> {
+  @override
+  Widget build(BuildContext context) {
+    return FaceScanPage(camera: widget.camera);
   }
 }
 
@@ -59,6 +83,7 @@ class _FaceScanPageState extends State<FaceScanPage> {
   CameraController? _controller;
   bool _busy = false;
 
+  // ignore: unused_field
   XFile? _capturedFile;
   ui.Image? _capturedUiImage;
   Face? _detectedFace;
@@ -88,6 +113,7 @@ class _FaceScanPageState extends State<FaceScanPage> {
 
   String _liveQualityLabel = 'Point camera at your face…';
   List<String> _liveWarnings = [];
+  // ignore: unused_field
   double _liveBrightness = 0.0;
 
   // ✅ Rotation + UV Swap toggles
@@ -895,6 +921,31 @@ class _FaceScanPageState extends State<FaceScanPage> {
               ],
             ),
           ),
+          // Button to view Scan Result Page
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ScanResultPage(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.preview),
+                label: const Text('View Result Screen'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFFFF4D97),
+                  side: const BorderSide(color: Color(0xFFFF4D97), width: 2),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
         ],
       ),
     );
