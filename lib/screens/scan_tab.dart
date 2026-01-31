@@ -4,7 +4,7 @@ import 'package:camera/camera.dart';
 import '../main.dart';
 
 class ScanTab extends StatefulWidget {
-  const ScanTab({Key? key}) : super(key: key);
+  const ScanTab({super.key});
 
   @override
   State<ScanTab> createState() => _ScanTabState();
@@ -38,14 +38,14 @@ class _ScanTabState extends State<ScanTab> {
         backgroundColor: Colors.white,
         elevation: 0,
         title: const Text(
-          'Face Scanner',
+          'Scan Face',
           style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600),
         ),
         centerTitle: true,
       ),
       body: _frontCamera == null
           ? const Center(child: CircularProgressIndicator(color: Color(0xFFFF4D97)))
-          : CameraScreen(camera: _frontCamera!),
+          : CameraScreen(camera: _frontCamera!, scannedItem: null),
     );
   }
 }

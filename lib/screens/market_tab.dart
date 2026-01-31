@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 
 class MarketTab extends StatelessWidget {
-  const MarketTab({Key? key}) : super(key: key);
+  const MarketTab({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -12,7 +12,7 @@ class MarketTab extends StatelessWidget {
         backgroundColor: Colors.white,
         elevation: 0,
         title: const Text(
-          'Beauty Market',
+          'Makeup & Beauty Shop',
           style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600),
         ),
         actions: [

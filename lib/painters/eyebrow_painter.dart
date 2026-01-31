@@ -110,8 +110,9 @@ class EyebrowPainter {
   // ✅ FIX #2: Use braces for string interpolation
   String _key(String side) {
     final tid = face.trackingId;
-    if (tid == null)
+    if (tid == null) {
       return 'NO_TRACK_${side}_${identityHashCode(face)}'; // ✅ FIXED
+    }
     return 'TID_${tid}_$side';
   }
 
@@ -401,8 +402,9 @@ class EyebrowPainter {
     required double safetyOpacity,
   }) {
     // Need corridor data
-    if (centerPts.length < 4 || topPts.length < 4 || bottomPts.length < 4)
+    if (centerPts.length < 4 || topPts.length < 4 || bottomPts.length < 4) {
       return;
+    }
 
     // ✅ STEP 1 - REBUILD CORRIDOR FROM CENTERLINE
     const int n = 24;
@@ -636,8 +638,9 @@ class EyebrowPainter {
 
     double densityAt(double u) {
       if (u < 0.18) return ui.lerpDouble(0.35, 0.75, u / 0.18)!;
-      if (u < 0.70)
+      if (u < 0.70) {
         return ui.lerpDouble(0.85, 1.00, (u - 0.18) / (0.70 - 0.18))!;
+      }
       return ui.lerpDouble(0.95, 0.90, (u - 0.70) / (1.0 - 0.70))!;
     }
 
@@ -1331,9 +1334,15 @@ class EyebrowPainter {
       maxY = max(maxY, p.dy);
     }
 
-    for (final p in a) eat(p);
-    for (final p in b) eat(p);
-    for (final p in c) eat(p);
+    for (final p in a) {
+      eat(p);
+    }
+    for (final p in b) {
+      eat(p);
+    }
+    for (final p in c) {
+      eat(p);
+    }
 
     return Rect.fromLTRB(minX, minY, maxX, maxY);
   }
@@ -1350,7 +1359,9 @@ class EyebrowPainter {
   double _avgX(List<ui.Offset> pts) {
     if (pts.isEmpty) return 0;
     double s = 0;
-    for (final p in pts) s += p.dx;
+    for (final p in pts) {
+      s += p.dx;
+    }
     return s / pts.length;
   }
 

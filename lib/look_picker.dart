@@ -23,7 +23,7 @@ class LookPicker extends StatelessWidget {
     ];
 
     return DropdownButtonFormField<MakeupLookPreset>(
-      value: value,
+      initialValue: value,
       decoration: const InputDecoration(
         labelText: 'Select Makeup Look',
         border: OutlineInputBorder(),

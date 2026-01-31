@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 
 class SubscriptionTab extends StatelessWidget {
-  const SubscriptionTab({Key? key}) : super(key: key);
+  const SubscriptionTab({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -70,11 +70,8 @@ class SubscriptionTab extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            _buildFeatureItem('Unlimited Makeup Looks', Icons.face_retouching_natural),
-            _buildFeatureItem('AI-Powered Recommendations', Icons.auto_awesome),
-            _buildFeatureItem('Advanced Skin Analysis', Icons.analytics),
-            _buildFeatureItem('Priority Support', Icons.support_agent),
-            _buildFeatureItem('Ad-Free Experience', Icons.block),
+              _buildFeatureItem('Unlimited Looks & Styles', Icons.face_retouching_natural),
+            _buildFeatureItem('AI-Powered Style Recommendations', Icons.auto_awesome),
             _buildFeatureItem('Exclusive Products Access', Icons.shopping_bag),
             const SizedBox(height: 32),
 
