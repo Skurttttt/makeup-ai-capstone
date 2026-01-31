@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 
 class MarketTab extends StatelessWidget {
-  const MarketTab({Key? key}) : super(key: key);
+  const MarketTab({super.key});
 
   @override
   Widget build(BuildContext context) {

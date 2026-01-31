@@ -1,6 +1,5 @@
 // main.dart
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'dart:math' show cos, sin;
 
@@ -19,7 +18,6 @@ import 'look_picker.dart';
 import 'painters/makeup_overlay_painter.dart';
 import 'scan_result_page.dart';
 import 'auth/login_page.dart';
-import 'home_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

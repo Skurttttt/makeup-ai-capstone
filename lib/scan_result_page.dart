@@ -5,7 +5,7 @@ class ScanResultPage extends StatefulWidget {
   final String? scannedImagePath;
   final String? scannedItem;
 
-  const ScanResultPage({Key? key, this.scannedImagePath, this.scannedItem}) : super(key: key);
+  const ScanResultPage({super.key, this.scannedImagePath, this.scannedItem});
 
   @override
   State<ScanResultPage> createState() => _ScanResultPageState();

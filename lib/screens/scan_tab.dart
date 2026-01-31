@@ -4,7 +4,7 @@ import 'package:camera/camera.dart';
 import '../main.dart';
 
 class ScanTab extends StatefulWidget {
-  const ScanTab({Key? key}) : super(key: key);
+  const ScanTab({super.key});
 
   @override
   State<ScanTab> createState() => _ScanTabState();
