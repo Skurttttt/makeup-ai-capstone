@@ -6,9 +6,6 @@ class OpenAIService {
   final String apiKey = dotenv.env['OPENAI_API_KEY'] ?? '';
 
   Future<String> generateMakeupInstructions({
-    required String skinTone,
-    required String undertone,
-    required String faceShape,
     required String lookName,
   }) async {
     if (apiKey.isEmpty) {
@@ -18,16 +15,13 @@ class OpenAIService {
 
     final prompt = '''
 You are a makeup artist assistant.
-Generate practical, step-by-step makeup instructions for a user with:
-- skinTone: $skinTone
-- undertone: $undertone
-- faceShape: $faceShape
+Generate practical, step-by-step makeup instructions for the look:
 - lookName: $lookName
 
 Rules:
 - Output in 8–12 short steps.
 - Be beginner-friendly.
-- Include placement tips for blush/contour based on faceShape.
+- Include placement tips for blush/contour based on the look style.
 - Avoid brand names.
 - Keep it concise and clear.
 ''';

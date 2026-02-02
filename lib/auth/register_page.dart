@@ -1,6 +1,8 @@
 // lib/auth/register_page.dart
 import 'package:flutter/material.dart';
 import '../home_screen.dart';
+import '../services/social_auth_service.dart';
+import '../services/email_verification_service.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -18,6 +20,9 @@ class _RegisterPageState extends State<RegisterPage> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _acceptTerms = false;
+  bool _isLoading = false;
+  final _socialAuthService = SocialAuthService();
+  final _emailVerificationService = EmailVerificationService();
 
   @override
   void dispose() {
@@ -28,7 +33,7 @@ class _RegisterPageState extends State<RegisterPage> {
     super.dispose();
   }
 
-  void _register() {
+  Future<void> _register() async {
     if (_formKey.currentState!.validate()) {
       if (!_acceptTerms) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -36,11 +41,197 @@ class _RegisterPageState extends State<RegisterPage> {
         );
         return;
       }
-      // TODO: Implement actual registration logic
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
-      );
+
+      final email = _emailController.text.trim();
+      final verified = await _showEmailVerificationDialog(email);
+      if (!verified) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Email verification failed. Please try again.')),
+          );
+        }
+        return;
+      }
+
+      // Navigate to home screen
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+        );
+      }
+    }
+  }
+
+  Future<bool> _showEmailVerificationDialog(String email) async {
+    final code = _emailVerificationService.generateCode(email);
+    final controller = TextEditingController();
+    bool verified = false;
+    String? errorText;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Verify your email'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('A 4-digit code was sent to $email.'),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Enter the code below to complete registration.',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: controller,
+                    keyboardType: TextInputType.number,
+                    maxLength: 4,
+                    decoration: InputDecoration(
+                      labelText: '4-digit code',
+                      errorText: errorText,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Dev code: $code',
+                    style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final input = controller.text.trim();
+                    final ok = _emailVerificationService.verifyCode(email, input);
+                    if (ok) {
+                      verified = true;
+                      Navigator.of(context).pop();
+                    } else {
+                      setState(() {
+                        errorText = 'Invalid or expired code';
+                      });
+                    }
+                  },
+                  child: const Text('Verify'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    controller.dispose();
+    return verified;
+  }
+
+  Future<void> _handleGoogleSignUp() async {
+    setState(() => _isLoading = true);
+    try {
+      final account = await _socialAuthService.signInWithGoogle();
+      if (account != null) {
+        final userInfo = SocialAuthService.getGoogleUserInfo(account);
+        final email = userInfo['email'] ?? '';
+        if (email.isEmpty) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('No email found for Google account.')),
+            );
+          }
+          return;
+        }
+
+        final verified = await _showEmailVerificationDialog(email);
+        if (!verified) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Email verification failed.')),
+            );
+          }
+          return;
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Welcome ${userInfo['displayName']}!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const HomeScreen()),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Google Sign-Up failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _handleAppleSignUp() async {
+    setState(() => _isLoading = true);
+    try {
+      final credential = await _socialAuthService.signInWithApple();
+      if (credential != null) {
+        final userInfo = SocialAuthService.getAppleUserInfo(credential);
+        final email = userInfo['email'] ?? '';
+        if (email.isEmpty) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('No email found for Apple account.')),
+            );
+          }
+          return;
+        }
+
+        final verified = await _showEmailVerificationDialog(email);
+        if (!verified) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Email verification failed.')),
+            );
+          }
+          return;
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Welcome ${userInfo['displayName']}!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const HomeScreen()),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Apple Sign-Up failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -293,10 +484,14 @@ class _RegisterPageState extends State<RegisterPage> {
 
                 // Social Sign Up Buttons
                 OutlinedButton.icon(
-                  onPressed: () {
-                    // TODO: Implement Google sign up
-                  },
-                  icon: const Icon(Icons.g_mobiledata, size: 28),
+                  onPressed: _isLoading ? null : _handleGoogleSignUp,
+                  icon: _isLoading
+                      ? SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.g_mobiledata, size: 28),
                   label: const Text('Sign up with Google'),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
@@ -308,11 +503,15 @@ class _RegisterPageState extends State<RegisterPage> {
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
-                  onPressed: () {
-                    // TODO: Implement Facebook sign up
-                  },
-                  icon: const Icon(Icons.facebook, color: Colors.blue),
-                  label: const Text('Sign up with Facebook'),
+                  onPressed: _isLoading ? null : _handleAppleSignUp,
+                  icon: _isLoading
+                      ? SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.apple, size: 28),
+                  label: const Text('Sign up with Apple'),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(

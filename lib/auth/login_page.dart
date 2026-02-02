@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'register_page.dart';
 import 'forgot_password_page.dart';
 import '../home_screen.dart';
+import '../services/social_auth_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -17,6 +18,8 @@ class _LoginPageState extends State<LoginPage> {
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _rememberMe = false;
+  bool _isLoading = false;
+  final _socialAuthService = SocialAuthService();
 
   @override
   void dispose() {
@@ -27,11 +30,72 @@ class _LoginPageState extends State<LoginPage> {
 
   void _login() {
     if (_formKey.currentState!.validate()) {
-      // TODO: Implement actual login logic
+      // Default to user home screen
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const HomeScreen()),
       );
+    }
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    setState(() => _isLoading = true);
+    try {
+      final account = await _socialAuthService.signInWithGoogle();
+      if (account != null) {
+        final userInfo = SocialAuthService.getGoogleUserInfo(account);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Welcome ${userInfo['displayName']}!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const HomeScreen()),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Google Sign-In failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _handleAppleSignIn() async {
+    setState(() => _isLoading = true);
+    try {
+      final credential = await _socialAuthService.signInWithApple();
+      if (credential != null) {
+        final userInfo =
+            SocialAuthService.getAppleUserInfo(credential);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Welcome ${userInfo['displayName']}!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const HomeScreen()),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Apple Sign-In failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -219,11 +283,16 @@ class _LoginPageState extends State<LoginPage> {
 
                 // Social Login Buttons
                 OutlinedButton.icon(
-                  onPressed: () {
-                    // TODO: Implement Google login
-                  },
-                  icon: const Icon(Icons.g_mobiledata, size: 24),
-                  label: const Text('Continue with Google', style: TextStyle(fontSize: 14)),
+                  onPressed: _isLoading ? null : _handleGoogleSignIn,
+                  icon: _isLoading
+                      ? SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.g_mobiledata, size: 24),
+                  label: const Text('Continue with Google',
+                      style: TextStyle(fontSize: 14)),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
@@ -234,11 +303,16 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 const SizedBox(height: 10),
                 OutlinedButton.icon(
-                  onPressed: () {
-                    // TODO: Implement Facebook login
-                  },
-                  icon: const Icon(Icons.facebook, color: Colors.blue, size: 20),
-                  label: const Text('Continue with Facebook', style: TextStyle(fontSize: 14)),
+                  onPressed: _isLoading ? null : _handleAppleSignIn,
+                  icon: _isLoading
+                      ? SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.apple, size: 24),
+                  label: const Text('Continue with Apple',
+                      style: TextStyle(fontSize: 14)),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(

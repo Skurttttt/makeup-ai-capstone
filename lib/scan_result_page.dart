@@ -1,11 +1,24 @@
 // lib/scan_result_page.dart
 import 'package:flutter/material.dart';
+import 'look_engine.dart';
+import 'instructions_page.dart';
+import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 class ScanResultPage extends StatefulWidget {
   final String? scannedImagePath;
   final String? scannedItem;
+  final Face? detectedFace;
+  final FaceProfile? faceProfile;
+  final LookResult? look;
 
-  const ScanResultPage({super.key, this.scannedImagePath, this.scannedItem});
+  const ScanResultPage({
+    super.key,
+    this.scannedImagePath,
+    this.scannedItem,
+    this.detectedFace,
+    this.faceProfile,
+    this.look,
+  });
 
   @override
   State<ScanResultPage> createState() => _ScanResultPageState();
@@ -325,39 +338,87 @@ class _ScanResultPageState extends State<ScanResultPage> {
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: OutlinedButton(
-              onPressed: () {
-                // Scan Again action
-                Navigator.pop(context);
-              },
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                side: const BorderSide(
-                  color: Color(0xFFFF4D97),
-                  width: 2,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    side: const BorderSide(
+                      color: Color(0xFFFF4D97),
+                      width: 2,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.arrow_back, size: 18, color: Color(0xFFFF4D97)),
+                      SizedBox(width: 6),
+                      Text(
+                        'Back',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFFFF4D97),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              child: const Text(
-                'Scan Again',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFFFF4D97),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: widget.look != null
+                      ? () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => InstructionsPage(look: widget.look!),
+                            ),
+                          );
+                        }
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: const Color(0xFFFF4D97),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.school, size: 18, color: Colors.white),
+                      SizedBox(width: 6),
+                      Text(
+                        'Tutorial',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
             child: ElevatedButton(
               onPressed: () {
-                // Buy Product action
                 _showBuyProductDialog();
               },
               style: ElevatedButton.styleFrom(
@@ -369,7 +430,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
                 elevation: 0,
               ),
               child: const Text(
-                'Buy Product',
+                'Buy Products',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
