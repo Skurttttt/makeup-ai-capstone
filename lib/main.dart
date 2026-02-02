@@ -23,17 +23,23 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: "assets/.env");
 
-  final cameras = await availableCameras();
-  final front = cameras.firstWhere(
-    (c) => c.lensDirection == CameraLensDirection.front,
-    orElse: () => cameras.first,
-  );
+  CameraDescription? frontCamera;
+  try {
+    final cameras = await availableCameras();
+    frontCamera = cameras.firstWhere(
+      (c) => c.lensDirection == CameraLensDirection.front,
+      orElse: () => cameras.first,
+    );
+  } catch (e) {
+    // Camera not available (common on web or emulators)
+    debugPrint('Camera access error: $e');
+  }
 
-  runApp(App(frontCamera: front));
+  runApp(App(frontCamera: frontCamera));
 }
 
 class App extends StatelessWidget {
-  final CameraDescription frontCamera;
+  final CameraDescription? frontCamera;
   const App({super.key, required this.frontCamera});
 
   @override
@@ -82,7 +88,6 @@ class FaceScanPage extends StatefulWidget {
 
 class _FaceScanPageState extends State<FaceScanPage> {
   CameraController? _controller;
-  CameraDescription? _currentCamera;
   bool _busy = false;
   bool _isFrontCamera = true;
 
@@ -98,9 +103,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
   double _intensity = 0.75;
 
   // ✅ Day 2: Post-scan quality feedback
-  List<String> _warnings = [];
-  static const double _minConfidenceOk = 0.45;
-  static const double _minConfidenceGood = 0.60;
 
   // ✅ Global luminance
   double _sceneLuminance = 0.50;
@@ -120,8 +122,13 @@ class _FaceScanPageState extends State<FaceScanPage> {
   double _liveBrightness = 0.0;
 
   // ✅ Rotation + UV Swap toggles
-  InputImageRotation _liveRotation = InputImageRotation.rotation90deg;
+  InputImageRotation _liveRotation = InputImageRotation.rotation270deg;
   bool _swapUV = false;
+
+  // ✅ Auto-capture when lighting is good
+  bool _autoCapture = false;
+  int _goodQualityFrameCount = 0;
+  static const int _goodQualityThreshold = 3; // Require 3+ consecutive good frames
 
   // ✅ Persistence for face detection
   int _noFaceStreak = 0;
@@ -173,7 +180,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
       if (!mounted) return;
       setState(() {
         _controller = controller;
-        _currentCamera = widget.camera;
         _isFrontCamera = widget.camera.lensDirection == CameraLensDirection.front;
       });
       await _startLiveQuality(controller);
@@ -226,7 +232,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
       if (!mounted) return;
       setState(() {
         _controller = controller;
-        _currentCamera = newCamera;
         _isFrontCamera = newCamera.lensDirection == CameraLensDirection.front;
         _status = _isFrontCamera ? 'Switched to Front Camera' : 'Switched to Back Camera';
       });
@@ -506,6 +511,25 @@ class _FaceScanPageState extends State<FaceScanPage> {
           brightness: brightness,
         );
 
+        // ✅ Auto-capture when quality is good and auto-capture is enabled
+        bool isQualityGood = warnings.isEmpty && brightness >= 90 && brightness <= 210;
+
+        if (_autoCapture && isQualityGood && !_busy) {
+          _goodQualityFrameCount++;
+          if (_goodQualityFrameCount >= _goodQualityThreshold) {
+            _goodQualityFrameCount = 0;
+            _autoCapture = false; // Disable auto-capture after triggering
+            _stopLiveQuality(); // Stop the stream before capturing
+            await Future.delayed(const Duration(milliseconds: 100));
+            if (mounted) {
+              _captureAndScan();
+            }
+            return;
+          }
+        } else {
+          _goodQualityFrameCount = 0;
+        }
+
         if (mounted) {
           setState(() {
             _liveBrightness = brightness;
@@ -552,67 +576,17 @@ class _FaceScanPageState extends State<FaceScanPage> {
     );
   }
 
-  void _toggleLiveRotation() {
-    setState(() {
-      _liveRotation = _liveRotation == InputImageRotation.rotation90deg
-          ? InputImageRotation.rotation270deg
-          : InputImageRotation.rotation90deg;
-    });
-  }
-
   void _toggleUVSwap() {
     setState(() {
       _swapUV = !_swapUV;
     });
   }
 
-  bool _isFaceTooSmall(Face face, int imgW, int imgH) {
-    final box = face.boundingBox;
-    final faceArea = box.width * box.height;
-    final imageArea = imgW * imgH;
-    final ratio = faceArea / imageArea;
-    return ratio < 0.12;
-  }
-
-  bool _isFaceNearEdges(Face face, int imgW, int imgH) {
-    return _isFaceNearEdge(face, imgW, imgH);
-  }
-
-  List<String> _buildWarnings({
-    required Face face,
-    required FaceProfile profile,
-    required int imgW,
-    required int imgH,
-  }) {
-    final warnings = <String>[];
-
-    if (_isFaceTooSmall(face, imgW, imgH)) {
-      warnings.add('Move closer for better analysis');
-    }
-
-    if (_isFaceNearEdges(face, imgW, imgH)) {
-      warnings.add('Center your face in the frame');
-    }
-
-    if (profile.skinConfidence < _minConfidenceOk) {
-      if (profile.skinConfidence < 0.3) {
-        warnings.add('Poor lighting—try brighter light');
-      } else {
-        warnings.add('Fair lighting—try more direct light');
-      }
-    }
-
-    if (profile.undertoneConfidence < 0.5) {
-      warnings.add('Undertone detection uncertain');
-    }
-
-    return warnings;
-  }
-
-  String _confidenceLabel(double c) {
-    if (c >= _minConfidenceGood) return 'Good';
-    if (c >= _minConfidenceOk) return 'Fair';
-    return 'Low';
+  void _toggleAutoCapture() {
+    setState(() {
+      _autoCapture = !_autoCapture;
+      _goodQualityFrameCount = 0; // Reset counter
+    });
   }
 
   Future<void> _captureAndScan() async {
@@ -633,7 +607,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
       _detectedFace = null;
       _faceProfile = null;
       _look = null;
-      _warnings = [];
       _intensity = 0.75;
       _sceneLuminance = 0.50;
       _leftCheekLum = 0.50;
@@ -699,20 +672,27 @@ class _FaceScanPageState extends State<FaceScanPage> {
       final profile = FaceProfile.fromAnalysis(face, skin);
       final look = LookEngine.fromPreset(_selectedLook, profile: profile);
 
-      final warnings = _buildWarnings(
-        face: face,
-        profile: profile,
-        imgW: uiImage.width,
-        imgH: uiImage.height,
-      );
-
       setState(() {
         _detectedFace = face;
         _faceProfile = profile;
         _look = look;
-        _warnings = warnings;
-        _status = 'Done ✅ Tap "View Instructions".';
+        _status = 'Done ✅ Navigating to results…';
       });
+
+      // ✅ Navigate immediately to results after successful detection
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => ScanResultPage(
+              scannedImagePath: _capturedFile?.path,
+              scannedItem: widget.scannedItem,
+              detectedFace: face,
+              faceProfile: profile,
+              look: look,
+            ),
+          ),
+        );
+      }
     } catch (e) {
       setState(() => _status = 'Error: $e');
     } finally {
@@ -725,13 +705,12 @@ class _FaceScanPageState extends State<FaceScanPage> {
   }
 
   void _openInstructions() {
-    final profile = _faceProfile;
     final look = _look;
-    if (profile == null || look == null) return;
+    if (look == null) return;
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => InstructionsPage(profile: profile, look: look),
+        builder: (_) => InstructionsPage(look: look),
       ),
     );
   }
@@ -789,15 +768,15 @@ class _FaceScanPageState extends State<FaceScanPage> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           ElevatedButton(
-                            onPressed: _toggleLiveRotation,
+                            onPressed: _toggleAutoCapture,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.grey[800],
+                              backgroundColor: _autoCapture ? const Color(0xFFFF4D97) : Colors.grey[800],
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                               minimumSize: const Size(0, 0),
                             ),
                             child: Text(
-                              'Rot: ${_liveRotation == InputImageRotation.rotation90deg ? '90°' : '270°'}',
+                              'Auto: ${_autoCapture ? 'ON' : 'OFF'}',
                               style: const TextStyle(fontSize: 9),
                             ),
                           ),
@@ -960,6 +939,43 @@ class _FaceScanPageState extends State<FaceScanPage> {
                           ],
                         ),
                       ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 40,
+                            child: FilledButton.icon(
+                              onPressed: (_faceProfile != null && _look != null) ? _openInstructions : null,
+                              icon: const Icon(Icons.list_alt, size: 16),
+                              label: const Text('View Instructions', style: TextStyle(fontSize: 12)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: SizedBox(
+                            height: 40,
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => ScanResultPage(scannedItem: widget.scannedItem),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.preview, size: 16),
+                              label: const Text('View Result Screen', style: TextStyle(fontSize: 12)),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFFFF4D97),
+                                side: const BorderSide(color: Color(0xFFFF4D97), width: 2),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               )
@@ -969,212 +985,18 @@ class _FaceScanPageState extends State<FaceScanPage> {
                 child: Text(_status, style: const TextStyle(fontSize: 12), textAlign: TextAlign.center),
               ),
 
-            if (_faceProfile != null)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                child: _ProfileChipRow(profile: _faceProfile!),
-              ),
-
-            if (_faceProfile != null)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                child: _ResultsSummaryCard(
-                  profile: _faceProfile!,
-                  warnings: _warnings,
-                  confidenceLabel: _confidenceLabel(_faceProfile!.skinConfidence),
-                ),
-              ),
-
             // Buttons
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: SizedBox(
-                      height: 44,
-                      child: ElevatedButton.icon(
-                        onPressed: _busy || !_canCaptureNow() ? null : _captureAndScan,
-                        icon: const Icon(Icons.camera_alt, size: 16),
-                        label: const Text('Capture & Scan', style: TextStyle(fontSize: 12)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: SizedBox(
-                      height: 44,
-                      child: FilledButton.icon(
-                        onPressed: (_faceProfile != null && _look != null) ? _openInstructions : null,
-                        icon: const Icon(Icons.list_alt, size: 16),
-                        label: const Text('View Instructions', style: TextStyle(fontSize: 12)),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // View Result Button
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
               child: SizedBox(
-                width: double.infinity,
                 height: 44,
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ScanResultPage(scannedItem: widget.scannedItem),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.preview, size: 16),
-                  label: const Text('View Result Screen', style: TextStyle(fontSize: 12)),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFFFF4D97),
-                    side: const BorderSide(color: Color(0xFFFF4D97), width: 2),
-                  ),
+                child: ElevatedButton.icon(
+                  onPressed: _busy || !_canCaptureNow() ? null : _captureAndScan,
+                  icon: const Icon(Icons.camera_alt, size: 16),
+                  label: const Text('Capture & Scan', style: TextStyle(fontSize: 12)),
                 ),
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ProfileChipRow extends StatelessWidget {
-  final FaceProfile profile;
-  const _ProfileChipRow({required this.profile});
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 6,
-      children: [
-        Chip(label: Text('Tone: ${profile.skinTone.name}')),
-        Chip(label: Text('Undertone: ${profile.undertone.name}')),
-        Chip(label: Text('Face shape: ${profile.faceShape.name}')),
-        Chip(label: Text('RGB: ${profile.avgR},${profile.avgG},${profile.avgB}')),
-        Chip(label: Text('Skin conf: ${(profile.skinConfidence * 100).toStringAsFixed(0)}%')),
-      ],
-    );
-  }
-}
-
-class _ResultsSummaryCard extends StatelessWidget {
-  final FaceProfile profile;
-  final List<String> warnings;
-  final String confidenceLabel;
-
-  const _ResultsSummaryCard({
-    required this.profile,
-    required this.warnings,
-    required this.confidenceLabel,
-  });
-
-  Color _confidenceColor() {
-    final c = profile.skinConfidence;
-    if (c >= _FaceScanPageState._minConfidenceGood) return Colors.green;
-    if (c >= _FaceScanPageState._minConfidenceOk) return Colors.orange;
-    return Colors.red;
-  }
-
-  Color _confidenceBgColor() {
-    final c = profile.skinConfidence;
-    if (c >= _FaceScanPageState._minConfidenceGood) return Colors.green.shade50;
-    if (c >= _FaceScanPageState._minConfidenceOk) return Colors.orange.shade50;
-    return Colors.red.shade50;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.analytics, size: 20),
-                const SizedBox(width: 8),
-                const Text(
-                  'Scan Quality',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _confidenceBgColor(),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: _confidenceColor(),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '$confidenceLabel (${(profile.skinConfidence * 100).toStringAsFixed(0)}%)',
-                        style: TextStyle(
-                          color: _confidenceColor(),
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (warnings.isNotEmpty)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Suggestions for better results:',
-                    style: TextStyle(fontSize: 13, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 6),
-                  ...warnings.map(
-                    (w) => Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Icon(
-                            Icons.info_outline,
-                            size: 16,
-                            color: Colors.orange,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              w,
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              )
-            else
-              const Text('Good scan quality'),
           ],
         ),
       ),
