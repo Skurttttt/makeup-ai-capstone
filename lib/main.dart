@@ -16,6 +16,7 @@ import 'instructions_page.dart';
 import 'look_engine.dart';
 import 'look_picker.dart';
 import 'painters/makeup_overlay_painter.dart';
+import 'painters/face_guide_painter.dart';
 import 'scan_result_page.dart';
 import 'auth/login_page.dart';
 
@@ -419,8 +420,9 @@ class _FaceScanPageState extends State<FaceScanPage> {
     final cx = (b.left + b.right) / 2;
     final cy = (b.top + b.bottom) / 2;
 
-    final marginX = imgW * 0.15;
-    final marginY = imgH * 0.15;
+    // Reduced margins from 0.15 to 0.08 (8% instead of 15%) for more lenient edge detection
+    final marginX = imgW * 0.08;
+    final marginY = imgH * 0.08;
 
     final insideX = cx > marginX && cx < (imgW - marginX);
     final insideY = cy > marginY && cy < (imgH - marginY);
@@ -679,9 +681,9 @@ class _FaceScanPageState extends State<FaceScanPage> {
         _status = 'Done ✅ Navigating to results…';
       });
 
-      // ✅ Navigate immediately to results after successful detection
+      // Navigate to results page with photo
       if (mounted) {
-        Navigator.of(context).pushReplacement(
+        await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => ScanResultPage(
               scannedImagePath: _capturedFile?.path,
@@ -692,6 +694,24 @@ class _FaceScanPageState extends State<FaceScanPage> {
             ),
           ),
         );
+        
+        // When returning from preview, reset capture state
+        if (mounted) {
+          setState(() {
+            _capturedFile = null;
+            _capturedUiImage = null;
+            _detectedFace = null;
+            _faceProfile = null;
+            _look = null;
+            _status = 'Tap "Capture & Scan" to start.';
+          });
+          
+          // Restart camera if needed
+          final c = _controller;
+          if (c != null && c.value.isInitialized) {
+            await _startLiveQuality(c);
+          }
+        }
       }
     } catch (e) {
       setState(() => _status = 'Error: $e');
@@ -846,6 +866,12 @@ class _FaceScanPageState extends State<FaceScanPage> {
                                   child: CameraPreview(controller),
                                 ),
                               ),
+                              
+                              // Face position guide overlay
+                              if (!_busy && _capturedUiImage == null)
+                                CustomPaint(
+                                  painter: FaceGuidePainter(),
+                                ),
                               
                               if (_busy)
                                 const Align(

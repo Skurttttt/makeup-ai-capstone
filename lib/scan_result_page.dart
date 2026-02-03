@@ -1,7 +1,10 @@
 // lib/scan_result_page.dart
+import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'look_engine.dart';
 import 'instructions_page.dart';
+import 'painters/makeup_overlay_painter.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 class ScanResultPage extends StatefulWidget {
@@ -27,6 +30,26 @@ class ScanResultPage extends StatefulWidget {
 class _ScanResultPageState extends State<ScanResultPage> {
   String selectedFilter = 'Natural';
   final List<String> filters = ['Natural', 'Everyday', 'Glam'];
+  ui.Image? _uiImage;
+  double _intensity = 0.75;
+  MakeupLookPreset _currentPreset = MakeupLookPreset.softGlam;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadImage();
+  }
+
+  Future<void> _loadImage() async {
+    if (widget.scannedImagePath != null) {
+      final bytes = await File(widget.scannedImagePath!).readAsBytes();
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      setState(() {
+        _uiImage = frame.image;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -61,23 +84,6 @@ class _ScanResultPageState extends State<ScanResultPage> {
                   _buildPhotoContainer(),
                   const SizedBox(height: 24),
 
-                  // Filter Options
-                  const Text(
-                    'Choose Look',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildFilterOptions(),
-                  const SizedBox(height: 32),
-
-                  // How to Apply Section
-                  _buildHowToApplySection(),
-                  const SizedBox(height: 32),
-
                   // Recommended Products Section
                   if (widget.scannedItem != null) ...[
                     Text(
@@ -106,9 +112,12 @@ class _ScanResultPageState extends State<ScanResultPage> {
   }
 
   Widget _buildPhotoContainer() {
+    final double? aspect = _uiImage != null
+        ? (_uiImage!.width.toDouble() / _uiImage!.height.toDouble())
+        : null;
+
     return Container(
       width: double.infinity,
-      height: 400,
       decoration: BoxDecoration(
         color: Colors.grey[100],
         borderRadius: BorderRadius.circular(20),
@@ -117,17 +126,60 @@ class _ScanResultPageState extends State<ScanResultPage> {
           width: 2,
         ),
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
-        child: widget.scannedImagePath != null
-            ? Image.network(
-                widget.scannedImagePath!,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return _buildPlaceholder();
-                },
-              )
-            : _buildPlaceholder(),
+      child: AspectRatio(
+        aspectRatio: aspect ?? (3 / 4),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: _uiImage != null && widget.detectedFace != null && widget.look != null
+              ? Center(
+                  child: FittedBox(
+                    fit: BoxFit.contain,
+                    child: SizedBox(
+                      width: _uiImage!.width.toDouble(),
+                      height: _uiImage!.height.toDouble(),
+                      child: CustomPaint(
+                        painter: MakeupOverlayPainter(
+                          image: _uiImage!,
+                          face: widget.detectedFace!,
+                          lipstickColor: widget.look!.lipstickColor,
+                          blushColor: widget.look!.blushColor,
+                          eyeshadowColor: widget.look!.eyeshadowColor,
+                          intensity: _intensity,
+                          faceShape: widget.faceProfile?.faceShape ?? FaceShape.oval,
+                          preset: MakeupLookPreset.softGlam,
+                          debugMode: false,
+                          isLiveMode: false,
+                          eyelinerStyle: LookEngine.configFromPreset(_currentPreset, profile: widget.faceProfile).eyelinerStyle,
+                          skinColor: widget.faceProfile != null
+                              ? Color.fromARGB(
+                                  255,
+                                  widget.faceProfile!.avgR,
+                                  widget.faceProfile!.avgG,
+                                  widget.faceProfile!.avgB,
+                                )
+                              : Colors.transparent,
+                          sceneLuminance: 0.5,
+                          leftCheekLuminance: 0.5,
+                          rightCheekLuminance: 0.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              : widget.scannedImagePath != null
+                  ? Center(
+                      child: FittedBox(
+                        fit: BoxFit.contain,
+                        child: Image.file(
+                          File(widget.scannedImagePath!),
+                          errorBuilder: (context, error, stackTrace) {
+                            return _buildPlaceholder();
+                          },
+                        ),
+                      ),
+                    )
+                  : _buildPlaceholder(),
+        ),
       ),
     );
   }
