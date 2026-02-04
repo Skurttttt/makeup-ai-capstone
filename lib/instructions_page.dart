@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
 import 'look_engine.dart';
 import 'openai_service.dart';
+import 'skin_analyzer.dart'; // ✅ reuse SkinTone + Undertone enums
 
 class InstructionsPage extends StatefulWidget {
   final LookResult look;
-  const InstructionsPage({super.key, required this.look});
+  final FaceProfile? faceProfile; // ✅ new (nullable)
+
+  const InstructionsPage({
+    super.key,
+    required this.look,
+    this.faceProfile,
+  });
 
   @override
   State<InstructionsPage> createState() => _InstructionsPageState();
@@ -281,6 +288,89 @@ class _InstructionsPageState extends State<InstructionsPage> {
     ];
   }
 
+  // ✅ NEW SECTION (replaces Color Palette)
+  Widget _buildWhyThisLookSection() {
+    final profile = widget.faceProfile;
+    if (profile == null) return const SizedBox.shrink();
+
+    String toneLabel(SkinTone tone) => switch (tone) {
+          SkinTone.light => 'light',
+          SkinTone.medium => 'medium',
+          SkinTone.tan => 'tan',
+          SkinTone.deep => 'deep',
+        };
+
+    String undertoneLabel(Undertone undertone) => switch (undertone) {
+          Undertone.warm => 'warm',
+          Undertone.cool => 'cool',
+          Undertone.neutral => 'neutral',
+        };
+
+    String faceShapeLabel(FaceShape shape) => switch (shape) {
+          FaceShape.oval => 'oval',
+          FaceShape.round => 'round',
+          FaceShape.square => 'square',
+          FaceShape.heart => 'heart',
+          FaceShape.unknown => 'balanced',
+        };
+
+    final bullets = <String>[
+      'Matched to your ${undertoneLabel(profile.undertone)} undertone based on skin analysis.',
+      'Balanced for your ${toneLabel(profile.skinTone)} skin tone.',
+      'Placement optimized for your ${faceShapeLabel(profile.faceShape)} face shape.',
+      if (profile.skinConfidence < 0.6)
+        'Lighting/angle reduced accuracy. Try brighter, even lighting for better results.',
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFFFF4D97).withOpacity(0.3),
+          width: 2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Why this look suits you',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...bullets.map(
+            (text) => Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.check_circle, size: 16, color: Color(0xFFFF4D97)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      text,
+                      style: TextStyle(
+                        color: Colors.grey[700],
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final look = widget.look;
@@ -310,41 +400,8 @@ class _InstructionsPageState extends State<InstructionsPage> {
           ),
           const SizedBox(height: 8),
 
-          // Color Preview
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: const Color(0xFFFF4D97).withOpacity(0.3),
-                width: 2,
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Color Palette',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    _buildColorBox('Lips', look.lipstickColor),
-                    const SizedBox(width: 12),
-                    _buildColorBox('Blush', look.blushColor),
-                    const SizedBox(width: 12),
-                    _buildColorBox('Eyes', look.eyeshadowColor),
-                  ],
-                ),
-              ],
-            ),
-          ),
+          // ✅ Color Palette REMOVED; replaced by Why this look suits you
+          _buildWhyThisLookSection(),
 
           const SizedBox(height: 24),
 
@@ -490,8 +547,8 @@ class _InstructionsPageState extends State<InstructionsPage> {
           Text(
             'Note: AI tips use only the selected look name. No face image data is sent.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Colors.grey[500],
-            ),
+                  color: Colors.grey[500],
+                ),
           ),
 
           const SizedBox(height: 24),
@@ -499,35 +556,4 @@ class _InstructionsPageState extends State<InstructionsPage> {
       ),
     );
   }
-
-  Widget _buildColorBox(String label, Color color) {
-    return Expanded(
-      child: Column(
-        children: [
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: Colors.grey[300]!,
-                width: 1,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: Colors.grey[600],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
-
