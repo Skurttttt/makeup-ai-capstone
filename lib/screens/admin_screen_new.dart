@@ -300,7 +300,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
               children: [
                 _buildKpiCard('Total Accounts', '$totalAccounts', '+2.1%', Colors.blue),
                 _buildKpiCard('Active Subscriptions', '$activeSubscriptions', '+1.5%', const Color(0xFFFF4D97)),
-                _buildKpiCard('Monthly Profit', '₱${currentMonthProfit.toStringAsFixed(2)}', '+0%', Colors.green),
+                _buildKpiCard('Monthly Sales', '₱${currentMonthProfit.toStringAsFixed(2)}', '+0%', Colors.green),
                 _buildKpiCard('Churn Rate', '1.8%', '-0.3%', Colors.orange),
               ],
             ),
@@ -557,7 +557,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Profit Tracking', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.black87)),
+        const Text('Sales Tracking', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.black87)),
         const SizedBox(height: 16),
         FutureBuilder(
           future: _supabaseService.getAllSubscriptions(),
@@ -587,13 +587,13 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                   spacing: 16,
                   runSpacing: 16,
                   children: [
-                    _buildProfitCard('Total Revenue', '₱${totalRevenue.toStringAsFixed(2)}', Colors.green),
+                    _buildProfitCard('Total Sales', '₱${totalRevenue.toStringAsFixed(2)}', Colors.green),
                     _buildProfitCard('Avg Monthly', '₱${avgMonthly.toStringAsFixed(2)}', Colors.blue),
                     _buildProfitCard('Active Subs', '${subscriptions.where((s) => s['status'] == 'active').length}', const Color(0xFFFF4D97)),
                   ],
                 ),
                 const SizedBox(height: 24),
-                // Monthly Profit Chart
+                // Monthly Sales Chart
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
@@ -605,7 +605,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Monthly Revenue Chart',
+                        'Monthly Sales Chart',
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black87),
                       ),
                       const SizedBox(height: 24),
