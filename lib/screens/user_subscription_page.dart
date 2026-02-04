@@ -116,6 +116,10 @@ class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
             itemCount: subscriptions.length,
             itemBuilder: (context, index) {
               final subscription = subscriptions[index];
+              final plan = subscription['subscription_plans'] as Map<String, dynamic>?;
+              final planName = (plan?['name'] ?? 'N/A').toString();
+              final displayName = (plan?['display_name'] ?? planName).toString();
+              final isFree = planName.toLowerCase() == 'free';
               final isActive = subscription['status'] == 'active';
               final periodEnd = subscription['current_period_end'] != null
                   ? DateTime.parse(subscription['current_period_end'])
@@ -145,7 +149,7 @@ class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
                               Row(
                                 children: [
                                   Text(
-                                    subscription['plan']?.toUpperCase() ?? 'N/A',
+                                    displayName.toUpperCase(),
                                     style: const TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.w700,
@@ -153,7 +157,7 @@ class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
                                     ),
                                   ),
                                   const SizedBox(width: 8),
-                                  if (subscription['plan'] == 'regular')
+                                  if (isFree)
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                       decoration: BoxDecoration(

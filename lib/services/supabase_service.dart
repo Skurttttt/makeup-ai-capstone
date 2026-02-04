@@ -316,14 +316,15 @@ class SupabaseService {
 
   // ==================== SUBSCRIPTIONS ====================
 
-  Future<void> _downgradeExpiredToRegular(List<Map<String, dynamic>> subscriptions) async {
+  Future<void> _expireExpiredSubscriptions(List<Map<String, dynamic>> subscriptions) async {
     final now = DateTime.now();
     final List<Future<void>> updates = [];
 
     for (final subscription in subscriptions) {
-      final plan = (subscription['plan'] ?? '').toString().toLowerCase();
+      final status = (subscription['status'] ?? '').toString().toLowerCase();
       final currentPeriodEnd = subscription['current_period_end']?.toString();
-      if (plan == 'regular' || currentPeriodEnd == null) {
+
+      if (status != 'active' || currentPeriodEnd == null) {
         continue;
       }
 
@@ -338,11 +339,11 @@ class SupabaseService {
       }
 
       updates.add(
-        client.from('subscriptions').update({
-          'plan': 'regular',
-          'status': 'active',
-          'current_period_end': now.add(const Duration(days: 36500)).toIso8601String(),
-        }).eq('id', id).then((_) => null),
+        client
+            .from('user_subscriptions')
+            .update({'status': 'expired'})
+            .eq('id', id)
+            .then((_) => null),
       );
     }
 
@@ -356,9 +357,9 @@ class SupabaseService {
   Future<List<Map<String, dynamic>>> getAllPlans() async {
     try {
       final response = await client
-          .from('plans')
+          .from('subscription_plans')
           .select()
-          .order('price', ascending: true);
+          .order('sort_order', ascending: true);
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       throw 'Failed to fetch plans: $e';
@@ -369,12 +370,12 @@ class SupabaseService {
   Future<List<Map<String, dynamic>>> getUserSubscriptions(String userId) async {
     try {
       final response = await client
-          .from('subscriptions')
-          .select('*, plans(name, price, currency, billing_period)')
-          .eq('account_id', userId)
+          .from('user_subscriptions')
+          .select('*, subscription_plans(name, display_name, price, currency, billing_period, badge_text, badge_color, daily_scan_limit, available_looks, can_save_results, can_export_hd, remove_watermark)')
+          .eq('user_id', userId)
           .order('created_at', ascending: false);
       final subscriptions = List<Map<String, dynamic>>.from(response);
-      await _downgradeExpiredToRegular(subscriptions);
+      await _expireExpiredSubscriptions(subscriptions);
       return subscriptions;
     } catch (e) {
       throw 'Failed to fetch user subscriptions: $e';
@@ -385,8 +386,8 @@ class SupabaseService {
   Future<List<Map<String, dynamic>>> getAllSubscriptions() async {
     try {
       final response = await client
-          .from('subscriptions')
-          .select('*, accounts(full_name, email), plans(name, price, currency)')
+          .from('user_subscriptions')
+          .select('*, accounts(full_name, email), subscription_plans(name, display_name, price, currency, billing_period)')
           .order('created_at', ascending: false);
       final subscriptions = List<Map<String, dynamic>>.from(response);
       return subscriptions;
@@ -401,14 +402,31 @@ class SupabaseService {
     required double price,
     String? description,
     String billingPeriod = 'month',
+    String? displayName,
+    String? badgeText,
+    String? badgeColor,
+    int dailyScanLimit = -1,
+    List<String>? availableLooks,
+    bool canSaveResults = false,
+    bool canExportHd = false,
+    bool removeWatermark = false,
   }) async {
     try {
-      final response = await client.from('plans').insert({
+      final response = await client.from('subscription_plans').insert({
         'name': name,
+        'display_name': displayName ?? name,
         'price': price,
         'currency': 'PHP',
         'description': description,
         'billing_period': billingPeriod,
+        'badge_text': badgeText,
+        'badge_color': badgeColor,
+        'daily_scan_limit': dailyScanLimit,
+        'available_looks': availableLooks ?? [],
+        'can_save_results': canSaveResults,
+        'can_export_hd': canExportHd,
+        'remove_watermark': removeWatermark,
+        'is_active': true,
       }).select();
       return response.first;
     } catch (e) {
@@ -423,7 +441,7 @@ class SupabaseService {
   }) async {
     try {
       final response = await client
-          .from('plans')
+          .from('subscription_plans')
           .update(updates)
           .eq('id', planId)
           .select();
@@ -436,7 +454,7 @@ class SupabaseService {
   /// Delete a subscription plan (admin only)
   Future<void> deletePlan(String planId) async {
     try {
-      await client.from('plans').delete().eq('id', planId);
+      await client.from('subscription_plans').delete().eq('id', planId);
     } catch (e) {
       throw 'Failed to delete plan: $e';
     }
@@ -450,8 +468,8 @@ class SupabaseService {
     required DateTime currentPeriodEnd,
   }) async {
     try {
-      final response = await client.from('subscriptions').insert({
-        'account_id': accountId,
+      final response = await client.from('user_subscriptions').insert({
+        'user_id': accountId,
         'plan_id': planId,
         'status': status,
         'current_period_end': currentPeriodEnd.toIso8601String(),
@@ -469,7 +487,7 @@ class SupabaseService {
   }) async {
     try {
       final response = await client
-          .from('subscriptions')
+          .from('user_subscriptions')
           .update(updates)
           .eq('id', subscriptionId)
           .select();
@@ -487,7 +505,7 @@ class SupabaseService {
   Future<void> deleteSubscription(String subscriptionId) async {
     try {
       await client
-          .from('subscriptions')
+          .from('user_subscriptions')
           .delete()
           .eq('id', subscriptionId);
     } catch (e) {
@@ -563,14 +581,14 @@ class SupabaseService {
   /// Listen to subscription changes
   RealtimeChannel subscribeToSubscriptions(String userId, {VoidCallback? onChange}) {
     return client
-        .channel('subscriptions:account_id=eq.$userId')
+        .channel('user_subscriptions:user_id=eq.$userId')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
-          table: 'subscriptions',
+          table: 'user_subscriptions',
           filter: PostgresChangeFilter(
             type: PostgresChangeFilterType.eq,
-            column: 'account_id',
+            column: 'user_id',
             value: userId,
           ),
           callback: (payload) {

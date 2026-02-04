@@ -41,11 +41,11 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
         .subscribe();
 
     _subscriptionsChannel = _supabaseService.client
-        .channel('subscriptions_all')
+        .channel('user_subscriptions_all')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
-          table: 'subscriptions',
+          table: 'user_subscriptions',
           callback: (payload) {
             if (mounted) setState(() {});
           },
