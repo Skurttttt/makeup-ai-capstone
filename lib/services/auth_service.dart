@@ -1,10 +1,10 @@
 // lib/services/auth_service.dart
 import 'package:flutter/material.dart';
 
-enum UserRole { admin, user, guest }
+enum UserRole { admin, user, client }
 
 class AuthService extends ChangeNotifier {
-  UserRole _userRole = UserRole.guest;
+  UserRole _userRole = UserRole.user;
   String? _userId;
   bool _isAuthenticated = false;
 
@@ -31,7 +31,7 @@ class AuthService extends ChangeNotifier {
 
   Future<void> logout() async {
     _userId = null;
-    _userRole = UserRole.guest;
+    _userRole = UserRole.user;
     _isAuthenticated = false;
     notifyListeners();
   }

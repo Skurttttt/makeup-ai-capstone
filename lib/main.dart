@@ -11,18 +11,31 @@ import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/services.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'instructions_page.dart';
 import 'look_engine.dart';
 import 'look_picker.dart';
 import 'painters/makeup_overlay_painter.dart';
-import 'painters/face_guide_painter.dart';
 import 'scan_result_page.dart';
-import 'auth/login_page.dart';
+import 'home_screen.dart';
+import 'screens/admin_screen_new.dart';
+import 'auth/login_supabase_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: "assets/.env");
+
+  // Initialize Supabase
+  try {
+    await Supabase.initialize(
+      url: dotenv.env['SUPABASE_URL'] ?? '',
+      anonKey: dotenv.env['SUPABASE_ANON_KEY'] ?? '',
+    );
+    debugPrint('✅ Supabase initialized successfully');
+  } catch (e) {
+    debugPrint('❌ Supabase initialization error: $e');
+  }
 
   CameraDescription? frontCamera;
   try {
@@ -55,10 +68,168 @@ class App extends StatelessWidget {
           primary: const Color(0xFFFF4D97),
         ),
       ),
-      home: const LoginPage(),
+      home: const LoginSupabasePage(),
       debugShowCheckedModeBanner: false,
     );
   }
+}
+
+class AuthCheckScreen extends StatelessWidget {
+  const AuthCheckScreen({super.key});
+
+  Future<String> _fetchUserRole({required String userId, String? email}) async {
+    try {
+        final profile = await Supabase.instance.client
+          .from('accounts')
+          .select('role')
+          .eq('id', userId)
+          .single();
+
+      final role = profile['role'] as String?;
+      if (role != null && role.isNotEmpty) {
+        return role.trim().toLowerCase();
+      }
+    } catch (_) {
+      // Fall through to email-based lookup
+    }
+
+    if (email != null && email.isNotEmpty) {
+        final profileByEmail = await Supabase.instance.client
+          .from('accounts')
+          .select('role')
+          .eq('email', email)
+          .single();
+
+      final role = profileByEmail['role'] as String?;
+      if (role != null && role.isNotEmpty) {
+        return role.trim().toLowerCase();
+      }
+    }
+
+    throw 'Role not found for this user.';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<AuthState>(
+      stream: Supabase.instance.client.auth.onAuthStateChange,
+      builder: (context, snapshot) {
+        // Connection waiting
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        // Check if user is authenticated
+        final session = Supabase.instance.client.auth.currentSession;
+        if (session != null) {
+          return FutureBuilder<String>(
+            future: _fetchUserRole(
+              userId: session.user.id,
+              email: session.user.email,
+            ),
+            builder: (context, roleSnapshot) {
+              if (roleSnapshot.connectionState == ConnectionState.waiting) {
+                return const Scaffold(
+                  body: Center(child: CircularProgressIndicator()),
+                );
+              }
+
+              if (roleSnapshot.hasError) {
+                return Scaffold(
+                  body: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Unable to load profile role.',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            roleSnapshot.error.toString(),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.redAccent),
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: () async {
+                              await Supabase.instance.client.auth.signOut();
+                            },
+                            child: const Text('Sign out'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }
+
+              final role = roleSnapshot.data;
+              if (role == 'admin') {
+                return const AdminScreenNew();
+              }
+
+              return _showRoleDialog(context, role ?? 'unknown', session.user.id, session.user.email ?? 'unknown');
+            },
+          );
+        }
+
+        // User is not logged in, show login page
+        return const LoginSupabasePage();
+      },
+    );
+  }
+}
+
+Widget _showRoleDialog(BuildContext context, String role, String userId, String email) {
+  if (role == 'admin') {
+    return const AdminScreenNew();
+  }
+
+  return Scaffold(
+    body: Center(
+      child: AlertDialog(
+        title: const Text('Role Confirmation'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Signed in as non-admin user'),
+            const SizedBox(height: 12),
+            Text('Role: $role'),
+            const SizedBox(height: 6),
+            Text('Email: $email'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await Supabase.instance.client.auth.signOut();
+              if (context.mounted) {
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(builder: (_) => const LoginSupabasePage()),
+                );
+              }
+            },
+            child: const Text('Sign out'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const HomeScreen()),
+              );
+            },
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 // Camera Screen widget for use in navigation
@@ -90,7 +261,6 @@ class FaceScanPage extends StatefulWidget {
 class _FaceScanPageState extends State<FaceScanPage> {
   CameraController? _controller;
   bool _busy = false;
-  bool _isFrontCamera = true;
 
   // ignore: unused_field
   XFile? _capturedFile;
@@ -122,14 +292,8 @@ class _FaceScanPageState extends State<FaceScanPage> {
   // ignore: unused_field
   double _liveBrightness = 0.0;
 
-  // ✅ Rotation + UV Swap toggles
-  InputImageRotation _liveRotation = InputImageRotation.rotation270deg;
-  bool _swapUV = false;
-
-  // ✅ Auto-capture when lighting is good
-  bool _autoCapture = false;
-  int _goodQualityFrameCount = 0;
-  static const int _goodQualityThreshold = 3; // Require 3+ consecutive good frames
+  // ✅ Rotation (UV locked to normal)
+  final InputImageRotation _liveRotation = InputImageRotation.rotation270deg;
 
   // ✅ Persistence for face detection
   int _noFaceStreak = 0;
@@ -148,7 +312,7 @@ class _FaceScanPageState extends State<FaceScanPage> {
     ),
   );
 
-  String _status = 'Tap "Capture & Scan" to start.';
+  String _status = 'Tap the preview to capture & scan.';
 
   late final FaceDetector _faceDetector = FaceDetector(
     options: FaceDetectorOptions(
@@ -181,7 +345,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
       if (!mounted) return;
       setState(() {
         _controller = controller;
-        _isFrontCamera = widget.camera.lensDirection == CameraLensDirection.front;
       });
       await _startLiveQuality(controller);
     } catch (e) {
@@ -189,59 +352,7 @@ class _FaceScanPageState extends State<FaceScanPage> {
     }
   }
 
-  Future<void> _switchCamera() async {
-    try {
-      // Dispose old controller
-      await _controller?.dispose();
-      _stopLiveQuality();
 
-      final cameras = await availableCameras();
-      if (cameras.isEmpty) {
-        setState(() => _status = 'No camera available');
-        return;
-      }
-
-      CameraDescription newCamera;
-
-      if (_isFrontCamera) {
-        // Switch to back camera
-        final backCam = cameras.firstWhere(
-          (c) => c.lensDirection == CameraLensDirection.back,
-          orElse: () => cameras[0],
-        );
-        newCamera = backCam;
-      } else {
-        // Switch to front camera
-        final frontCam = cameras.firstWhere(
-          (c) => c.lensDirection == CameraLensDirection.front,
-          orElse: () => cameras[0],
-        );
-        newCamera = frontCam;
-      }
-
-      final controller = CameraController(
-        newCamera,
-        ResolutionPreset.high,
-        enableAudio: false,
-        imageFormatGroup: ImageFormatGroup.bgra8888,
-      );
-
-      await controller.initialize();
-      await controller.setFlashMode(FlashMode.off);
-      await controller.setFocusMode(FocusMode.auto);
-
-      if (!mounted) return;
-      setState(() {
-        _controller = controller;
-        _isFrontCamera = newCamera.lensDirection == CameraLensDirection.front;
-        _status = _isFrontCamera ? 'Switched to Front Camera' : 'Switched to Back Camera';
-      });
-
-      await _startLiveQuality(controller);
-    } catch (e) {
-      setState(() => _status = 'Camera switch error: $e');
-    }
-  }
 
   @override
   void dispose() {
@@ -362,13 +473,9 @@ class _FaceScanPageState extends State<FaceScanPage> {
         final u = uPlane[uvIndex];
         final v = vPlane[uvIndex];
 
-        if (_swapUV) {
-          nv21[index++] = u;
-          nv21[index++] = v;
-        } else {
-          nv21[index++] = v;
-          nv21[index++] = u;
-        }
+        // UV locked to normal (NV21 expects V then U)
+        nv21[index++] = v;
+        nv21[index++] = u;
       }
     }
 
@@ -487,7 +594,7 @@ class _FaceScanPageState extends State<FaceScanPage> {
         final input = _inputImageFromCameraImageNv21(image);
         final faces = await _liveFaceDetector.processImage(input);
 
-        debugPrint('LIVE faces: ${faces.length}  img=${image.width}x${image.height}  rotation=$_liveRotation  swapUV=$_swapUV');
+        debugPrint('LIVE faces: ${faces.length}  img=${image.width}x${image.height}  rotation=$_liveRotation');
 
         Face? face;
         if (faces.isNotEmpty) {
@@ -512,25 +619,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
           imgH: image.height,
           brightness: brightness,
         );
-
-        // ✅ Auto-capture when quality is good and auto-capture is enabled
-        bool isQualityGood = warnings.isEmpty && brightness >= 90 && brightness <= 210;
-
-        if (_autoCapture && isQualityGood && !_busy) {
-          _goodQualityFrameCount++;
-          if (_goodQualityFrameCount >= _goodQualityThreshold) {
-            _goodQualityFrameCount = 0;
-            _autoCapture = false; // Disable auto-capture after triggering
-            _stopLiveQuality(); // Stop the stream before capturing
-            await Future.delayed(const Duration(milliseconds: 100));
-            if (mounted) {
-              _captureAndScan();
-            }
-            return;
-          }
-        } else {
-          _goodQualityFrameCount = 0;
-        }
 
         if (mounted) {
           setState(() {
@@ -578,17 +666,13 @@ class _FaceScanPageState extends State<FaceScanPage> {
     );
   }
 
-  void _toggleUVSwap() {
-    setState(() {
-      _swapUV = !_swapUV;
-    });
-  }
-
-  void _toggleAutoCapture() {
-    setState(() {
-      _autoCapture = !_autoCapture;
-      _goodQualityFrameCount = 0; // Reset counter
-    });
+  void _handlePreviewTap() {
+    if (_busy) return;
+    if (!_canCaptureNow()) {
+      _showCaptureBlockedMessage();
+      return;
+    }
+    _captureAndScan();
   }
 
   Future<void> _captureAndScan() async {
@@ -703,7 +787,7 @@ class _FaceScanPageState extends State<FaceScanPage> {
             _detectedFace = null;
             _faceProfile = null;
             _look = null;
-            _status = 'Tap "Capture & Scan" to start.';
+            _status = 'Tap the preview to capture & scan.';
           });
           
           // Restart camera if needed
@@ -784,56 +868,6 @@ class _FaceScanPageState extends State<FaceScanPage> {
                           ],
                         ),
                       ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ElevatedButton(
-                            onPressed: _toggleAutoCapture,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: _autoCapture ? const Color(0xFFFF4D97) : Colors.grey[800],
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                              minimumSize: const Size(0, 0),
-                            ),
-                            child: Text(
-                              'Auto: ${_autoCapture ? 'ON' : 'OFF'}',
-                              style: const TextStyle(fontSize: 9),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          ElevatedButton(
-                            onPressed: _toggleUVSwap,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.grey[800],
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                              minimumSize: const Size(0, 0),
-                            ),
-                            child: Text(
-                              'UV: ${_swapUV ? 'Swap' : 'Norm'}',
-                              style: const TextStyle(fontSize: 9),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          ElevatedButton.icon(
-                            onPressed: _switchCamera,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFFF4D97),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                              minimumSize: const Size(0, 0),
-                            ),
-                            icon: Icon(
-                              _isFrontCamera ? Icons.camera_front : Icons.camera_rear,
-                              size: 12,
-                            ),
-                            label: Text(
-                              _isFrontCamera ? 'Front' : 'Back',
-                              style: const TextStyle(fontSize: 9),
-                            ),
-                          ),
-                        ],
-                      ),
                     ],
                   ),
                 ],
@@ -843,45 +877,48 @@ class _FaceScanPageState extends State<FaceScanPage> {
             // Camera in bordered container
             Padding(
               padding: const EdgeInsets.all(12),
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: const Color(0xFFFF4D97), width: 2),
-                  borderRadius: BorderRadius.circular(12),
-                  color: Colors.black,
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: AspectRatio(
-                    aspectRatio: 1,
-                    child: controller == null || !controller.value.isInitialized
-                        ? const Center(child: CircularProgressIndicator(color: Color(0xFFFF4D97)))
-                        : Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              FittedBox(
-                                fit: BoxFit.cover,
-                                child: SizedBox(
-                                  width: controller.value.previewSize!.height,
-                                  height: controller.value.previewSize!.width,
-                                  child: CameraPreview(controller),
-                                ),
-                              ),
-                              
-                              // Face position guide overlay
-                              if (!_busy && _capturedUiImage == null)
-                                CustomPaint(
-                                  painter: FaceGuidePainter(),
-                                ),
-                              
-                              if (_busy)
-                                const Align(
-                                  alignment: Alignment.center,
-                                  child: CircularProgressIndicator(
-                                    color: Color(0xFFFF4D97),
+              child: GestureDetector(
+                onTap: _handlePreviewTap,
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: const Color(0xFFFF4D97), width: 2),
+                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.black,
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: AspectRatio(
+                      aspectRatio: 1,
+                      child: controller == null || !controller.value.isInitialized
+                          ? const Center(child: CircularProgressIndicator(color: Color(0xFFFF4D97)))
+                          : Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                FittedBox(
+                                  fit: BoxFit.cover,
+                                  child: SizedBox(
+                                    width: controller.value.previewSize!.height,
+                                    height: controller.value.previewSize!.width,
+                                    child: CameraPreview(controller),
                                   ),
                                 ),
-                            ],
-                          ),
+                                
+                                // Face position guide overlay
+                                if (!_busy && _capturedUiImage == null)
+                                  CustomPaint(
+                                    painter: FaceGuidePainter(),
+                                  ),
+                                
+                                if (_busy)
+                                  const Align(
+                                    alignment: Alignment.center,
+                                    child: CircularProgressIndicator(
+                                      color: Color(0xFFFF4D97),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                    ),
                   ),
                 ),
               ),
@@ -904,43 +941,45 @@ class _FaceScanPageState extends State<FaceScanPage> {
                   children: [
                     SizedBox(
                       height: 180,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: FittedBox(
-                          fit: BoxFit.contain,
-                          child: SizedBox(
-                            width: _capturedUiImage!.width.toDouble(),
-                            height: _capturedUiImage!.height.toDouble(),
-                            child: Builder(
-                              builder: (context) {
-                                final bool isDebug = _selectedLook == MakeupLookPreset.debugPainterTest;
-                                return CustomPaint(
-                                  painter: MakeupOverlayPainter(
-                                    image: _capturedUiImage!,
-                                    face: _detectedFace!,
-                                    lipstickColor: _look!.lipstickColor,
-                                    blushColor: _look!.blushColor,
-                                    eyeshadowColor: _look!.eyeshadowColor,
-                                    intensity: _intensity,
-                                    faceShape: _faceProfile!.faceShape,
-                                    preset: _selectedLook,
-                                    debugMode: isDebug,
-                                    isLiveMode: false,
-                                    eyelinerStyle: LookEngine
-                                        .configFromPreset(_selectedLook, profile: _faceProfile)
-                                        .eyelinerStyle,
-                                    skinColor: Color.fromARGB(
-                                      255,
-                                      _faceProfile!.avgR,
-                                      _faceProfile!.avgG,
-                                      _faceProfile!.avgB,
+                      child: RepaintBoundary(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: FittedBox(
+                            fit: BoxFit.contain,
+                            child: SizedBox(
+                              width: _capturedUiImage!.width.toDouble(),
+                              height: _capturedUiImage!.height.toDouble(),
+                              child: Builder(
+                                builder: (context) {
+                                  final bool isDebug = _selectedLook == MakeupLookPreset.debugPainterTest;
+                                  return CustomPaint(
+                                    painter: MakeupOverlayPainter(
+                                      image: _capturedUiImage!,
+                                      face: _detectedFace!,
+                                      lipstickColor: _look!.lipstickColor,
+                                      blushColor: _look!.blushColor,
+                                      eyeshadowColor: _look!.eyeshadowColor,
+                                      intensity: _intensity,
+                                      faceShape: _faceProfile!.faceShape,
+                                      preset: _selectedLook,
+                                      debugMode: isDebug,
+                                      isLiveMode: false,
+                                      eyelinerStyle: LookEngine
+                                          .configFromPreset(_selectedLook, profile: _faceProfile)
+                                          .eyelinerStyle,
+                                      skinColor: Color.fromARGB(
+                                        255,
+                                        _faceProfile!.avgR,
+                                        _faceProfile!.avgG,
+                                        _faceProfile!.avgB,
+                                      ),
+                                      sceneLuminance: _sceneLuminance,
+                                      leftCheekLuminance: _leftCheekLum,
+                                      rightCheekLuminance: _rightCheekLum,
                                     ),
-                                    sceneLuminance: _sceneLuminance,
-                                    leftCheekLuminance: _leftCheekLum,
-                                    rightCheekLuminance: _rightCheekLum,
-                                  ),
-                                );
-                              },
+                                  );
+                                },
+                              ),
                             ),
                           ),
                         ),
@@ -1011,18 +1050,30 @@ class _FaceScanPageState extends State<FaceScanPage> {
                 child: Text(_status, style: const TextStyle(fontSize: 12), textAlign: TextAlign.center),
               ),
 
-            // Buttons
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-              child: SizedBox(
-                height: 44,
-                child: ElevatedButton.icon(
-                  onPressed: _busy || !_canCaptureNow() ? null : _captureAndScan,
-                  icon: const Icon(Icons.camera_alt, size: 16),
-                  label: const Text('Capture & Scan', style: TextStyle(fontSize: 12)),
+            // Scan Face Button
+            if (_capturedUiImage == null)
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    onPressed: _busy ? null : _handlePreviewTap,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF4D97),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    icon: const Icon(Icons.camera_alt, size: 24),
+                    label: const Text(
+                      'Scan Face',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                  ),
                 ),
               ),
-            ),
           ],
         ),
       ),

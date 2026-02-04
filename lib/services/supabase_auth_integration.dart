@@ -11,7 +11,8 @@ class SupabaseAuthIntegration {
   /// Integrate Supabase with existing AuthService
   Future<void> initialize() async {
     try {
-      await _supabaseService.initialize();
+      // SupabaseService is already initialized via Supabase.initialize() in main
+      await Future.value();
     } catch (e) {
       throw 'Failed to initialize Supabase: $e';
     }
@@ -70,9 +71,17 @@ class SupabaseAuthIntegration {
         );
 
         // Update local auth service with role
-        final role = profile['role'] == 'admin' 
-            ? UserRole.admin 
-            : UserRole.user;
+        UserRole role;
+        switch (profile['role']) {
+          case 'admin':
+            role = UserRole.admin;
+            break;
+          case 'client':
+            role = UserRole.client;
+            break;
+          default:
+            role = UserRole.user;
+        }
 
         await _authService.login(
           email: email,

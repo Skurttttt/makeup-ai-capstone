@@ -1,7 +1,7 @@
 // lib/auth/role_login_page.dart
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import '../screens/admin_screen.dart';
+import '../screens/admin_screen_new.dart';
 import '../home_screen.dart';
 
 class RoleLoginPage extends StatefulWidget {
@@ -44,9 +44,11 @@ class _RoleLoginPageState extends State<RoleLoginPage> {
         // Navigate based on role
         if (_selectedRole == UserRole.admin) {
           Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const AdminScreen()),
+            MaterialPageRoute(builder: (_) => const AdminScreenNew()),
           );
         } else {
+          // Both user and client go to HomeScreen
+          // You can differentiate their experience based on role later
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (_) => const HomeScreen()),
           );
@@ -133,6 +135,17 @@ class _RoleLoginPageState extends State<RoleLoginPage> {
                         isSelected: _selectedRole == UserRole.user,
                         onTap: () {
                           setState(() => _selectedRole = UserRole.user);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _RoleButton(
+                        label: 'Client',
+                        icon: Icons.business_center,
+                        isSelected: _selectedRole == UserRole.client,
+                        onTap: () {
+                          setState(() => _selectedRole = UserRole.client);
                         },
                       ),
                     ),

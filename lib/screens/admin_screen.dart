@@ -1,5 +1,6 @@
 // lib/screens/admin_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
@@ -20,6 +21,10 @@ class _AdminScreenState extends State<AdminScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (kIsWeb) {
+      return const _AdminWebShell();
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -99,6 +104,510 @@ class _AdminScreenState extends State<AdminScreen> {
             ),
             child: const Text('Logout', style: TextStyle(color: Colors.white)),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AdminWebShell extends StatelessWidget {
+  const _AdminWebShell();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F6FA),
+      body: SafeArea(
+        child: Row(
+          children: [
+            const _WebSidebar(),
+            Expanded(
+              child: Column(
+                children: [
+                  const _WebTopBar(),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          _WebKpiGrid(),
+                          SizedBox(height: 24),
+                          _WebAccountsAndSubscriptions(),
+                          SizedBox(height: 24),
+                          _WebGainsAndAuditLogs(),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WebSidebar extends StatelessWidget {
+  const _WebSidebar();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 240,
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: const [
+          Text(
+            'FaceTune Beauty',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          ),
+          SizedBox(height: 8),
+          Text(
+            'Admin Console',
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+          SizedBox(height: 24),
+          _WebNavItem(icon: Icons.dashboard_outlined, label: 'Overview', isActive: true),
+          _WebNavItem(icon: Icons.people_outline, label: 'Accounts'),
+          _WebNavItem(icon: Icons.card_membership_outlined, label: 'Subscriptions'),
+           _WebNavItem(icon: Icons.attach_money_outlined, label: 'Profit'),
+          _WebNavItem(icon: Icons.receipt_long_outlined, label: 'Audit Logs'),
+          _WebNavItem(icon: Icons.settings_outlined, label: 'Settings'),
+        ],
+      ),
+    );
+  }
+}
+
+class _WebNavItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isActive;
+
+  const _WebNavItem({
+    required this.icon,
+    required this.label,
+    this.isActive = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: isActive ? const Color(0xFFFF4D97).withOpacity(0.12) : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: isActive ? const Color(0xFFFF4D97) : Colors.grey[700]),
+          const SizedBox(width: 12),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+              color: isActive ? const Color(0xFFFF4D97) : Colors.grey[800],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WebTopBar extends StatelessWidget {
+  const _WebTopBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 72,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Color(0xFFE6E8F0))),
+      ),
+      child: Row(
+        children: [
+          const Text(
+            'Overview',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(width: 24),
+          Expanded(
+            child: TextField(
+              decoration: InputDecoration(
+                prefixIcon: const Icon(Icons.search, size: 20),
+                hintText: 'Search users, subscriptions, audits…',
+                filled: true,
+                fillColor: const Color(0xFFF3F4F7),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          IconButton(onPressed: () {}, icon: const Icon(Icons.notifications_none)),
+          const SizedBox(width: 8),
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: const Color(0xFFFF4D97),
+            child: const Text('A', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WebKpiGrid extends StatelessWidget {
+  const _WebKpiGrid();
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 16,
+      runSpacing: 16,
+      children: const [
+        _WebKpiCard(title: 'Total Accounts', value: '12,482', delta: '+4.2%'),
+        _WebKpiCard(title: 'Active Subscriptions', value: '3,128', delta: '+2.1%'),
+        _WebKpiCard(title: 'Monthly Profit', value: '£24,560', delta: '+6.8%'),
+        _WebKpiCard(title: 'Churn Rate', value: '1.8%', delta: '-0.3%'),
+      ],
+    );
+  }
+}
+
+class _WebKpiCard extends StatelessWidget {
+  final String title;
+  final String value;
+  final String delta;
+
+  const _WebKpiCard({
+    required this.title,
+    required this.value,
+    required this.delta,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 240,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE6E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+          const SizedBox(height: 8),
+          Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          Text(delta, style: const TextStyle(fontSize: 12, color: Color(0xFF16A34A))),
+        ],
+      ),
+    );
+  }
+}
+
+class _WebAccountsAndSubscriptions extends StatelessWidget {
+  const _WebAccountsAndSubscriptions();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: const [
+        Expanded(child: _WebAccountsTable()),
+        SizedBox(width: 16),
+        Expanded(child: _WebSubscriptionsCard()),
+      ],
+    );
+  }
+}
+
+class _WebAccountsTable extends StatelessWidget {
+  const _WebAccountsTable();
+
+  @override
+  Widget build(BuildContext context) {
+    return _WebSection(
+      title: 'Accounts',
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          columns: const [
+            DataColumn(label: Text('User')),
+            DataColumn(label: Text('Email')),
+            DataColumn(label: Text('Plan')),
+            DataColumn(label: Text('Status')),
+            DataColumn(label: Text('Last Active')),
+          ],
+          rows: const [
+            DataRow(cells: [
+              DataCell(Text('Sarah M.')),
+              DataCell(Text('sarah.m@example.com')),
+              DataCell(Text('Premium')),
+              DataCell(Text('Active')),
+              DataCell(Text('2m ago')),
+            ]),
+            DataRow(cells: [
+              DataCell(Text('John Doe')),
+              DataCell(Text('john.doe@example.com')),
+              DataCell(Text('Pro')),
+              DataCell(Text('Active')),
+              DataCell(Text('12m ago')),
+            ]),
+            DataRow(cells: [
+              DataCell(Text('Emma W.')),
+              DataCell(Text('emma.w@example.com')),
+              DataCell(Text('Free')),
+              DataCell(Text('Trial')),
+              DataCell(Text('1h ago')),
+            ]),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WebSubscriptionsCard extends StatelessWidget {
+  const _WebSubscriptionsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return _WebSection(
+      title: 'Subscriptions',
+      child: Column(
+        children: const [
+          _SubscriptionRow(label: 'Premium', value: '1,204', color: Color(0xFFFF4D97)),
+          _SubscriptionRow(label: 'Pro', value: '812', color: Color(0xFF6366F1)),
+          _SubscriptionRow(label: 'Trial', value: '356', color: Color(0xFF22C55E)),
+          _SubscriptionRow(label: 'Expired', value: '102', color: Color(0xFFF97316)),
+        ],
+      ),
+    );
+  }
+}
+
+class _SubscriptionRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+
+  const _SubscriptionRow({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+          const SizedBox(width: 8),
+          Expanded(child: Text(label)),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+}
+
+class _WebGainsAndAuditLogs extends StatelessWidget {
+  const _WebGainsAndAuditLogs();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: const [
+        Expanded(child: _WebGainsCard()),
+        SizedBox(width: 16),
+        Expanded(child: _WebAuditLog()),
+      ],
+    );
+  }
+}
+
+class _WebGainsCard extends StatelessWidget {
+  const _WebGainsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return _WebSection(
+       title: 'Profit',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+               const Text('Monthly Profit', style: TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: const [
+              _GainChip(label: 'Subscriptions', value: ' 18,240'),
+              _GainChip(label: 'Add-ons', value: ' 4,320'),
+              _GainChip(label: 'Marketplace', value: ' 1,980'),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            height: 140,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8F9FE),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE6E8F0)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: const [
+                _MiniBar(label: 'W1', value: 60),
+                _MiniBar(label: 'W2', value: 80),
+                _MiniBar(label: 'W3', value: 70),
+                _MiniBar(label: 'W4', value: 90),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GainChip extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _GainChip({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE6E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+          const SizedBox(height: 4),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniBar extends StatelessWidget {
+  final String label;
+  final double value;
+
+  const _MiniBar({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        Container(
+          width: 24,
+          height: value,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFF4D97),
+            borderRadius: BorderRadius.circular(6),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(label, style: const TextStyle(fontSize: 11)),
+      ],
+    );
+  }
+}
+
+class _WebAuditLog extends StatelessWidget {
+  const _WebAuditLog();
+
+  @override
+  Widget build(BuildContext context) {
+    return _WebSection(
+      title: 'Audit Logs',
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          columns: const [
+            DataColumn(label: Text('Time')),
+            DataColumn(label: Text('Actor')),
+            DataColumn(label: Text('Action')),
+            DataColumn(label: Text('Target')),
+          ],
+          rows: const [
+            DataRow(cells: [
+              DataCell(Text('10:12 AM')),
+              DataCell(Text('admin@facetune.com')),
+              DataCell(Text('Updated plan')),
+              DataCell(Text('john.doe@example.com')),
+            ]),
+            DataRow(cells: [
+              DataCell(Text('9:44 AM')),
+              DataCell(Text('admin@facetune.com')),
+              DataCell(Text('Refund issued')),
+              DataCell(Text('emma.w@example.com')),
+            ]),
+            DataRow(cells: [
+              DataCell(Text('Yesterday')),
+              DataCell(Text('system')),
+              DataCell(Text('Subscription expired')),
+              DataCell(Text('mike.j@example.com')),
+            ]),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WebSection extends StatelessWidget {
+  final String title;
+  final Widget child;
+
+  const _WebSection({required this.title, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE6E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 12),
+          child,
         ],
       ),
     );
@@ -333,7 +842,7 @@ class AdminSettingsTab extends StatelessWidget {
             trailing: Switch(
               value: true,
               onChanged: (value) {},
-              activeColor: const Color(0xFFFF4D97),
+              activeThumbColor: const Color(0xFFFF4D97),
             ),
           ),
           ListTile(
@@ -343,7 +852,7 @@ class AdminSettingsTab extends StatelessWidget {
             trailing: Switch(
               value: false,
               onChanged: (value) {},
-              activeColor: const Color(0xFFFF4D97),
+              activeThumbColor: const Color(0xFFFF4D97),
             ),
           ),
           ListTile(

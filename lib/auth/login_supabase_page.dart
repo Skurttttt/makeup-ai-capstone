@@ -1,7 +1,8 @@
 // lib/auth/login_supabase_page.dart
 import 'package:flutter/material.dart';
-import '../services/auth_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../home_screen.dart';
+import '../screens/admin_screen_new.dart';
 import 'register_supabase_page.dart';
 import 'forgot_password_page.dart';
 
@@ -33,17 +34,50 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
     setState(() => _isLoading = true);
 
     try {
-      // TODO: Implement Supabase login
-      final authService = AuthService();
-      
-      await authService.login(
+      final response = await Supabase.instance.client.auth.signInWithPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text,
-        role: UserRole.user,
       );
 
-      if (mounted) {
-        // Navigate to home
+      if (!mounted) return;
+
+      final user = response.user;
+      final isConfirmed = user?.emailConfirmedAt != null;
+
+      if (!isConfirmed) {
+        await Supabase.instance.client.auth.signOut();
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please confirm your email before logging in.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      // Check user role and route accordingly
+      String? role;
+      try {
+        final profile = await Supabase.instance.client
+            .from('accounts')
+            .select('role')
+            .eq('id', user!.id)
+            .single();
+        role = profile['role'] as String?;
+      } catch (_) {
+        role = 'user';
+      }
+
+      if (!mounted) return;
+
+      // Route based on role
+      if (role?.toLowerCase() == 'admin') {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const AdminScreenNew()),
+        );
+      } else {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const HomeScreen()),
         );
@@ -71,11 +105,11 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          physics: const BouncingScrollPhysics(),
           child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const SizedBox(height: 24),
 

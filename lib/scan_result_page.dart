@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'look_engine.dart';
 import 'instructions_page.dart';
 import 'painters/makeup_overlay_painter.dart';
+import 'skin_analyzer.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 class ScanResultPage extends StatefulWidget {
@@ -32,7 +33,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
   final List<String> filters = ['Natural', 'Everyday', 'Glam'];
   ui.Image? _uiImage;
   double _intensity = 0.75;
-  MakeupLookPreset _currentPreset = MakeupLookPreset.softGlam;
+  final MakeupLookPreset _currentPreset = MakeupLookPreset.softGlam;
 
   @override
   void initState() {
@@ -82,6 +83,29 @@ class _ScanResultPageState extends State<ScanResultPage> {
                 children: [
                   // Scanned Photo Container
                   _buildPhotoContainer(),
+                  const SizedBox(height: 12),
+
+                  // Opacity slider (after capture)
+                  if (_uiImage != null && widget.look != null)
+                    Row(
+                      children: [
+                        const Text('Opacity', style: TextStyle(fontSize: 12)),
+                        Expanded(
+                          child: Slider(
+                            value: _intensity,
+                            min: 0.0,
+                            max: 1.0,
+                            divisions: 20,
+                            label: '${(_intensity * 100).round()}%',
+                            onChanged: (v) => setState(() => _intensity = v),
+                          ),
+                        ),
+                      ],
+                    ),
+                  const SizedBox(height: 24),
+
+                  // Why this look suits you
+                  _buildWhyThisLookSection(),
                   const SizedBox(height: 24),
 
                   // Recommended Products Section
@@ -208,6 +232,98 @@ class _ScanResultPageState extends State<ScanResultPage> {
     );
   }
 
+  Widget _buildWhyThisLookSection() {
+    final profile = widget.faceProfile;
+    final look = widget.look;
+
+    if (profile == null || look == null) {
+      return const SizedBox.shrink();
+    }
+
+    String toneLabel(SkinTone tone) {
+      switch (tone) {
+        case SkinTone.light:
+          return 'light';
+        case SkinTone.medium:
+          return 'medium';
+        case SkinTone.tan:
+          return 'tan';
+        case SkinTone.deep:
+          return 'deep';
+      }
+    }
+
+    String undertoneLabel(Undertone undertone) {
+      switch (undertone) {
+        case Undertone.warm:
+          return 'warm';
+        case Undertone.cool:
+          return 'cool';
+        case Undertone.neutral:
+          return 'neutral';
+      }
+    }
+
+    String faceShapeLabel(FaceShape shape) {
+      switch (shape) {
+        case FaceShape.oval:
+          return 'oval';
+        case FaceShape.round:
+          return 'round';
+        case FaceShape.square:
+          return 'square';
+        case FaceShape.heart:
+          return 'heart';
+        case FaceShape.unknown:
+          return 'balanced';
+      }
+    }
+
+    final bullets = <String>[
+      'Designed to complement your ${undertoneLabel(profile.undertone)} undertone.',
+      'Balanced for your ${toneLabel(profile.skinTone)} skin tone.',
+      'Placement flatters your ${faceShapeLabel(profile.faceShape)} face shape.',
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF5FA),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFFFD3E6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Why this look suits you',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          ...bullets.map(
+            (text) => Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.check_circle, size: 16, color: Color(0xFFFF4D97)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      text,
+                      style: TextStyle(color: Colors.grey[700], fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ignore: unused_element
   Widget _buildFilterOptions() {
     return SizedBox(
       height: 50,
@@ -254,6 +370,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
     );
   }
 
+  // ignore: unused_element
   Widget _buildHowToApplySection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

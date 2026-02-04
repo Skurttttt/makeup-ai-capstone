@@ -1,8 +1,16 @@
 // lib/screens/subscription_tab.dart
 import 'package:flutter/material.dart';
+import '../services/supabase_service.dart';
 
-class SubscriptionTab extends StatelessWidget {
+class SubscriptionTab extends StatefulWidget {
   const SubscriptionTab({super.key});
+
+  @override
+  State<SubscriptionTab> createState() => _SubscriptionTabState();
+}
+
+class _SubscriptionTabState extends State<SubscriptionTab> {
+  final _supabaseService = SupabaseService();
 
   @override
   Widget build(BuildContext context) {
@@ -85,20 +93,40 @@ class SubscriptionTab extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            _buildPlanCard(
-              'Monthly',
-              '\$9.99',
-              '/month',
-              'Billed monthly',
-              false,
-            ),
-            const SizedBox(height: 12),
-            _buildPlanCard(
-              'Yearly',
-              '\$79.99',
-              '/year',
-              'Save 33% - Best Value!',
-              true,
+            FutureBuilder(
+              future: _supabaseService.getAllPlans(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error loading plans: ${snapshot.error}'));
+                }
+
+                final plans = snapshot.data ?? [];
+                
+                return Column(
+                  children: plans.map((plan) {
+                    final price = '₱${(plan['price'] ?? 0).toStringAsFixed(0)}';
+                    final period = plan['billing_period'] == 'year' ? '/year' : '/month';
+                    final isPopular = plan['name'].toString().toLowerCase() == 'premium';
+                    
+                    return Column(
+                      children: [
+                        _buildPlanCard(
+                          plan['name'] ?? 'Plan',
+                          price,
+                          period,
+                          plan['description'] ?? '',
+                          isPopular,
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                    );
+                  }).toList(),
+                );
+              },
             ),
             const SizedBox(height: 32),
 
