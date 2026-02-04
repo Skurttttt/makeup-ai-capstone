@@ -220,10 +220,13 @@ class MakeupOverlayPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant MakeupOverlayPainter old) {
+    // Optimize: only repaint if intensity changed by more than 5%
+    final intensityChanged = (old.intensity - intensity).abs() > 0.05;
+    
     final shouldRepaint =
         old.image != image ||
         old.face != face ||
-        old.intensity != intensity ||
+        intensityChanged ||
         old.faceShape != faceShape ||
         old.eyelinerStyle != eyelinerStyle ||
         old.preset != preset ||
@@ -232,9 +235,8 @@ class MakeupOverlayPainter extends CustomPainter {
         old.leftCheekLuminance != leftCheekLuminance ||
         old.rightCheekLuminance != rightCheekLuminance ||
         old.sceneLuminance != sceneLuminance ||
-        old.profile != profile; // ✅ so brows adapt when profile changes
+        old.profile != profile;
 
-    debugPrint('🎨 shouldRepaint: $shouldRepaint');
     return shouldRepaint;
   }
 }

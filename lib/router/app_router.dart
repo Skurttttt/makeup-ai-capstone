@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../auth/login_page.dart';
-import '../screens/admin_screen.dart';
+import '../screens/admin_screen_new.dart';
 import '../home_screen.dart';
 
 class AppRouter {
@@ -14,7 +14,7 @@ class AppRouter {
           return MaterialPageRoute(builder: (_) => const LoginPage());
         }
         if (authService.isAdmin) {
-          return MaterialPageRoute(builder: (_) => const AdminScreen());
+          return MaterialPageRoute(builder: (_) => const AdminScreenNew());
         }
         return MaterialPageRoute(builder: (_) => const HomeScreen());
 
@@ -31,7 +31,7 @@ class AppRouter {
         if (!authService.isAdmin) {
           return MaterialPageRoute(builder: (_) => const LoginPage());
         }
-        return MaterialPageRoute(builder: (_) => const AdminScreen());
+        return MaterialPageRoute(builder: (_) => const AdminScreenNew());
 
       default:
         return MaterialPageRoute(

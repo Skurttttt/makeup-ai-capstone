@@ -2,7 +2,8 @@
 import 'package:flutter/material.dart';
 import '../home_screen.dart';
 import '../services/social_auth_service.dart';
-import '../services/email_verification_service.dart';
+import '../services/supabase_service.dart';
+// import '../services/email_verification_service.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -22,7 +23,8 @@ class _RegisterPageState extends State<RegisterPage> {
   bool _acceptTerms = false;
   bool _isLoading = false;
   final _socialAuthService = SocialAuthService();
-  final _emailVerificationService = EmailVerificationService();
+  // final _emailVerificationService = EmailVerificationService();
+  final _supabaseService = SupabaseService();
 
   @override
   void dispose() {
@@ -43,6 +45,19 @@ class _RegisterPageState extends State<RegisterPage> {
       }
 
       final email = _emailController.text.trim();
+      final exists = await _supabaseService.emailExists(email);
+      if (exists) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Email already exists. Please use another email or delete the old account.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
       final verified = await _showEmailVerificationDialog(email);
       if (!verified) {
         if (mounted) {
@@ -64,76 +79,45 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
   Future<bool> _showEmailVerificationDialog(String email) async {
-    final code = _emailVerificationService.generateCode(email);
-    final controller = TextEditingController();
     bool verified = false;
-    String? errorText;
 
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: const Text('Verify your email'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('A 4-digit code was sent to $email.'),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Enter the code below to complete registration.',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: controller,
-                    keyboardType: TextInputType.number,
-                    maxLength: 4,
-                    decoration: InputDecoration(
-                      labelText: '4-digit code',
-                      errorText: errorText,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Dev code: $code',
-                    style: TextStyle(color: Colors.grey[500], fontSize: 11),
-                  ),
-                ],
+        return AlertDialog(
+          title: const Text('Confirm your email'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('We sent a confirmation email to $email.'),
+              const SizedBox(height: 8),
+              Text(
+                'Open your inbox and tap the "Confirm my account" button to finish signup.',
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    final input = controller.text.trim();
-                    final ok = _emailVerificationService.verifyCode(email, input);
-                    if (ok) {
-                      verified = true;
-                      Navigator.of(context).pop();
-                    } else {
-                      setState(() {
-                        errorText = 'Invalid or expired code';
-                      });
-                    }
-                  },
-                  child: const Text('Verify'),
-                ),
-              ],
-            );
-          },
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                verified = true;
+                Navigator.of(context).pop();
+              },
+              child: const Text('I confirmed'),
+            ),
+          ],
         );
       },
     );
 
-    controller.dispose();
     return verified;
   }
 

@@ -1,8 +1,10 @@
 // lib/auth/register_supabase_page.dart
 import 'package:flutter/material.dart';
-import '../services/auth_service.dart';
-import '../home_screen.dart';
-import 'login_page.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/verification_service.dart';
+import '../services/supabase_service.dart';
+import 'email_verification_page.dart';
+import 'login_supabase_page.dart';
 
 class RegisterSupabasePage extends StatefulWidget {
   const RegisterSupabasePage({super.key});
@@ -17,6 +19,7 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _supabaseService = SupabaseService();
   
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
@@ -52,21 +55,53 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
     setState(() => _isLoading = true);
 
     try {
-      // TODO: Implement Supabase signup
-      final authService = AuthService();
+      final email = _emailController.text.trim();
+      final fullName = _nameController.text.trim();
+      final password = _passwordController.text;
 
-      await authService.login(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-        role: UserRole.user,
+      // Check if email already exists
+      try {
+        final exists = await _supabaseService.emailExists(email);
+        if (exists) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Email already exists. Please use another email or delete the old account.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+      } catch (_) {
+        // Continue with signup even if check fails
+      }
+
+      // Signup with trigger creating account automatically
+      await Supabase.instance.client.auth.signUp(
+        email: email,
+        password: password,
+        data: {'full_name': fullName},
       );
 
-      if (mounted) {
-        // Navigate to home
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-        );
-      }
+      if (!mounted) return;
+
+      // Sign out so user must confirm email
+      await Supabase.instance.client.auth.signOut();
+
+      if (!mounted) return;
+
+      // Send confirmation email (no 4-digit code)
+      try {
+        await VerificationService().sendConfirmationEmail(email);
+      } catch (_) {}
+
+      // Navigate to verification page
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => EmailVerificationPage(email: email),
+        ),
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -319,7 +354,7 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
                     GestureDetector(
                       onTap: () {
                         Navigator.of(context).pushReplacement(
-                          MaterialPageRoute(builder: (_) => const LoginPage()),
+                          MaterialPageRoute(builder: (_) => const LoginSupabasePage()),
                         );
                       },
                       child: const Text(

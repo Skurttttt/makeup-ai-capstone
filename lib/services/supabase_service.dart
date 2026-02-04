@@ -1,9 +1,7 @@
 // lib/services/supabase_service.dart
-// TODO: Implement when supabase_flutter package is installed
-
-/*
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class SupabaseService {
   static final SupabaseService _instance = SupabaseService._internal();
@@ -14,18 +12,7 @@ class SupabaseService {
 
   SupabaseService._internal();
 
-  late SupabaseClient _client;
-
-  SupabaseClient get client => _client;
-
-  // Initialize Supabase
-  Future<void> initialize() async {
-    await Supabase.initialize(
-      url: dotenv.env['SUPABASE_URL'] ?? '',
-      anonKey: dotenv.env['SUPABASE_ANON_KEY'] ?? '',
-    );
-    _client = Supabase.instance.client;
-  }
+  SupabaseClient get client => Supabase.instance.client;
 
   // ==================== AUTHENTICATION ====================
 
@@ -36,7 +23,7 @@ class SupabaseService {
     required String fullName,
   }) async {
     try {
-      final response = await _client.auth.signUp(
+      final response = await client.auth.signUp(
         email: email,
         password: password,
         data: {'full_name': fullName},
@@ -53,7 +40,7 @@ class SupabaseService {
     required String password,
   }) async {
     try {
-      final response = await _client.auth.signInWithPassword(
+      final response = await client.auth.signInWithPassword(
         email: email,
         password: password,
       );
@@ -66,7 +53,7 @@ class SupabaseService {
   /// Sign out user
   Future<void> signOut() async {
     try {
-      await _client.auth.signOut();
+      await client.auth.signOut();
     } catch (e) {
       throw 'Logout failed: $e';
     }
@@ -74,17 +61,17 @@ class SupabaseService {
 
   /// Get current user
   User? getCurrentUser() {
-    return _client.auth.currentUser;
+    return client.auth.currentUser;
   }
 
   /// Check if user is authenticated
   bool isAuthenticated() {
-    return _client.auth.currentUser != null;
+    return client.auth.currentUser != null;
   }
 
   /// Get user session
   Session? getSession() {
-    return _client.auth.currentSession;
+    return client.auth.currentSession;
   }
 
   // ==================== USER PROFILE ====================
@@ -97,7 +84,7 @@ class SupabaseService {
     String role = 'user',
   }) async {
     try {
-      final response = await _client.from('profiles').insert({
+      final response = await client.from('accounts').insert({
         'id': userId,
         'email': email,
         'full_name': fullName,
@@ -114,8 +101,8 @@ class SupabaseService {
   /// Get user profile
   Future<Map<String, dynamic>> getUserProfile(String userId) async {
     try {
-      final response = await _client
-          .from('profiles')
+      final response = await client
+          .from('accounts')
           .select()
           .eq('id', userId)
           .single();
@@ -126,14 +113,29 @@ class SupabaseService {
     }
   }
 
+  /// Check if email already exists in accounts
+  Future<bool> emailExists(String email) async {
+    try {
+      final response = await client
+          .from('accounts')
+          .select('id')
+          .eq('email', email)
+          .limit(1);
+
+      return response.isNotEmpty;
+    } catch (e) {
+      throw 'Failed to check email: $e';
+    }
+  }
+
   /// Update user profile
   Future<Map<String, dynamic>> updateUserProfile({
     required String userId,
     required Map<String, dynamic> updates,
   }) async {
     try {
-      final response = await _client
-          .from('profiles')
+      final response = await client
+          .from('accounts')
           .update(updates)
           .eq('id', userId)
           .select()
@@ -155,7 +157,7 @@ class SupabaseService {
     required Map<String, dynamic> faceData,
   }) async {
     try {
-      final response = await _client.from('scans').insert({
+      final response = await client.from('scans').insert({
         'user_id': userId,
         'look_name': lookName,
         'image_path': imagePath,
@@ -172,7 +174,7 @@ class SupabaseService {
   /// Get user's scan history
   Future<List<Map<String, dynamic>>> getScanHistory(String userId) async {
     try {
-      final response = await _client
+      final response = await client
           .from('scans')
           .select()
           .eq('user_id', userId)
@@ -187,7 +189,7 @@ class SupabaseService {
   /// Delete scan
   Future<void> deleteScan(String scanId) async {
     try {
-      await _client.from('scans').delete().eq('id', scanId);
+      await client.from('scans').delete().eq('id', scanId);
     } catch (e) {
       throw 'Failed to delete scan: $e';
     }
@@ -201,7 +203,7 @@ class SupabaseService {
     required String lookName,
   }) async {
     try {
-      final response = await _client.from('favorites').insert({
+      final response = await client.from('favorites').insert({
         'user_id': userId,
         'look_name': lookName,
         'created_at': DateTime.now().toIso8601String(),
@@ -216,7 +218,7 @@ class SupabaseService {
   /// Get user's favorite looks
   Future<List<Map<String, dynamic>>> getFavoriteLooks(String userId) async {
     try {
-      final response = await _client
+      final response = await client
           .from('favorites')
           .select()
           .eq('user_id', userId);
@@ -230,7 +232,7 @@ class SupabaseService {
   /// Remove favorite look
   Future<void> removeFavoriteLook(String favoriteId) async {
     try {
-      await _client.from('favorites').delete().eq('id', favoriteId);
+      await client.from('favorites').delete().eq('id', favoriteId);
     } catch (e) {
       throw 'Failed to remove favorite: $e';
     }
@@ -241,8 +243,8 @@ class SupabaseService {
   /// Get all users (admin only)
   Future<List<Map<String, dynamic>>> getAllUsers() async {
     try {
-      final response = await _client
-          .from('profiles')
+        final response = await client
+          .from('accounts')
           .select()
           .order('created_at', ascending: false);
 
@@ -255,12 +257,12 @@ class SupabaseService {
   /// Get analytics data (admin only)
   Future<Map<String, dynamic>> getAnalyticsData() async {
     try {
-      final totalUsers = await _client
-          .from('profiles')
+        final totalUsers = await client
+          .from('accounts')
           .select()
           .then((data) => data.length);
 
-      final totalScans = await _client
+      final totalScans = await client
           .from('scans')
           .select()
           .then((data) => data.length);
@@ -284,18 +286,18 @@ class SupabaseService {
     required String fileName,
   }) async {
     try {
-      final file = await Future.value(filePath);
-      final fileBytes = await Future.value(file);
+      final file = File(filePath);
+      final fileBytes = await file.readAsBytes();
 
       final path = '$userId/scans/$fileName';
 
-      await _client.storage.from('scan-images').upload(
+      await client.storage.from('scan-images').uploadBinary(
             path,
             fileBytes,
             fileOptions: const FileOptions(cacheControl: '3600', upsert: false),
           );
 
-      final publicUrl = _client.storage
+      final publicUrl = client.storage
           .from('scan-images')
           .getPublicUrl(path);
 
@@ -307,25 +309,272 @@ class SupabaseService {
 
   /// Get public URL for uploaded file
   String getPublicImageUrl(String path) {
-    return _client.storage.from('scan-images').getPublicUrl(path);
+    return client.storage.from('scan-images').getPublicUrl(path);
+  }
+
+  // ==================== REAL-TIME SUBSCRIPTIONS ====================
+
+  // ==================== SUBSCRIPTIONS ====================
+
+  Future<void> _downgradeExpiredToRegular(List<Map<String, dynamic>> subscriptions) async {
+    final now = DateTime.now();
+    final List<Future<void>> updates = [];
+
+    for (final subscription in subscriptions) {
+      final plan = (subscription['plan'] ?? '').toString().toLowerCase();
+      final currentPeriodEnd = subscription['current_period_end']?.toString();
+      if (plan == 'regular' || currentPeriodEnd == null) {
+        continue;
+      }
+
+      final parsedEnd = DateTime.tryParse(currentPeriodEnd);
+      if (parsedEnd == null || !parsedEnd.isBefore(now)) {
+        continue;
+      }
+
+      final id = subscription['id']?.toString();
+      if (id == null || id.isEmpty) {
+        continue;
+      }
+
+      updates.add(
+        client.from('subscriptions').update({
+          'plan': 'regular',
+          'status': 'active',
+          'current_period_end': now.add(const Duration(days: 36500)).toIso8601String(),
+        }).eq('id', id).then((_) => null),
+      );
+    }
+
+    if (updates.isNotEmpty) {
+      await Future.wait(updates);
+    }
+  }
+
+  /// Get all subscriptions (admin only)
+  /// Get all subscription plans (for admin to manage)
+  Future<List<Map<String, dynamic>>> getAllPlans() async {
+    try {
+      final response = await client
+          .from('plans')
+          .select()
+          .order('price', ascending: true);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      throw 'Failed to fetch plans: $e';
+    }
+  }
+
+  /// Get user's subscriptions with plan details
+  Future<List<Map<String, dynamic>>> getUserSubscriptions(String userId) async {
+    try {
+      final response = await client
+          .from('subscriptions')
+          .select('*, plans(name, price, currency, billing_period)')
+          .eq('account_id', userId)
+          .order('created_at', ascending: false);
+      final subscriptions = List<Map<String, dynamic>>.from(response);
+      await _downgradeExpiredToRegular(subscriptions);
+      return subscriptions;
+    } catch (e) {
+      throw 'Failed to fetch user subscriptions: $e';
+    }
+  }
+
+  /// Get all subscriptions (for admin)
+  Future<List<Map<String, dynamic>>> getAllSubscriptions() async {
+    try {
+      final response = await client
+          .from('subscriptions')
+          .select('*, accounts(full_name, email), plans(name, price, currency)')
+          .order('created_at', ascending: false);
+      final subscriptions = List<Map<String, dynamic>>.from(response);
+      return subscriptions;
+    } catch (e) {
+      throw 'Failed to fetch subscriptions: $e';
+    }
+  }
+
+  /// Create a subscription plan (admin only)
+  Future<Map<String, dynamic>> createPlan({
+    required String name,
+    required double price,
+    String? description,
+    String billingPeriod = 'month',
+  }) async {
+    try {
+      final response = await client.from('plans').insert({
+        'name': name,
+        'price': price,
+        'currency': 'PHP',
+        'description': description,
+        'billing_period': billingPeriod,
+      }).select();
+      return response.first;
+    } catch (e) {
+      throw 'Failed to create plan: $e';
+    }
+  }
+
+  /// Update a subscription plan (admin only)
+  Future<Map<String, dynamic>> updatePlan({
+    required String planId,
+    required Map<String, dynamic> updates,
+  }) async {
+    try {
+      final response = await client
+          .from('plans')
+          .update(updates)
+          .eq('id', planId)
+          .select();
+      return response.first;
+    } catch (e) {
+      throw 'Failed to update plan: $e';
+    }
+  }
+
+  /// Delete a subscription plan (admin only)
+  Future<void> deletePlan(String planId) async {
+    try {
+      await client.from('plans').delete().eq('id', planId);
+    } catch (e) {
+      throw 'Failed to delete plan: $e';
+    }
+  }
+
+  /// Create user subscription from plan
+  Future<Map<String, dynamic>> createUserSubscription({
+    required String accountId,
+    required String planId,
+    required String status,
+    required DateTime currentPeriodEnd,
+  }) async {
+    try {
+      final response = await client.from('subscriptions').insert({
+        'account_id': accountId,
+        'plan_id': planId,
+        'status': status,
+        'current_period_end': currentPeriodEnd.toIso8601String(),
+      }).select();
+      return response.first;
+    } catch (e) {
+      throw 'Failed to create user subscription: $e';
+    }
+  }
+
+  /// Update subscription (admin only)
+  Future<Map<String, dynamic>> updateSubscription({
+    required String subscriptionId,
+    required Map<String, dynamic> updates,
+  }) async {
+    try {
+      final response = await client
+          .from('subscriptions')
+          .update(updates)
+          .eq('id', subscriptionId)
+          .select();
+
+      if (response.isEmpty) {
+        throw 'Subscription not found or access denied';
+      }
+      return response.first;
+    } catch (e) {
+      throw 'Failed to update subscription: $e';
+    }
+  }
+
+  /// Delete subscription (admin only)
+  Future<void> deleteSubscription(String subscriptionId) async {
+    try {
+      await client
+          .from('subscriptions')
+          .delete()
+          .eq('id', subscriptionId);
+    } catch (e) {
+      throw 'Failed to delete subscription: $e';
+    }
+  }
+
+  // ==================== AUDIT LOGS ====================
+
+  /// Log admin action
+  Future<void> logAdminAction({
+    required String action,
+    required String target,
+    required Map<String, dynamic> metadata,
+  }) async {
+    try {
+      final currentUser = client.auth.currentUser;
+      if (currentUser == null) {
+        debugPrint('⚠️ Cannot log action: No user logged in');
+        return;
+      }
+      
+      await client.from('audit_logs').insert({
+        'actor_id': currentUser.id,
+        'action': action,
+        'target': target,
+        'metadata': metadata,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      // Don't throw - just log the error so the main operation isn't blocked
+      debugPrint('⚠️ Failed to log admin action: $e');
+    }
+  }
+
+  /// Get audit logs (admin only)
+  Future<List<Map<String, dynamic>>> getAuditLogs({int limit = 100}) async {
+    try {
+      final response = await client
+          .from('audit_logs')
+          .select('*, accounts(full_name, email)')
+          .order('created_at', ascending: false)
+          .limit(limit);
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      throw 'Failed to fetch audit logs: $e';
+    }
   }
 
   // ==================== REAL-TIME SUBSCRIPTIONS ====================
 
   /// Listen to user profile changes
   RealtimeChannel subscribeToUserProfile(String userId) {
-    return _client
-        .channel('profiles:id=eq.$userId')
-        .on(
-          RealtimeListenTypes.postgresChanges,
-          PostgresChangeFilter(
-            event: '*',
-            schema: 'public',
-            table: 'profiles',
-            filter: 'id=eq.$userId',
+    return client
+        .channel('accounts:id=eq.$userId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'accounts',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'id',
+            value: userId,
           ),
-          (payload, [ref]) {
+          callback: (payload) {
             // Handle profile changes
+          },
+        )
+        .subscribe();
+  }
+
+  /// Listen to subscription changes
+  RealtimeChannel subscribeToSubscriptions(String userId, {VoidCallback? onChange}) {
+    return client
+        .channel('subscriptions:account_id=eq.$userId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'subscriptions',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'account_id',
+            value: userId,
+          ),
+          callback: (payload) {
+            onChange?.call();
           },
         )
         .subscribe();
@@ -333,17 +582,18 @@ class SupabaseService {
 
   /// Listen to new scans
   RealtimeChannel subscribeToNewScans(String userId) {
-    return _client
+    return client
         .channel('scans:user_id=eq.$userId')
-        .on(
-          RealtimeListenTypes.postgresChanges,
-          PostgresChangeFilter(
-            event: 'INSERT',
-            schema: 'public',
-            table: 'scans',
-            filter: 'user_id=eq.$userId',
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'scans',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: userId,
           ),
-          (payload, [ref]) {
+          callback: (payload) {
             // Handle new scans
           },
         )
@@ -352,26 +602,6 @@ class SupabaseService {
 
   /// Unsubscribe from channel
   Future<void> unsubscribeFromChannel(RealtimeChannel channel) async {
-    await _client.removeChannel(channel);
+    await client.removeChannel(channel);
   }
-}
-*/
-
-// Stub implementation until Supabase is available
-class SupabaseService {
-  Future<void> initialize() async {}
-  dynamic getCurrentUser() => null;
-  dynamic getSession() => null;
-  Future<dynamic> signUp({required String email, required String password, required String fullName}) async => null;
-  Future<void> createUserProfile({required String userId, required String email, required String fullName}) async {}
-  Future<dynamic> signIn({required String email, required String password}) async => null;
-  Future<dynamic> getUserProfile(String userId) async => null;
-  Future<void> signOut() async {}
-  Future<dynamic> saveScan({required String userId, required String lookName, required String imagePath, required Map<String, dynamic> faceData}) async => null;
-  Future<List<Map<String, dynamic>>> getScanHistory(String userId) async => [];
-  Future<void> addFavoriteLook({required String userId, required String lookName}) async {}
-  Future<List<Map<String, dynamic>>> getFavoriteLooks(String userId) async => [];
-  Future<Map<String, dynamic>> getAnalyticsData() async => {};
-  Future<List<Map<String, dynamic>>> getAllUsers() async => [];
-  bool isAuthenticated() => false;
 }
