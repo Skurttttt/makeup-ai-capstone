@@ -113,53 +113,156 @@ CREATE POLICY "Users can delete their own favorites"
   FOR DELETE
   USING (auth.uid() = user_id);
 
--- 4. Create plans table (for subscription plan definitions - managed by admin)
-CREATE TABLE public.plans (
+-- 4. Create subscription_plans table (tier definitions - Bumble-style)
+CREATE TABLE public.subscription_plans (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   name text NOT NULL UNIQUE,
+  display_name text NOT NULL,
   description text,
-  price numeric(10,2) NOT NULL,
+  price numeric(10,2) NOT NULL DEFAULT 0,
   currency text DEFAULT 'PHP',
-  billing_period text DEFAULT 'month',
+  billing_period text NOT NULL DEFAULT 'month',
+
+  -- Feature gating fields
+  daily_scan_limit integer DEFAULT -1,
+  total_scan_limit integer DEFAULT -1,
+  available_looks jsonb DEFAULT '[]'::jsonb,
+  can_save_results boolean DEFAULT false,
+  can_export_hd boolean DEFAULT false,
+  can_use_filters boolean DEFAULT false,
+  priority_processing boolean DEFAULT false,
+  remove_watermark boolean DEFAULT false,
+  access_exclusive_looks boolean DEFAULT false,
+
+  -- Display fields
+  badge_color text,
+  badge_text text,
+  sort_order integer DEFAULT 0,
+  is_active boolean DEFAULT true,
+
   created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
 );
 
-ALTER TABLE public.plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.subscription_plans ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Anyone can view plans"
-  ON public.plans
+CREATE POLICY "Anyone can view active plans"
+  ON public.subscription_plans
   FOR SELECT
-  USING (true);
+  USING (is_active = true);
 
 CREATE POLICY "Admins can manage plans"
-  ON public.plans
+  ON public.subscription_plans
   FOR ALL
   USING (public.is_admin())
   WITH CHECK (public.is_admin());
 
--- 5. Create subscriptions table (for user purchases)
-CREATE TABLE public.subscriptions (
+-- 5. Create user_subscriptions table (user purchases)
+CREATE TABLE public.user_subscriptions (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  account_id uuid REFERENCES public.accounts(id) ON DELETE CASCADE NOT NULL,
-  plan_id uuid REFERENCES public.plans(id) ON DELETE RESTRICT NOT NULL,
-  status text NOT NULL CHECK (status IN ('trial', 'active', 'past_due', 'canceled', 'expired')),
+  user_id uuid REFERENCES public.accounts(id) ON DELETE CASCADE NOT NULL,
+  plan_id uuid REFERENCES public.subscription_plans(id) ON DELETE RESTRICT NOT NULL,
+  status text NOT NULL DEFAULT 'active' CHECK (status IN ('trial', 'active', 'past_due', 'canceled', 'expired', 'paused')),
+  started_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  current_period_start timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
   current_period_end timestamp with time zone,
-  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+  canceled_at timestamp with time zone,
+  payment_method text,
+  transaction_id text,
+  amount_paid numeric(10,2),
+  auto_renew boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
 );
 
-ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_subscriptions ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can view their own subscriptions"
-  ON public.subscriptions
+  ON public.user_subscriptions
   FOR SELECT
-  USING (auth.uid() = account_id);
+  USING (auth.uid() = user_id);
 
 CREATE POLICY "Admins can manage subscriptions"
-  ON public.subscriptions
+  ON public.user_subscriptions
   FOR ALL
   USING (public.is_admin())
   WITH CHECK (public.is_admin());
+
+-- Seed default Bumble-style tiers (safe re-run)
+INSERT INTO public.subscription_plans (
+  name, display_name, description, price, currency, billing_period,
+  daily_scan_limit, available_looks, can_save_results, can_export_hd,
+  remove_watermark, badge_text, badge_color, sort_order, is_active
+) VALUES
+  (
+    'free',
+    'FaceTune Free',
+    'Basic access with limited scans',
+    0,
+    'PHP',
+    'lifetime',
+    3,
+    '["softGlam"]'::jsonb,
+    false,
+    false,
+    false,
+    null,
+    '#90A4AE',
+    1,
+    true
+  ),
+  (
+    'pro_monthly',
+    'FaceTune Pro',
+    'Unlimited scans and more looks',
+    499,
+    'PHP',
+    'month',
+    -1,
+    '["softGlam", "emo", "dollKBeauty"]'::jsonb,
+    true,
+    false,
+    true,
+    null,
+    '#FF4D97',
+    2,
+    true
+  ),
+  (
+    'premium_yearly',
+    'FaceTune Premium',
+    'All looks, HD export, and exclusive features',
+    4999,
+    'PHP',
+    'year',
+    -1,
+    '["softGlam", "emo", "dollKBeauty", "bronzedGoddess", "boldEditorial"]'::jsonb,
+    true,
+    true,
+    true,
+    'BEST VALUE',
+    '#9C27B0',
+    3,
+    true
+  ),
+  (
+    'lifetime_premium',
+    'FaceTune Lifetime',
+    'One-time payment for lifetime premium access',
+    9999,
+    'PHP',
+    'lifetime',
+    -1,
+    '["softGlam", "emo", "dollKBeauty", "bronzedGoddess", "boldEditorial"]'::jsonb,
+    true,
+    true,
+    true,
+    'BEST DEAL',
+    '#FFD700',
+    4,
+    true
+  )
+ON CONFLICT (name) DO NOTHING;
 
 -- 6. Create profits table
 CREATE TABLE public.profits (
@@ -284,6 +387,8 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+  v_free_plan_id uuid;
 BEGIN
   -- Create account record
   INSERT INTO public.accounts (id, email, full_name, role)
@@ -293,16 +398,25 @@ BEGIN
     COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email),
     'user'
   );
-  
-  -- Create default "regular" (free) subscription for new user
-  INSERT INTO public.subscriptions (account_id, plan, status, current_period_end)
-  VALUES (
-    NEW.id,
-    'regular',
-    'active',
-    NOW() + INTERVAL '100 years'
-  );
-  
+
+  -- Get free plan id
+  SELECT id INTO v_free_plan_id
+  FROM public.subscription_plans
+  WHERE name = 'free' AND is_active = true
+  LIMIT 1;
+
+  -- Create default free subscription for new user
+  IF v_free_plan_id IS NOT NULL THEN
+    INSERT INTO public.user_subscriptions (user_id, plan_id, status, current_period_end, payment_method)
+    VALUES (
+      NEW.id,
+      v_free_plan_id,
+      'active',
+      NOW() + INTERVAL '100 years',
+      'free'
+    );
+  END IF;
+
   RETURN NEW;
 END;
 $$;

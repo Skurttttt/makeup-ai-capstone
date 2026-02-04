@@ -108,18 +108,21 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
                 
                 return Column(
                   children: plans.map((plan) {
-                    final price = '₱${(plan['price'] ?? 0).toStringAsFixed(0)}';
-                    final period = plan['billing_period'] == 'year' ? '/year' : '/month';
-                    final isPopular = plan['name'].toString().toLowerCase() == 'premium';
-                    
+                    final priceValue = (plan['price'] ?? 0) as num;
+                    final price = priceValue == 0 ? 'Free' : '₱${priceValue.toStringAsFixed(0)}';
+                    final period = _formatPeriod(plan['billing_period']?.toString() ?? 'month');
+                    final badgeText = plan['badge_text']?.toString();
+                    final badgeColor = plan['badge_color']?.toString();
+
                     return Column(
                       children: [
                         _buildPlanCard(
-                          plan['name'] ?? 'Plan',
+                          plan['display_name'] ?? plan['name'] ?? 'Plan',
                           price,
                           period,
                           plan['description'] ?? '',
-                          isPopular,
+                          badgeText,
+                          badgeColor,
                         ),
                         const SizedBox(height: 12),
                       ],
@@ -196,34 +199,37 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
     );
   }
 
-  Widget _buildPlanCard(String title, String price, String period, String subtitle, bool recommended) {
+  Widget _buildPlanCard(String title, String price, String period, String subtitle, String? badgeText, String? badgeColor) {
+    final hasBadge = badgeText != null && badgeText.trim().isNotEmpty;
+    final badgeBg = _parseHexColor(badgeColor) ?? const Color(0xFFFF4D97);
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: recommended ? const Color(0xFFFF4D97) : Colors.grey[300]!,
-          width: recommended ? 2 : 1,
+          color: hasBadge ? const Color(0xFFFF4D97) : Colors.grey[300]!,
+          width: hasBadge ? 2 : 1,
         ),
       ),
       child: Stack(
         children: [
-          if (recommended)
+          if (hasBadge)
             Positioned(
               top: 0,
               right: 0,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFF4D97),
+                decoration: BoxDecoration(
+                  color: badgeBg,
                   borderRadius: BorderRadius.only(
                     topRight: Radius.circular(10),
                     bottomLeft: Radius.circular(10),
                   ),
                 ),
-                child: const Text(
-                  'BEST VALUE',
-                  style: TextStyle(
+                child: Text(
+                  badgeText,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
@@ -252,8 +258,8 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
                         subtitle,
                         style: TextStyle(
                           fontSize: 13,
-                          color: recommended ? const Color(0xFFFF4D97) : Colors.grey[600],
-                          fontWeight: recommended ? FontWeight.w600 : FontWeight.normal,
+                          color: hasBadge ? const Color(0xFFFF4D97) : Colors.grey[600],
+                          fontWeight: hasBadge ? FontWeight.w600 : FontWeight.normal,
                         ),
                       ),
                     ],
@@ -290,6 +296,33 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
         ],
       ),
     );
+  }
+
+  String _formatPeriod(String billingPeriod) {
+    switch (billingPeriod) {
+      case 'week':
+        return '/week';
+      case 'month':
+        return '/month';
+      case 'year':
+        return '/year';
+      case 'lifetime':
+        return 'lifetime';
+      default:
+        return '/month';
+    }
+  }
+
+  Color? _parseHexColor(String? hex) {
+    if (hex == null || hex.isEmpty) return null;
+    final value = hex.replaceAll('#', '').trim();
+    if (value.length == 6) {
+      return Color(int.parse('FF$value', radix: 16));
+    }
+    if (value.length == 8) {
+      return Color(int.parse(value, radix: 16));
+    }
+    return null;
   }
 
   void _showSubscribeDialog(BuildContext context) {

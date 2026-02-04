@@ -28,9 +28,22 @@ Future<void> main() async {
 
   // Initialize Supabase
   try {
+    final envUrl = (dotenv.env['SUPABASE_URL'] ?? '').trim();
+    final envAnonKey = (dotenv.env['SUPABASE_ANON_KEY'] ?? '').trim();
+
+    const fallbackUrl = 'https://iqaiebnoodjnoyaiyoez.supabase.co';
+    const fallbackAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlxYWllYm5vb2Rqbm95YWl5b2V6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAwMzAzNDEsImV4cCI6MjA4NTYwNjM0MX0.2Jvt3WMFpaTYIAE_wff-wlmZfrJNJdXku76cF1x4MFY';
+
+    final resolvedUrl = envUrl.isNotEmpty ? envUrl : fallbackUrl;
+    final resolvedAnonKey = envAnonKey.isNotEmpty ? envAnonKey : fallbackAnonKey;
+
+    if (envUrl.isEmpty || envAnonKey.isEmpty) {
+      debugPrint('⚠️ Supabase env missing. Using fallback credentials.');
+    }
+
     await Supabase.initialize(
-      url: dotenv.env['SUPABASE_URL'] ?? '',
-      anonKey: dotenv.env['SUPABASE_ANON_KEY'] ?? '',
+      url: resolvedUrl,
+      anonKey: resolvedAnonKey,
     );
     debugPrint('✅ Supabase initialized successfully');
   } catch (e) {
