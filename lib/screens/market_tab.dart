@@ -18,7 +18,11 @@ class MarketTab extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.shopping_cart_outlined, color: Colors.black87),
-            onPressed: () {},
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Cart feature coming soon')),
+              );
+            },
           ),
         ],
       ),
@@ -88,7 +92,11 @@ class MarketTab extends StatelessWidget {
                     ),
                   ),
                   TextButton(
-                    onPressed: () {},
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('View all products')),
+                      );
+                    },
                     child: const Text(
                       'See All',
                       style: TextStyle(color: Color(0xFFFF4D97)),

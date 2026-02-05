@@ -387,9 +387,19 @@ class SupabaseService {
     try {
       final response = await client
           .from('user_subscriptions')
-          .select('*, accounts(full_name, email), subscription_plans(name, display_name, price, currency, billing_period)')
+          .select('id, user_id, plan_id, status, started_at, current_period_start, current_period_end, amount_paid, created_at, updated_at, accounts(full_name, email), subscription_plans(name, display_name, price, currency, billing_period)')
           .order('created_at', ascending: false);
       final subscriptions = List<Map<String, dynamic>>.from(response);
+      
+      // Use amount_paid as the primary price source
+      for (var sub in subscriptions) {
+        if (sub['amount_paid'] != null) {
+          sub['price'] = sub['amount_paid'];
+        } else if (sub['subscription_plans'] != null && sub['subscription_plans']['price'] != null) {
+          sub['price'] = sub['subscription_plans']['price'];
+        }
+      }
+      
       return subscriptions;
     } catch (e) {
       throw 'Failed to fetch subscriptions: $e';
@@ -466,6 +476,7 @@ class SupabaseService {
     required String planId,
     required String status,
     required DateTime currentPeriodEnd,
+    double? amountPaid,
   }) async {
     try {
       final response = await client.from('user_subscriptions').insert({
@@ -473,6 +484,7 @@ class SupabaseService {
         'plan_id': planId,
         'status': status,
         'current_period_end': currentPeriodEnd.toIso8601String(),
+        if (amountPaid != null) 'amount_paid': amountPaid,
       }).select();
       return response.first;
     } catch (e) {

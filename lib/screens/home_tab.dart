@@ -93,7 +93,11 @@ class HomeTab extends StatelessWidget {
                       ),
                     ),
                     TextButton(
-                      onPressed: () {},
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('View all popular looks')),
+                        );
+                      },
                       child: const Text(
                         'See All',
                         style: TextStyle(color: Color(0xFFFF4D97)),
