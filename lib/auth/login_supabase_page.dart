@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../home_screen.dart';
 import '../screens/admin_screen_new.dart';
+import '../services/supabase_service.dart';
 import 'register_supabase_page.dart';
 import 'forgot_password_page.dart';
 
@@ -71,6 +72,22 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
       }
 
       if (!mounted) return;
+
+      // Log the login event
+      try {
+        final supabaseService = SupabaseService();
+        await supabaseService.logAdminAction(
+          action: role?.toLowerCase() == 'admin' ? 'admin_login' : 'user_login',
+          target: 'auth',
+          metadata: {
+            'email': user!.email,
+            'role': role,
+            'login_time': DateTime.now().toIso8601String(),
+          },
+        );
+      } catch (e) {
+        debugPrint('Failed to log login audit: $e');
+      }
 
       // Route based on role
       if (role?.toLowerCase() == 'admin') {

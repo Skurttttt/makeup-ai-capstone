@@ -11,8 +11,7 @@ class SubscriptionTab extends StatefulWidget {
 
 class _SubscriptionTabState extends State<SubscriptionTab> {
   final _supabaseService = SupabaseService();
-  String? _selectedPlanType; // 'pro' or 'premium'
-  String? _selectedDuration;
+  Map<String, dynamic>? _selectedPlan;
 
   @override
   Widget build(BuildContext context) {
@@ -26,386 +25,227 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
           style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600),
         ),
         centerTitle: true,
-        leading: _selectedPlanType != null
+        leading: _selectedPlan != null
             ? IconButton(
                 icon: const Icon(Icons.arrow_back, color: Colors.black87),
                 onPressed: () {
                   setState(() {
-                    _selectedPlanType = null;
-                    _selectedDuration = null;
+                    _selectedPlan = null;
                   });
                 },
               )
             : null,
       ),
-      body: _selectedPlanType == null
-          ? _buildComparisonView()
-          : _buildDurationSelection(),
+      body: _selectedPlan == null ? _buildPlansList() : _buildPlanDetails(),
     );
   }
 
-  Widget _buildComparisonView() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Header
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFFFF4D97), Color(0xFFFF8DC7)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              children: [
-                const Icon(Icons.workspace_premium, size: 60, color: Colors.white),
-                const SizedBox(height: 12),
-                const Text(
-                  'Choose Your Plan',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+  Widget _buildPlansList() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _supabaseService.getAllPlans(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator(color: Color(0xFFFF4D97)));
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Text('Error loading plans: ${snapshot.error}', style: const TextStyle(color: Colors.red)),
+          );
+        }
+
+        final plans = snapshot.data ?? [];
+        if (plans.isEmpty) {
+          return const Center(
+            child: Text('No subscription plans available', style: TextStyle(color: Colors.black54)),
+          );
+        }
+
+        // Filter out inactive plans and free plan
+        final activePlans = plans.where((plan) => 
+          (plan['is_active'] == true) && 
+          (plan['name']?.toString().toLowerCase() != 'free')
+        ).toList();
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFF4D97), Color(0xFFFF8DC7)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'Compare features and pick what\'s right for you',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.white.withOpacity(0.9),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 32),
-
-          // Plan Comparison Table
-          const Text(
-            'Feature Comparison',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Comparison Cards
-          _buildComparisonCard(
-            'Daily Scans',
-            free: '3 scans/day',
-            pro: 'Unlimited',
-            premium: 'Unlimited',
-            icon: Icons.camera_alt,
-          ),
-          _buildComparisonCard(
-            'Makeup Looks',
-            free: '1 look',
-            pro: '3 looks',
-            premium: 'All 5 looks',
-            icon: Icons.face_retouching_natural,
-          ),
-          _buildComparisonCard(
-            'Save Results',
-            free: '✗',
-            pro: '✓',
-            premium: '✓',
-            icon: Icons.save,
-          ),
-          _buildComparisonCard(
-            'HD Export',
-            free: '✗',
-            pro: '✗',
-            premium: '✓',
-            icon: Icons.high_quality,
-          ),
-          _buildComparisonCard(
-            'Remove Watermark',
-            free: '✗',
-            pro: '✓',
-            premium: '✓',
-            icon: Icons.check_circle,
-          ),
-
-          const SizedBox(height: 32),
-
-          // Action Buttons
-          const Text(
-            'Select Your Plan',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Pro Button
-          ElevatedButton(
-            onPressed: () {
-              setState(() {
-                _selectedPlanType = 'pro';
-                _selectedDuration = null;
-              });
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF4D97),
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              elevation: 2,
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Get Pro',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
+                child: Column(
+                  children: [
+                    const Icon(Icons.workspace_premium, size: 50, color: Colors.white),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Choose Your Plan',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Starting at ₱199/week',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.white,
-                        ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Upgrade to unlock premium features',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.white.withOpacity(0.9),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                const Icon(Icons.arrow_forward, color: Colors.white, size: 28),
-              ],
-            ),
+              ),
+              const SizedBox(height: 20),
+
+              // Plan Cards
+              ...activePlans.map((plan) => _buildPlanCard(plan)),
+            ],
           ),
+        );
+      },
+    );
+  }
 
-          const SizedBox(height: 12),
+  Widget _buildPlanCard(Map<String, dynamic> plan) {
+    final planName = plan['display_name'] ?? plan['name'] ?? 'N/A';
+    final price = plan['price'] ?? 0;
+    final billingPeriod = plan['billing_period'] ?? '';
+    final description = plan['description'] ?? '';
+    final isPremium = planName.toLowerCase().contains('premium');
 
-          // Premium Button
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              gradient: const LinearGradient(
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        gradient: isPremium
+            ? const LinearGradient(
                 colors: [Color(0xFFFFD700), Color(0xFFFF8C00)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-              ),
-            ),
-            child: ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  _selectedPlanType = 'premium';
-                  _selectedDuration = null;
-                });
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.transparent,
-                shadowColor: Colors.transparent,
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              'Get Premium',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
+              )
+            : null,
+        color: isPremium ? null : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isPremium ? Colors.transparent : const Color(0xFFFF4D97),
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: (isPremium ? Colors.orange : const Color(0xFFFF4D97)).withOpacity(0.2),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            setState(() {
+              _selectedPlan = plan;
+            });
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            planName,
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: isPremium ? Colors.white : const Color(0xFFFF4D97),
                             ),
-                            SizedBox(width: 8),
-                            Text(
-                              'BEST VALUE',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'Starting at ₱299/week',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.white,
                           ),
+                          const SizedBox(height: 3),
+                          Text(
+                            description,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isPremium ? Colors.white.withOpacity(0.9) : Colors.black54,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      Icons.arrow_forward,
+                      color: isPremium ? Colors.white : const Color(0xFFFF4D97),
+                      size: 24,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '₱${price.toStringAsFixed(0)}',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: isPremium ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(width: 3),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 2),
+                      child: Text(
+                        '/$billingPeriod',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isPremium ? Colors.white.withOpacity(0.8) : Colors.black54,
                         ),
-                      ],
+                      ),
                     ),
-                  ),
-                  const Icon(Icons.arrow_forward, color: Colors.white, size: 28),
-                ],
-              ),
+                  ],
+                ),
+              ],
             ),
           ),
-
-          const SizedBox(height: 16),
-          Text(
-            'Cancel anytime. No commitment.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildComparisonCard(
-    String feature, {
-    required String free,
-    required String pro,
-    required String premium,
-    required IconData icon,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[300]!),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFF4D97).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, size: 20, color: const Color(0xFFFF4D97)),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                feature,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  children: [
-                    Text(
-                      'Free',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      free,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: free == '✗' ? Colors.red : Colors.grey[800],
-                        fontWeight: free == '✓' || free == '✗' ? FontWeight.bold : FontWeight.normal,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: Column(
-                  children: [
-                    const Text(
-                      'Pro',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFFFF4D97),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      pro,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: pro == '✗' ? Colors.red : const Color(0xFFFF4D97),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: Column(
-                  children: [
-                    const Text(
-                      'Premium',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFFFF8C00),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      premium,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFFFF8C00),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _buildPlanDetails() {
+    if (_selectedPlan == null) return const SizedBox();
 
-  Widget _buildDurationSelection() {
+    final planName = _selectedPlan!['display_name'] ?? _selectedPlan!['name'] ?? 'N/A';
+    final price = _selectedPlan!['price'] ?? 0;
+    final billingPeriod = _selectedPlan!['billing_period'] ?? '';
+    final description = _selectedPlan!['description'] ?? '';
+    final dailyScans = _selectedPlan!['daily_scan_limit'] ?? 0;
+    final availableLooks = _selectedPlan!['available_looks'] ?? 0;
+    final canSave = _selectedPlan!['can_save_results'] ?? false;
+    final canExportHd = _selectedPlan!['can_export_hd'] ?? false;
+    final removeWatermark = _selectedPlan!['remove_watermark'] ?? false;
+    final isPremium = planName.toLowerCase().contains('premium');
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -413,84 +253,137 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: _selectedPlanType == 'premium'
-                    ? [const Color(0xFFFFD700), const Color(0xFFFF8C00)]
-                    : [const Color(0xFFFF4D97), const Color(0xFFFF8DC7)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(12),
+              gradient: isPremium
+                  ? const LinearGradient(
+                      colors: [Color(0xFFFFD700), Color(0xFFFF8C00)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    )
+                  : const LinearGradient(
+                      colors: [Color(0xFFFF4D97), Color(0xFFFF8DC7)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+              borderRadius: BorderRadius.circular(16),
             ),
-            child: Text(
-              _selectedPlanType == 'pro' ? 'FaceTune Pro' : 'FaceTune Premium',
-              style: const TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-              textAlign: TextAlign.center,
+            child: Column(
+              children: [
+                Icon(
+                  isPremium ? Icons.workspace_premium : Icons.star,
+                  size: 50,
+                  color: Colors.white,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  planName,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  description,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.white.withOpacity(0.9),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '₱${price.toStringAsFixed(0)}',
+                      style: const TextStyle(
+                        fontSize: 36,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text(
+                        '/$billingPeriod',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.white.withOpacity(0.9),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 20),
 
-          // Duration Title
+          // Features List
           const Text(
-            'Choose Your Duration',
+            'What\'s Included',
             style: TextStyle(
-              fontSize: 20,
+              fontSize: 18,
               fontWeight: FontWeight.bold,
               color: Colors.black87,
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Select a billing period that works best for you',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[600],
-            ),
+          const SizedBox(height: 12),
+
+          _buildFeatureItem(
+            icon: Icons.camera_alt,
+            title: 'Daily Scans',
+            value: dailyScans == -1 ? 'Unlimited' : '$dailyScans scans/day',
+            included: true,
           ),
-          const SizedBox(height: 24),
+          _buildFeatureItem(
+            icon: Icons.face_retouching_natural,
+            title: 'Makeup Looks',
+            value: availableLooks == -1 ? 'All looks' : '$availableLooks looks',
+            included: true,
+          ),
+          _buildFeatureItem(
+            icon: Icons.save,
+            title: 'Save Results',
+            value: canSave ? 'Yes' : 'No',
+            included: canSave,
+          ),
+          _buildFeatureItem(
+            icon: Icons.high_quality,
+            title: 'HD Export',
+            value: canExportHd ? 'Yes' : 'No',
+            included: canExportHd,
+          ),
+          _buildFeatureItem(
+            icon: Icons.check_circle,
+            title: 'Remove Watermark',
+            value: removeWatermark ? 'Yes' : 'No',
+            included: removeWatermark,
+          ),
 
-          // Duration Options
-          _buildDurationOptions(),
+          const SizedBox(height: 20),
 
-          const SizedBox(height: 32),
-
-          // Continue Button
+          // Subscribe Button
           ElevatedButton(
-            onPressed: _selectedDuration != null
-                ? () {
-                    _showSubscribeDialog(context);
-                  }
-                : null,
+            onPressed: () => _showSubscribeConfirmation(),
             style: ElevatedButton.styleFrom(
-              backgroundColor: _selectedPlanType == 'premium'
-                  ? const Color(0xFFFF8C00)
-                  : const Color(0xFFFF4D97),
+              backgroundColor: isPremium ? Colors.orange : const Color(0xFFFF4D97),
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
-              elevation: 0,
+              elevation: 4,
             ),
-            child: const Text(
-              'Continue to Payment',
-              style: TextStyle(
+            child: Text(
+              'Subscribe to $planName',
+              style: const TextStyle(
                 fontSize: 16,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.bold,
                 color: Colors.white,
               ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Cancel anytime. Terms and conditions apply.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
             ),
           ),
         ],
@@ -498,135 +391,76 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
     );
   }
 
-  Widget _buildDurationOptions() {
-    List<Map<String, String>> durations = [];
-
-    // Pro plan
-    if (_selectedPlanType == 'pro') {
-      durations = [
-        {'label': '1 Week', 'value': 'week', 'price': '₱199'},
-        {'label': '1 Month', 'value': 'month', 'price': '₱499'},
-        {'label': '3 Months', 'value': 'quarter', 'price': '₱1,299'},
-      ];
-    }
-    // Premium plan
-    else if (_selectedPlanType == 'premium') {
-      durations = [
-        {'label': '1 Week Trial', 'value': 'week', 'price': '₱299'},
-        {'label': '1 Month', 'value': 'month', 'price': '₱2,499'},
-        {'label': '1 Year', 'value': 'year', 'price': '₱4,999'},
-      ];
-    }
-
-    return Column(
-      children: durations.map((duration) {
-        final isSelected = _selectedDuration == duration['value'];
-        return Column(
-          children: [
-            GestureDetector(
-              onTap: () {
-                setState(() {
-                  _selectedDuration = duration['value'];
-                });
-              },
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isSelected 
-                      ? (_selectedPlanType == 'premium' 
-                          ? const Color(0xFFFF8C00).withOpacity(0.1) 
-                          : const Color(0xFFFF4D97).withOpacity(0.1))
-                      : Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: isSelected 
-                        ? (_selectedPlanType == 'premium' 
-                            ? const Color(0xFFFF8C00) 
-                            : const Color(0xFFFF4D97))
-                        : Colors.grey[300]!,
-                    width: isSelected ? 2 : 1,
+  Widget _buildFeatureItem({
+    required IconData icon,
+    required String title,
+    required String value,
+    required bool included,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE6E8F0)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: included ? const Color(0xFFFF4D97).withOpacity(0.1) : Colors.grey.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              icon,
+              color: included ? const Color(0xFFFF4D97) : Colors.grey,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
                   ),
                 ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: isSelected 
-                              ? (_selectedPlanType == 'premium' 
-                                  ? const Color(0xFFFF8C00) 
-                                  : const Color(0xFFFF4D97))
-                              : Colors.grey[400]!,
-                          width: 2,
-                        ),
-                      ),
-                      child: isSelected
-                          ? Center(
-                              child: Icon(
-                                Icons.check, 
-                                size: 16, 
-                                color: _selectedPlanType == 'premium' 
-                                    ? const Color(0xFFFF8C00) 
-                                    : const Color(0xFFFF4D97),
-                              ),
-                            )
-                          : null,
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            duration['label']!,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Text(
-                      duration['price']!,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: _selectedPlanType == 'premium' 
-                            ? const Color(0xFFFF8C00) 
-                            : const Color(0xFFFF4D97),
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 1),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: included ? const Color(0xFFFF4D97) : Colors.grey,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-              ),
+              ],
             ),
-            const SizedBox(height: 12),
-          ],
-        );
-      }).toList(),
+          ),
+          Icon(
+            included ? Icons.check_circle : Icons.cancel,
+            color: included ? Colors.green : Colors.grey,
+            size: 20,
+          ),
+        ],
+      ),
     );
   }
 
-  void _showSubscribeDialog(BuildContext context) {
-    final planName = _selectedPlanType == 'pro' ? 'FaceTune Pro' : 'FaceTune Premium';
-    
-    // Find the price based on duration
-    String price = '₱0';
-    if (_selectedPlanType == 'pro') {
-      if (_selectedDuration == 'week') price = '₱199';
-      if (_selectedDuration == 'month') price = '₱499';
-      if (_selectedDuration == 'quarter') price = '₱1,299';
-    } else if (_selectedPlanType == 'premium') {
-      if (_selectedDuration == 'week') price = '₱299';
-      if (_selectedDuration == 'month') price = '₱2,499';
-      if (_selectedDuration == 'year') price = '₱4,999';
-    }
-    
+  void _showSubscribeConfirmation() {
+    if (_selectedPlan == null) return;
+
+    final planName = _selectedPlan!['display_name'] ?? _selectedPlan!['name'] ?? 'N/A';
+    final price = _selectedPlan!['price'] ?? 0;
+    final billingPeriod = _selectedPlan!['billing_period'] ?? '';
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -640,19 +474,22 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Duration: $_selectedDuration',
+              'Plan: $planName',
               style: const TextStyle(fontWeight: FontWeight.w500),
             ),
             const SizedBox(height: 8),
             Text(
-              'Price: $price',
-              style: TextStyle(
+              'Price: ₱${price.toStringAsFixed(2)}',
+              style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: _selectedPlanType == 'premium' 
-                    ? const Color(0xFFFF8C00) 
-                    : const Color(0xFFFF4D97),
+                color: Color(0xFFFF4D97),
               ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Billing: $billingPeriod',
+              style: const TextStyle(fontSize: 13, color: Colors.black54),
             ),
             const SizedBox(height: 12),
             const Text(
@@ -670,30 +507,84 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
             ),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('$planName subscription activated! 🎉'),
-                  backgroundColor: _selectedPlanType == 'premium' 
-                      ? const Color(0xFFFF8C00) 
-                      : const Color(0xFFFF4D97),
-                ),
-              );
-              setState(() {
-                _selectedPlanType = null;
-                _selectedDuration = null;
-              });
+
+              try {
+                // Get current user
+                final currentUser = _supabaseService.client.auth.currentUser;
+                if (currentUser == null) {
+                  throw 'User not logged in';
+                }
+
+                // Calculate end date based on billing period
+                DateTime endDate;
+                final period = billingPeriod.toLowerCase();
+                if (period.contains('day')) {
+                  endDate = DateTime.now().add(const Duration(days: 1));
+                } else if (period.contains('week')) {
+                  endDate = DateTime.now().add(const Duration(days: 7));
+                } else if (period.contains('month')) {
+                  endDate = DateTime.now().add(const Duration(days: 30));
+                } else if (period.contains('year')) {
+                  endDate = DateTime.now().add(const Duration(days: 365));
+                } else if (period.contains('lifetime')) {
+                  endDate = DateTime.now().add(const Duration(days: 36500));
+                } else {
+                  endDate = DateTime.now().add(const Duration(days: 30));
+                }
+
+                // Create the subscription in database
+                await _supabaseService.createUserSubscription(
+                  accountId: currentUser.id,
+                  planId: _selectedPlan!['id'],
+                  status: 'active',
+                  currentPeriodEnd: endDate,
+                  amountPaid: price.toDouble(),
+                );
+
+                // Log subscription purchase for audit
+                await _supabaseService.logAdminAction(
+                  action: 'subscription_purchase',
+                  target: 'subscription',
+                  metadata: {
+                    'plan_name': planName,
+                    'price': price,
+                    'billing_period': billingPeriod,
+                    'purchase_time': DateTime.now().toIso8601String(),
+                    'end_date': endDate.toIso8601String(),
+                  },
+                );
+
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('$planName subscription activated! 🎉'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                  setState(() {
+                    _selectedPlan = null;
+                  });
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Failed to activate subscription: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: _selectedPlanType == 'premium' 
-                  ? const Color(0xFFFF8C00) 
-                  : const Color(0xFFFF4D97),
+              backgroundColor: const Color(0xFFFF4D97),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
-            child: const Text('Subscribe'),
+            child: const Text('Subscribe', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),

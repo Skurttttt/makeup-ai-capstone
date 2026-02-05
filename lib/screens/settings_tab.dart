@@ -1,6 +1,8 @@
 // lib/screens/settings_tab.dart
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../auth/login_page.dart';
+import '../services/supabase_service.dart';
 
 class SettingsTab extends StatelessWidget {
   const SettingsTab({super.key});
@@ -64,7 +66,11 @@ class SettingsTab extends StatelessWidget {
                     ),
                     IconButton(
                       icon: const Icon(Icons.edit, color: Color(0xFFFF4D97)),
-                      onPressed: () {},
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Edit profile coming soon')),
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -213,13 +219,33 @@ class SettingsTab extends StatelessWidget {
             ),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (context) => const LoginPage()),
-                (route) => false,
-              );
+              
+              // Log user logout before signing out
+              try {
+                final supabaseService = SupabaseService();
+                await supabaseService.logAdminAction(
+                  action: 'user_logout',
+                  target: 'auth',
+                  metadata: {
+                    'email': Supabase.instance.client.auth.currentUser?.email,
+                    'logout_time': DateTime.now().toIso8601String(),
+                  },
+                );
+              } catch (e) {
+                debugPrint('Failed to log logout audit: $e');
+              }
+              
+              await Supabase.instance.client.auth.signOut();
+              
+              if (context.mounted) {
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (context) => const LoginPage()),
+                  (route) => false,
+                );
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,

@@ -98,7 +98,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
 
       // cleanup temp file (optional safe cleanup)
       // ignore: unawaited_futures
-      tmpFile.delete().catchError((_) {});
+      tmpFile.delete().catchError((_) => tmpFile);
     } catch (_) {
       // If anything fails, fall back to passed-in face (still functional)
       if (!mounted) return;
