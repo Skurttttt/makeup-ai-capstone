@@ -1392,14 +1392,30 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
   }
 
   List<Map<String, dynamic>> _calculateMonthlyProfits(List<Map<String, dynamic>> subscriptions) {
+    // Philippines timezone is UTC+8
+    final phTimeZone = Duration(hours: 8);
+    
+    // Initialize map for last 12 months
     final Map<DateTime, double> monthlyRevenue = {};
+    final now = DateTime.now().add(phTimeZone);
+    
+    // Create entries for last 12 months
+    for (int i = 11; i >= 0; i--) {
+      final monthDate = DateTime(now.year, now.month - i);
+      final monthKey = DateTime(monthDate.year, monthDate.month);
+      monthlyRevenue[monthKey] = 0.0;
+    }
 
     for (var sub in subscriptions) {
       final periodEndRaw = sub['current_period_end']?.toString();
       final createdAtRaw = sub['created_at']?.toString();
-      final revenueDate = DateTime.tryParse(periodEndRaw ?? '') ??
+      var revenueDate = DateTime.tryParse(periodEndRaw ?? '') ??
           DateTime.tryParse(createdAtRaw ?? '') ??
           DateTime.now();
+      
+      // Convert to Philippines time
+      revenueDate = revenueDate.add(phTimeZone);
+      
       final monthKey = DateTime(revenueDate.year, revenueDate.month);
       
       // Get price from amount_paid first, then from subscription_plans, then from price field
@@ -1412,7 +1428,9 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
         price = (sub['subscription_plans']['price'] as num).toDouble();
       }
       
-      monthlyRevenue[monthKey] = (monthlyRevenue[monthKey] ?? 0.0) + price;
+      if (monthlyRevenue.containsKey(monthKey)) {
+        monthlyRevenue[monthKey] = (monthlyRevenue[monthKey] ?? 0.0) + price;
+      }
     }
 
     final sortedEntries = monthlyRevenue.entries.toList()
@@ -1421,7 +1439,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
       });
 
     return sortedEntries.map((entry) => {
-      'month': DateFormat('MMM yy').format(entry.key),
+      'month': DateFormat('MMM').format(entry.key),
       'amount': entry.value,
     }).toList();
   }
