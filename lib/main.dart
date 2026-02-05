@@ -827,7 +827,10 @@ class _FaceScanPageState extends State<FaceScanPage> {
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => InstructionsPage(look: look),
+        builder: (_) => InstructionsPage(
+          look: look,
+          faceProfile: _faceProfile,
+        ),
       ),
     );
   }

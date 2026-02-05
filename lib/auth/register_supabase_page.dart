@@ -127,7 +127,11 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const LoginSupabasePage()),
+            );
+          },
         ),
         title: const Text(
           'Create Account',
