@@ -11,6 +11,17 @@ CREATE TABLE public.accounts (
   role text DEFAULT 'user' CHECK (role IN ('admin', 'user', 'client')),
   avatar_url text,
   bio text,
+  account_type text DEFAULT 'individual' CHECK (account_type IN ('individual', 'business')),
+  client_type text DEFAULT 'individual' CHECK (client_type IN ('individual', 'business')),
+  business_name text,
+  business_type text CHECK (business_type IN ('makeup_brand', 'salon', 'artist', 'distributor', 'retailer', 'other')),
+  business_phone text,
+  business_address text,
+  business_description text,
+  business_reg_number text,
+  business_logo_url text,
+  business_verified boolean DEFAULT false,
+  business_verified_at timestamp with time zone,
   created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
 );

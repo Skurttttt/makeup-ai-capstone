@@ -1,7 +1,7 @@
 // lib/router/app_router.dart
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import '../auth/login_page.dart';
+import '../auth/login_supabase_page.dart';
 import '../screens/admin_screen_new.dart';
 import '../home_screen.dart';
 
@@ -11,7 +11,7 @@ class AppRouter {
       case '/':
         // Route to appropriate screen based on authentication and role
         if (!authService.isAuthenticated) {
-          return MaterialPageRoute(builder: (_) => const LoginPage());
+          return MaterialPageRoute(builder: (_) => const LoginSupabasePage());
         }
         if (authService.isAdmin) {
           return MaterialPageRoute(builder: (_) => const AdminScreenNew());
@@ -19,17 +19,17 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => const HomeScreen());
 
       case '/login':
-        return MaterialPageRoute(builder: (_) => const LoginPage());
+        return MaterialPageRoute(builder: (_) => const LoginSupabasePage());
 
       case '/home':
         if (!authService.isAuthenticated) {
-          return MaterialPageRoute(builder: (_) => const LoginPage());
+          return MaterialPageRoute(builder: (_) => const LoginSupabasePage());
         }
         return MaterialPageRoute(builder: (_) => const HomeScreen());
 
       case '/admin':
         if (!authService.isAdmin) {
-          return MaterialPageRoute(builder: (_) => const LoginPage());
+          return MaterialPageRoute(builder: (_) => const LoginSupabasePage());
         }
         return MaterialPageRoute(builder: (_) => const AdminScreenNew());
 

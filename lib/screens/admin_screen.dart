@@ -175,7 +175,7 @@ class _WebSidebar extends StatelessWidget {
           _WebNavItem(icon: Icons.dashboard_outlined, label: 'Overview', isActive: true),
           _WebNavItem(icon: Icons.people_outline, label: 'Accounts'),
           _WebNavItem(icon: Icons.card_membership_outlined, label: 'Subscriptions'),
-           _WebNavItem(icon: Icons.attach_money_outlined, label: 'Profit'),
+          _WebNavItem(textIcon: '₱', label: 'Profit'),
           _WebNavItem(icon: Icons.receipt_long_outlined, label: 'Audit Logs'),
           _WebNavItem(icon: Icons.settings_outlined, label: 'Settings'),
         ],
@@ -185,12 +185,14 @@ class _WebSidebar extends StatelessWidget {
 }
 
 class _WebNavItem extends StatelessWidget {
-  final IconData icon;
+  final IconData? icon;
+  final String? textIcon;
   final String label;
   final bool isActive;
 
   const _WebNavItem({
-    required this.icon,
+    this.icon,
+    this.textIcon,
     required this.label,
     this.isActive = false,
   });
@@ -206,7 +208,21 @@ class _WebNavItem extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: isActive ? const Color(0xFFFF4D97) : Colors.grey[700]),
+          if (textIcon != null)
+            Text(
+              textIcon!,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: isActive ? const Color(0xFFFF4D97) : Colors.grey[700],
+              ),
+            )
+          else
+            Icon(
+              icon,
+              size: 18,
+              color: isActive ? const Color(0xFFFF4D97) : Colors.grey[700],
+            ),
           const SizedBox(width: 12),
           Text(
             label,
