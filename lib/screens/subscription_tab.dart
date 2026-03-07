@@ -16,18 +16,18 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF8F4F6),
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFFFF4D97),
         elevation: 0,
         title: const Text(
           'Premium Plans',
-          style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600),
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
         ),
         centerTitle: true,
         leading: _selectedPlan != null
             ? IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.black87),
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
                 onPressed: () {
                   setState(() {
                     _selectedPlan = null;
@@ -124,49 +124,63 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
     final price = plan['price'] ?? 0;
     final billingPeriod = plan['billing_period'] ?? '';
     final description = plan['description'] ?? '';
-    final isPremium = planName.toLowerCase().contains('premium');
+    final lowerPlanName = planName.toLowerCase();
+    final isPremium = lowerPlanName.contains('premium') || lowerPlanName.contains('lifetime');
+    final isPopular = lowerPlanName.contains('premium') && !lowerPlanName.contains('lifetime');
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        gradient: isPremium
-            ? const LinearGradient(
-                colors: [Color(0xFFFFD700), Color(0xFFFF8C00)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              )
-            : null,
-        color: isPremium ? null : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isPremium ? Colors.transparent : const Color(0xFFFF4D97),
-          width: 2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: (isPremium ? Colors.orange : const Color(0xFFFF4D97)).withOpacity(0.2),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          margin: EdgeInsets.only(bottom: 12, top: isPopular ? 12 : 0),
+          decoration: BoxDecoration(
+            gradient: isPremium
+                ? const LinearGradient(
+                    colors: [Color(0xFFFF4D97), Color(0xFFFF8DC7)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : null,
+            color: isPremium ? null : Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: isPremium ? null : Border.all(
+              color: const Color(0xFFFF4D97).withOpacity(0.3),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: (isPremium ? const Color(0xFFFF4D97) : Colors.black).withOpacity(0.15),
+                blurRadius: 14,
+                offset: const Offset(0, 5),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            setState(() {
-              _selectedPlan = plan;
-            });
-          },
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                setState(() {
+                  _selectedPlan = plan;
+                });
+              },
+              borderRadius: BorderRadius.circular(18),
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Row(
                   children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isPremium ? Colors.white.withOpacity(0.2) : const Color(0xFFFF4D97).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(
+                        isPremium ? Icons.workspace_premium : Icons.star_border,
+                        size: 28,
+                        color: isPremium ? Colors.white : const Color(0xFFFF4D97),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -174,59 +188,95 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
                           Text(
                             planName,
                             style: TextStyle(
-                              fontSize: 20,
+                              fontSize: 17,
                               fontWeight: FontWeight.bold,
-                              color: isPremium ? Colors.white : const Color(0xFFFF4D97),
+                              color: isPremium ? Colors.white : const Color(0xFF1A1D2E),
                             ),
                           ),
-                          const SizedBox(height: 3),
+                          const SizedBox(height: 2),
                           Text(
                             description,
                             style: TextStyle(
                               fontSize: 12,
-                              color: isPremium ? Colors.white.withOpacity(0.9) : Colors.black54,
+                              color: isPremium ? Colors.white.withOpacity(0.85) : Colors.black54,
                             ),
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                '₱${price.toStringAsFixed(0)}',
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: isPremium ? Colors.white : const Color(0xFFFF4D97),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 2, left: 3),
+                                child: Text(
+                                  '/$billingPeriod',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: isPremium ? Colors.white.withOpacity(0.8) : Colors.black45,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
                     ),
-                    Icon(
-                      Icons.arrow_forward,
-                      color: isPremium ? Colors.white : const Color(0xFFFF4D97),
-                      size: 24,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '₱${price.toStringAsFixed(0)}',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: isPremium ? Colors.white : Colors.black87,
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: isPremium ? Colors.white.withOpacity(0.2) : const Color(0xFFFF4D97).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                    ),
-                    const SizedBox(width: 3),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 2),
-                      child: Text(
-                        '/$billingPeriod',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isPremium ? Colors.white.withOpacity(0.8) : Colors.black54,
-                        ),
+                      child: Icon(
+                        Icons.arrow_forward_ios,
+                        color: isPremium ? Colors.white : const Color(0xFFFF4D97),
+                        size: 14,
                       ),
                     ),
                   ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
-      ),
+        if (isPopular)
+          Positioned(
+            top: 0,
+            right: 20,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFFD700), Color(0xFFFF8C00)],
+                ),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.orange.withOpacity(0.4),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Text(
+                '⭐ MOST POPULAR',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -242,7 +292,8 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
     final canSave = _selectedPlan!['can_save_results'] ?? false;
     final canExportHd = _selectedPlan!['can_export_hd'] ?? false;
     final removeWatermark = _selectedPlan!['remove_watermark'] ?? false;
-    final isPremium = planName.toLowerCase().contains('premium');
+    final lowerPlanName = planName.toLowerCase();
+    final isPremium = lowerPlanName.contains('premium') || lowerPlanName.contains('lifetime');
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),

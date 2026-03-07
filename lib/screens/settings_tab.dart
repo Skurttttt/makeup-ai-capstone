@@ -1,150 +1,211 @@
 // lib/screens/settings_tab.dart
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../auth/login_page.dart';
+import '../auth/login_supabase_page.dart';
 import '../services/supabase_service.dart';
 
-class SettingsTab extends StatelessWidget {
+class SettingsTab extends StatefulWidget {
   const SettingsTab({super.key});
+
+  @override
+  State<SettingsTab> createState() => _SettingsTabState();
+}
+
+class _SettingsTabState extends State<SettingsTab> {
+  String _userEmail = '';
+  String _userName = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  void _loadUserData() {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user != null) {
+      final meta = user.userMetadata ?? {};
+      final fullName = meta['full_name'] as String? ?? '';
+      final name = meta['name'] as String? ?? '';
+      setState(() {
+        _userEmail = user.email ?? '';
+        _userName = fullName.trim().isNotEmpty
+            ? fullName.trim()
+            : name.trim().isNotEmpty
+                ? name.trim()
+                : 'Beauty Enthusiast';
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        title: const Text(
-          'Settings',
-          style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600),
-        ),
-        centerTitle: true,
-      ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            const SizedBox(height: 20),
-            // Profile Section
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFF4D97).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 32,
-                      backgroundColor: const Color(0xFFFF4D97),
-                      child: const Icon(Icons.person, size: 32, color: Colors.white),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Style Enthusiast',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'user@example.com',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[700],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.edit, color: Color(0xFFFF4D97)),
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Edit profile coming soon')),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
+      backgroundColor: const Color(0xFFF8F4F6),
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            pinned: true,
+            backgroundColor: const Color(0xFFFF4D97),
+            elevation: 0,
+            title: const Text(
+              'Settings',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
             ),
-            const SizedBox(height: 24),
+            centerTitle: true,
+          ),
+          SliverToBoxAdapter(
+            child: Column(
+              children: [
+                // Profile Hero Card
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFF4D97), Color(0xFFFF8DC7)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFFF4D97).withOpacity(0.35),
+                        blurRadius: 14,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white.withOpacity(0.6), width: 2.5),
+                        ),
+                        child: CircleAvatar(
+                          radius: 34,
+                          backgroundColor: Colors.white.withOpacity(0.25),
+                          child: const Icon(Icons.person, size: 36, color: Colors.white),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _userName.isEmpty ? 'Beauty Enthusiast' : _userName,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _userEmail.isEmpty ? 'Loading...' : _userEmail,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.white.withOpacity(0.85),
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Edit profile coming soon')),
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.25),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.edit_outlined, color: Colors.white, size: 20),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
 
-            // Settings Sections
-            _buildSection('My Beauty', [
+                // Settings Sections
+                _buildSection('My Beauty', [
               _buildSettingItem(context, Icons.favorite_outline, 'Saved Looks', () {
                 _showSavedLooksDialog(context);
-              }),
-              _buildSettingItem(context, Icons.palette, 'Current Products', () {
-                _showCurrentProductsDialog(context);
-              }),
-            ]),
+                  }, iconColor: const Color(0xFFFF4D97)),
+                  _buildSettingItem(context, Icons.palette, 'Current Products', () {
+                    _showCurrentProductsDialog(context);
+                  }, iconColor: const Color(0xFFFF8DC7)),
+                ]),
 
-            _buildSection('Account Settings', [
-              _buildSettingItem(context, Icons.person_outline, 'Edit Profile', () {}),
-              _buildSettingItem(context, Icons.lock_outline, 'Change Password', () {}),
-              _buildSettingItem(context, Icons.notifications_outlined, 'Notifications', () {}),
-              _buildSettingItem(context, Icons.privacy_tip_outlined, 'Privacy', () {}),
-            ]),
+                _buildSection('Account Settings', [
+                  _buildSettingItem(context, Icons.person_outline, 'Edit Profile', () {}, iconColor: const Color(0xFF4568DC)),
+                  _buildSettingItem(context, Icons.lock_outline, 'Change Password', () {}, iconColor: const Color(0xFF3B82F6)),
+                  _buildSettingItem(context, Icons.notifications_outlined, 'Notifications', () {}, iconColor: const Color(0xFF6366F1)),
+                  _buildSettingItem(context, Icons.privacy_tip_outlined, 'Privacy', () {}, iconColor: const Color(0xFF8B5CF6)),
+                ]),
 
-            _buildSection('Preferences', [
-              _buildSettingItem(context, Icons.language, 'Language', () {}),
-              _buildSettingItem(context, Icons.dark_mode_outlined, 'Dark Mode', () {}),
-              _buildSettingItem(context, Icons.storage, 'Storage', () {}),
-            ]),
+                _buildSection('Preferences', [
+                  _buildSettingItem(context, Icons.language, 'Language', () {}, iconColor: const Color(0xFF06B6D4)),
+                  _buildSettingItem(context, Icons.dark_mode_outlined, 'Dark Mode', () {}, iconColor: const Color(0xFF1E293B)),
+                  _buildSettingItem(context, Icons.storage, 'Storage', () {}, iconColor: const Color(0xFF64748B)),
+                ]),
 
-            _buildSection('Support', [
-              _buildSettingItem(context, Icons.help_outline, 'Help Center', () {}),
-              _buildSettingItem(context, Icons.feedback_outlined, 'Send Feedback', () {}),
-              _buildSettingItem(context, Icons.star_outline, 'Rate Us', () {}),
-              _buildSettingItem(context, Icons.info_outline, 'About', () {}),
-            ]),
+                _buildSection('Support', [
+                  _buildSettingItem(context, Icons.help_outline, 'Help Center', () {}, iconColor: const Color(0xFF10B981)),
+                  _buildSettingItem(context, Icons.feedback_outlined, 'Send Feedback', () {}, iconColor: const Color(0xFF059669)),
+                  _buildSettingItem(context, Icons.star_outline, 'Rate Us', () {}, iconColor: const Color(0xFFF59E0B)),
+                  _buildSettingItem(context, Icons.info_outline, 'About', () {}, iconColor: const Color(0xFF0EA5E9)),
+                ]),
 
-            _buildSection('Legal', [
-              _buildSettingItem(context, Icons.description_outlined, 'Terms of Service', () {}),
-              _buildSettingItem(context, Icons.policy_outlined, 'Privacy Policy', () {}),
-            ]),
+                _buildSection('Legal', [
+                  _buildSettingItem(context, Icons.description_outlined, 'Terms of Service', () {}, iconColor: const Color(0xFF94A3B8)),
+                  _buildSettingItem(context, Icons.policy_outlined, 'Privacy Policy', () {}, iconColor: const Color(0xFF94A3B8)),
+                ]),
 
-            const SizedBox(height: 20),
-            // Logout Button
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  _showLogoutDialog(context);
-                },
-                icon: const Icon(Icons.logout),
-                label: const Text('Logout'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.red,
-                  side: const BorderSide(color: Colors.red, width: 2),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        _showLogoutDialog(context);
+                      },
+                      icon: const Icon(Icons.logout, size: 18),
+                      label: const Text('Log Out', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFFF4D97),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        elevation: 3,
+                        shadowColor: const Color(0xFFFF4D97).withOpacity(0.4),
+                      ),
+                    ),
                   ),
-                  minimumSize: const Size(double.infinity, 0),
                 ),
-              ),
+                const SizedBox(height: 14),
+                Text(
+                  'Version 1.0.0',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[500],
+                  ),
+                ),
+                const SizedBox(height: 32),
+              ],
             ),
-            const SizedBox(height: 12),
-            Text(
-              'Version 1.0.0',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-              ),
-            ),
-            const SizedBox(height: 32),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -154,49 +215,85 @@ class SettingsTab extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          child: Text(
-            title,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[600],
-            ),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+          child: Row(
+            children: [
+              Container(
+                width: 4,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF4D97),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF1A1D2E),
+                  letterSpacing: 1.0,
+                ),
+              ),
+            ],
           ),
         ),
         Container(
-          margin: const EdgeInsets.symmetric(horizontal: 20),
+          margin: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey[200]!),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Column(children: items),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
       ],
     );
   }
 
-  Widget _buildSettingItem(BuildContext context, IconData icon, String title, VoidCallback onTap) {
+  Widget _buildSettingItem(BuildContext context, IconData icon, String title, VoidCallback onTap, {Color iconColor = const Color(0xFFFF4D97)}) {
     return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
-            Icon(icon, size: 24, color: Colors.grey[700]),
-            const SizedBox(width: 16),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: iconColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, size: 20, color: iconColor),
+            ),
+            const SizedBox(width: 14),
             Expanded(
               child: Text(
                 title,
                 style: const TextStyle(
                   fontSize: 15,
-                  color: Colors.black87,
+                  color: Color(0xFF1A1D2E),
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),
-            Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey[400]),
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.grey.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Icon(Icons.arrow_forward_ios, size: 12, color: Colors.grey[400]),
+            ),
           ],
         ),
       ),
@@ -220,7 +317,8 @@ class SettingsTab extends StatelessWidget {
           ),
           ElevatedButton(
             onPressed: () async {
-              Navigator.pop(context);
+              final navigator = Navigator.of(context, rootNavigator: true);
+              navigator.pop();
               
               // Log user logout before signing out
               try {
@@ -240,9 +338,8 @@ class SettingsTab extends StatelessWidget {
               await Supabase.instance.client.auth.signOut();
               
               if (context.mounted) {
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(builder: (context) => const LoginPage()),
+                navigator.pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const LoginSupabasePage()),
                   (route) => false,
                 );
               }

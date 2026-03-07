@@ -14,6 +14,7 @@ class UserSubscriptionPage extends StatefulWidget {
 class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
   final _supabaseService = SupabaseService();
   RealtimeChannel? _subscriptionChannel;
+  RealtimeChannel? _legacySubscriptionChannel;
 
   @override
   void initState() {
@@ -31,6 +32,23 @@ class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
         if (mounted) setState(() {});
       },
     );
+
+    _legacySubscriptionChannel = _supabaseService.client
+        .channel('legacy_user_subscriptions:$userId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'subscriptions',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'account_id',
+            value: userId,
+          ),
+          callback: (payload) {
+            if (mounted) setState(() {});
+          },
+        )
+        .subscribe();
   }
 
   @override
@@ -38,6 +56,10 @@ class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
     final channel = _subscriptionChannel;
     if (channel != null) {
       _supabaseService.client.removeChannel(channel);
+    }
+    final legacyChannel = _legacySubscriptionChannel;
+    if (legacyChannel != null) {
+      _supabaseService.client.removeChannel(legacyChannel);
     }
     super.dispose();
   }
@@ -121,8 +143,12 @@ class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
               final displayName = (plan?['display_name'] ?? planName).toString();
               final isFree = planName.toLowerCase() == 'free';
               final isActive = subscription['status'] == 'active';
-              final periodEnd = subscription['current_period_end'] != null
-                  ? DateTime.parse(subscription['current_period_end'])
+                final canManage = isActive && subscription['_source'] != 'subscriptions';
+                final periodEnd = subscription['current_period_end'] != null
+                  ? DateTime.tryParse(subscription['current_period_end'].toString())
+                  : null;
+                final createdAt = subscription['created_at'] != null
+                  ? DateTime.tryParse(subscription['created_at'].toString())
                   : null;
 
               return Card(
@@ -224,9 +250,7 @@ class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
                           children: [
                             _buildSubscriptionDetail(
                               'Created',
-                              DateFormat('MMM dd, yyyy').format(
-                                DateTime.parse(subscription['created_at'] ?? ''),
-                              ),
+                              createdAt != null ? DateFormat('MMM dd, yyyy').format(createdAt) : 'N/A',
                             ),
                             const SizedBox(height: 8),
                             if (periodEnd != null)
@@ -237,13 +261,13 @@ class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
                             const SizedBox(height: 8),
                             _buildSubscriptionDetail(
                               'Subscription ID',
-                              subscription['id'].toString().substring(0, 8) + '...',
+                              '${subscription['id'].toString().substring(0, 8)}...',
                             ),
                           ],
                         ),
                       ),
                       const SizedBox(height: 16),
-                      if (isActive)
+                      if (canManage)
                         ElevatedButton(
                           onPressed: () => _showManageDialog(subscription),
                           style: ElevatedButton.styleFrom(
@@ -253,6 +277,15 @@ class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
                           child: const Text(
                             'Manage Subscription',
                             style: TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      if (isActive && !canManage)
+                        Text(
+                          'Legacy subscription (read-only)',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 12,
+                            fontStyle: FontStyle.italic,
                           ),
                         ),
                     ],
@@ -342,15 +375,18 @@ class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
           ),
           ElevatedButton(
             onPressed: () async {
+              final pageContext = this.context;
               await _supabaseService.updateSubscription(
                 subscriptionId: subscription['id'],
                 updates: {'status': 'canceled'},
               );
 
-              if (mounted) {
+              if (!mounted) return;
+
+              if (pageContext.mounted) {
                 setState(() {});
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
+                Navigator.pop(pageContext);
+                ScaffoldMessenger.of(pageContext).showSnackBar(
                   const SnackBar(content: Text('Subscription cancelled')),
                 );
               }

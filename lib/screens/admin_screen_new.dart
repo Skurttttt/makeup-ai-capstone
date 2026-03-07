@@ -1,6 +1,5 @@
 // lib/screens/admin_screen_new.dart
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -77,100 +76,26 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
 
   @override
   Widget build(BuildContext context) {
-    if (kIsWeb) {
-      return _buildWebAdmin();
-    }
-    return _buildMobileAdmin();
+    return _buildWebAdmin();
   }
 
   Widget _buildWebAdmin() {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FC),
-      body: SafeArea(
-        child: Row(
-          children: [
-            _buildWebSidebar(),
-            Expanded(
-              child: Column(
-                children: [
-                  _buildWebTopBar(),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(24),
-                      child: _buildCurrentSection(),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildWebSidebar() {
-    const items = [
-      ('Dashboard', Icons.dashboard_outlined),
-      ('Accounts', Icons.people_outline),
-      ('Subscriptions', Icons.card_membership_outlined),
-      ('Profit', Icons.attach_money_outlined),
-      ('Audit Logs', Icons.receipt_long_outlined),
-    ];
-
-    return Container(
-      width: 240,
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      backgroundColor: const Color(0xFFF0F2F8),
+      body: Row(
         children: [
-          const Text(
-            'FaceTune Beauty',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Admin Console',
-            style: TextStyle(fontSize: 12, color: Colors.grey),
-          ),
-          const SizedBox(height: 24),
-          ...List.generate(items.length, (index) {
-            final (label, icon) = items[index];
-            return GestureDetector(
-              onTap: () => setState(() => _currentSection = index),
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: _currentSection == index ? const Color(0xFFFF4D97).withOpacity(0.12) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
+          _buildWebSidebar(),
+          Expanded(
+            child: Column(
+              children: [
+                _buildWebTopBar(),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+                    child: _buildCurrentSection(),
+                  ),
                 ),
-                child: Row(
-                  children: [
-                    Icon(icon, size: 18, color: _currentSection == index ? const Color(0xFFFF4D97) : Colors.grey[700]),
-                    const SizedBox(width: 12),
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: _currentSection == index ? FontWeight.w600 : FontWeight.w500,
-                        color: _currentSection == index ? const Color(0xFFFF4D97) : Colors.grey[800],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }),
-          const Spacer(),
-          ElevatedButton.icon(
-            onPressed: () => _showLogoutDialog(),
-            icon: const Icon(Icons.logout, color: Colors.white),
-            label: const Text('Logout', style: TextStyle(color: Colors.white)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              minimumSize: const Size(double.infinity, 40),
+              ],
             ),
           ),
         ],
@@ -178,31 +103,275 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
     );
   }
 
+  Widget _buildWebSidebar() {
+    final sections = [
+      (label: 'Dashboard',     icon: Icons.dashboard_rounded,       idx: 0),
+      (label: 'Accounts',      icon: Icons.people_rounded,           idx: 1),
+      (label: 'Subscriptions', icon: Icons.card_membership_rounded,  idx: 2),
+      (label: 'Profit',        icon: Icons.bar_chart_rounded,        idx: 3),
+      (label: 'Audit Logs',    icon: Icons.receipt_long_rounded,     idx: 4),
+    ];
+
+    return Container(
+      width: 260,
+      decoration: const BoxDecoration(
+        color: Color(0xFF111827),
+        boxShadow: [
+          BoxShadow(color: Color(0x1A000000), blurRadius: 20, offset: Offset(4, 0)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Branding
+          Container(
+            padding: const EdgeInsets.fromLTRB(20, 28, 20, 24),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF2A1040), Color(0xFF1A1D2E)],
+              ),
+              border: Border(bottom: BorderSide(color: Color(0xFF2A2D3E))),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFFFF4D97), Color(0xFFFF8CC8)],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Color(0xFFFF4D97).withOpacity(0.4),
+                        blurRadius: 10,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.face_retouching_natural, color: Colors.white, size: 24),
+                ),
+                const SizedBox(width: 12),
+                const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('FaceTune Beauty', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: 0.2)),
+                    Text('Admin Console', style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                Expanded(child: Container(height: 1, color: const Color(0xFF2A2D3E))),
+                const SizedBox(width: 8),
+                Text('NAVIGATION', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.grey[600], letterSpacing: 1.5)),
+                const SizedBox(width: 8),
+                Expanded(child: Container(height: 1, color: const Color(0xFF2A2D3E))),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          // Nav items
+          ...sections.map((s) {
+            final isActive = _currentSection == s.idx;
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  onTap: () => setState(() => _currentSection = s.idx),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: EdgeInsets.zero,
+                    decoration: BoxDecoration(
+                      color: isActive ? const Color(0xFFFF4D97).withOpacity(0.12) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(10),
+                      border: isActive ? Border.all(color: const Color(0xFFFF4D97).withOpacity(0.3), width: 1) : null,
+                    ),
+                    child: Row(
+                      children: [
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          width: 3,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: isActive ? const Color(0xFFFF4D97) : Colors.transparent,
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(10),
+                              bottomLeft: Radius.circular(10),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 11),
+                        Icon(
+                          s.icon,
+                          size: 19,
+                          color: isActive ? const Color(0xFFFF4D97) : const Color(0xFF6B7280),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            s.label,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                              color: isActive ? Colors.white : const Color(0xFFB0B7C3),
+                            ),
+                          ),
+                        ),
+                        if (isActive)
+                          Container(
+                            margin: const EdgeInsets.only(right: 12),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFF4D97).withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.chevron_right_rounded, size: 14, color: Color(0xFFFF4D97)),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+          const Spacer(),
+          // Footer / logout
+          Container(
+            margin: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2A2D3E),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                const CircleAvatar(
+                  radius: 16,
+                  backgroundColor: Color(0xFFFF4D97),
+                  child: Text('A', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Admin', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
+                      Text('admin@facetunebeauty.com', style: TextStyle(fontSize: 10, color: Color(0xFF6B7280)), overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.logout_rounded, color: Color(0xFF6B7280), size: 18),
+                  tooltip: 'Logout',
+                  onPressed: _showLogoutDialog,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static const _sectionTitles = ['Dashboard', 'Accounts', 'Subscriptions', 'Profit', 'Audit Logs'];
+  static const _sectionIcons = [
+    Icons.dashboard_rounded,
+    Icons.people_rounded,
+    Icons.card_membership_rounded,
+    Icons.bar_chart_rounded,
+    Icons.receipt_long_rounded,
+  ];
+
   Widget _buildWebTopBar() {
+    final title = _sectionTitles[_currentSection];
+    final icon  = _sectionIcons[_currentSection];
     return Container(
       height: 72,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 28),
       decoration: const BoxDecoration(
         color: Colors.white,
-        border: Border(bottom: BorderSide(color: Color(0xFFE6E8F0))),
+        border: Border(bottom: BorderSide(color: Color(0xFFE8EAF2), width: 1.5)),
+        boxShadow: [BoxShadow(color: Color(0x0A000000), blurRadius: 12, offset: Offset(0, 3))],
       ),
       child: Row(
         children: [
-          const Text(
-            'Admin Dashboard',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          Icon(icon, size: 20, color: const Color(0xFFFF4D97)),
+          const SizedBox(width: 10),
+          Text(
+            title,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1A1D2E)),
           ),
-          const SizedBox(width: 24),
-          Expanded(child: Container()),
-          const SizedBox(width: 16),
-          _buildLiveTime(),
-          const SizedBox(width: 12),
-          IconButton(onPressed: () {}, icon: const Icon(Icons.notifications_none)),
           const SizedBox(width: 8),
-          CircleAvatar(
-            radius: 16,
-            backgroundColor: const Color(0xFFFF4D97),
-            child: const Text('A', style: TextStyle(color: Colors.white)),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFF4D97).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              'Admin',
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: const Color(0xFFFF4D97)),
+            ),
+          ),
+          const Spacer(),
+          _buildLiveTime(),
+          const SizedBox(width: 20),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0F2F8),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFE6E8F0)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.circle, size: 8, color: Colors.green[400]),
+                const SizedBox(width: 6),
+                Text('Live', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.green[700])),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          Stack(
+            children: [
+              IconButton(
+                onPressed: () {},
+                icon: const Icon(Icons.notifications_outlined, size: 22, color: Color(0xFF6B7280)),
+                tooltip: 'Notifications',
+              ),
+              Positioned(
+                right: 8,
+                top: 8,
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFF4D97),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 4),
+          const CircleAvatar(
+            radius: 17,
+            backgroundColor: Color(0xFFFF4D97),
+            child: Text('A', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -282,14 +451,15 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Wrap(
-              spacing: 16,
-              runSpacing: 16,
+            Row(
               children: [
-                _buildKpiCard('Total Accounts', '$totalAccounts', '+2.1%', Colors.blue),
-                _buildKpiCard('Active Subscriptions', '$activeSubscriptions', '+1.5%', const Color(0xFFFF4D97)),
-                _buildKpiCard('Monthly Sales', '₱${currentMonthProfit.toStringAsFixed(2)}', '+0%', Colors.green),
-                _buildKpiCard('Churn Rate', '1.8%', '-0.3%', Colors.orange),
+                Expanded(child: _buildKpiCard('Total Accounts', '$totalAccounts', '+2.1%', Colors.blue)),
+                const SizedBox(width: 16),
+                Expanded(child: _buildKpiCard('Active Subscriptions', '$activeSubscriptions', '+1.5%', const Color(0xFFFF4D97))),
+                const SizedBox(width: 16),
+                Expanded(child: _buildKpiCard('Monthly Sales', '₱${currentMonthProfit.toStringAsFixed(2)}', '+0%', Colors.green)),
+                const SizedBox(width: 16),
+                Expanded(child: _buildKpiCard('Churn Rate', '1.8%', '-0.3%', Colors.orange)),
               ],
             ),
             const SizedBox(height: 16),
@@ -605,14 +775,16 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            _buildSectionHeader('Account Management', 'View, search and manage all user accounts', Icons.people_rounded, Colors.blue),
+            const SizedBox(height: 20),
             // Summary Cards
-            Wrap(
-              spacing: 16,
-              runSpacing: 16,
+            Row(
               children: [
-                _buildKpiCard('Total Users', '$totalUsers', '+${(totalUsers > 0 ? 5 : 0)}%', Colors.blue),
-                _buildKpiCard('Admin Users', '$adminCount', '+0%', Colors.purple),
-                _buildKpiCard('Regular Users', '$regularUsers', '+${(regularUsers > 0 ? 5 : 0)}%', Colors.cyan),
+                Expanded(child: _buildKpiCard('Total Users', '$totalUsers', '+${(totalUsers > 0 ? 5 : 0)}%', Colors.blue)),
+                const SizedBox(width: 16),
+                Expanded(child: _buildKpiCard('Admin Users', '$adminCount', '+0%', Colors.purple)),
+                const SizedBox(width: 16),
+                Expanded(child: _buildKpiCard('Regular Users', '$regularUsers', '+${(regularUsers > 0 ? 5 : 0)}%', Colors.cyan)),
               ],
             ),
             const SizedBox(height: 24),
@@ -620,7 +792,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Manage Accounts', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.black87)),
+                const Text('Manage Accounts', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1A1D2E))),
                 ElevatedButton.icon(
                   onPressed: () {},
                   icon: const Icon(Icons.add, color: Colors.white, size: 18),
@@ -686,16 +858,19 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                   ),
                 ],
               ),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  headingRowColor: MaterialStateProperty.all(Colors.grey[50]),
-                  dataRowHeight: 56,
-                  headingRowHeight: 48,
-                  dividerThickness: 1,
-                  columnSpacing: 24,
-                  columns: const [
-                    DataColumn(label: Text('Name', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
+              child: LayoutBuilder(
+                builder: (context, constraints) => SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                    child: DataTable(
+                      headingRowColor: WidgetStateProperty.all(Colors.grey[50]),
+                      dataRowHeight: 56,
+                      headingRowHeight: 48,
+                      dividerThickness: 1,
+                      columnSpacing: 24,
+                      columns: const [
+                        DataColumn(label: Text('Name', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
                     DataColumn(label: Text('Email', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
                     DataColumn(label: Text('Role', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
                     DataColumn(label: Text('Subscription', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
@@ -723,7 +898,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                     final planName = userSub?['subscription_plans']?['name'] ?? 'Free';
                     
                     return DataRow(
-                      color: MaterialStateProperty.all(
+                      color: WidgetStateProperty.all(
                         isEvenRow ? Colors.white : Colors.grey[50],
                       ),
                       cells: [
@@ -791,6 +966,8 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                 ),
               ),
             ),
+          ),
+        ),
           ],
         );
       },
@@ -818,14 +995,16 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            _buildSectionHeader('Subscription Management', 'Manage plans, pricing and user subscriptions', Icons.card_membership_rounded, Colors.orange),
+            const SizedBox(height: 20),
             // Summary Cards
-            Wrap(
-              spacing: 16,
-              runSpacing: 16,
+            Row(
               children: [
-                _buildKpiCard('Total Subscriptions', '${subscriptions.length}', '+${(subscriptions.isNotEmpty ? 3 : 0)}%', Colors.orange),
-                _buildKpiCard('Active Subscriptions', '$activeCount', '+${(activeCount > 0 ? 2 : 0)}%', const Color(0xFFFF4D97)),
-                _buildKpiCard('Revenue', '₱${totalRevenue.toStringAsFixed(0)}', '+${(totalRevenue > 0 ? 5 : 0)}%', Colors.green),
+                Expanded(child: _buildKpiCard('Total Subscriptions', '${subscriptions.length}', '+${(subscriptions.isNotEmpty ? 3 : 0)}%', Colors.orange)),
+                const SizedBox(width: 16),
+                Expanded(child: _buildKpiCard('Active Subscriptions', '$activeCount', '+${(activeCount > 0 ? 2 : 0)}%', const Color(0xFFFF4D97))),
+                const SizedBox(width: 16),
+                Expanded(child: _buildKpiCard('Revenue', '₱${totalRevenue.toStringAsFixed(0)}', '+${(totalRevenue > 0 ? 5 : 0)}%', Colors.green)),
               ],
             ),
             const SizedBox(height: 24),
@@ -833,7 +1012,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Subscription Plans', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.black87)),
+                const Text('Subscription Plans', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1A1D2E))),
                 ElevatedButton.icon(
                   onPressed: () => _showAddPlanDialog(),
                   icon: const Icon(Icons.add, color: Colors.white),
@@ -884,16 +1063,19 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                       ),
                     ],
                   ),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: DataTable(
-                      headingRowColor: MaterialStateProperty.all(Colors.grey[50]),
-                      dataRowHeight: 56,
-                      headingRowHeight: 48,
-                      dividerThickness: 1,
-                      columnSpacing: 24,
-                      columns: const [
-                        DataColumn(label: Text('Plan Name', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) => SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                        child: DataTable(
+                          headingRowColor: WidgetStateProperty.all(Colors.grey[50]),
+                          dataRowHeight: 56,
+                          headingRowHeight: 48,
+                          dividerThickness: 1,
+                          columnSpacing: 24,
+                          columns: const [
+                            DataColumn(label: Text('Plan Name', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
                         DataColumn(label: Text('Price', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
                         DataColumn(label: Text('Billing Period', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
                         DataColumn(label: Text('Description', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
@@ -903,7 +1085,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                         final plan = plans[index];
                         final isEvenRow = index % 2 == 0;
                         return DataRow(
-                          color: MaterialStateProperty.all(
+                          color: WidgetStateProperty.all(
                             isEvenRow ? Colors.white : Colors.grey[50],
                           ),
                           cells: [
@@ -943,7 +1125,9 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                       }),
                     ),
                   ),
-                );
+                ),
+              ),
+            );
               },
             ),
             const SizedBox(height: 32),
@@ -951,7 +1135,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Manage User Subscriptions', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.black87)),
+                const Text('Manage User Subscriptions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1A1D2E))),
                 ElevatedButton.icon(
                   onPressed: () => _showAssignSubscriptionDialog(),
                   icon: const Icon(Icons.person_add, color: Colors.white),
@@ -981,16 +1165,19 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                   ),
                 ],
               ),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  headingRowColor: MaterialStateProperty.all(Colors.grey[50]),
-                  dataRowHeight: 56,
-                  headingRowHeight: 48,
-                  dividerThickness: 1,
-                  columnSpacing: 24,
-                  columns: const [
-                    DataColumn(label: Text('User', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
+              child: LayoutBuilder(
+                builder: (context, constraints) => SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                    child: DataTable(
+                      headingRowColor: WidgetStateProperty.all(Colors.grey[50]),
+                      dataRowHeight: 56,
+                      headingRowHeight: 48,
+                      dividerThickness: 1,
+                      columnSpacing: 24,
+                      columns: const [
+                        DataColumn(label: Text('User', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
                     DataColumn(label: Text('Plan', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
                     DataColumn(label: Text('Price', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
                     DataColumn(label: Text('Status', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
@@ -1009,7 +1196,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                     final isEvenRow = index % 2 == 0;
 
                     return DataRow(
-                      color: MaterialStateProperty.all(isEvenRow ? Colors.white : Colors.grey[50]),
+                      color: WidgetStateProperty.all(isEvenRow ? Colors.white : Colors.grey[50]),
                       cells: [
                         DataCell(Text(userName, style: const TextStyle(color: Colors.black87, fontSize: 13))),
                         DataCell(Text(planName, style: const TextStyle(color: Colors.black87, fontSize: 13))),
@@ -1054,6 +1241,8 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                 ),
               ),
             ),
+          ),
+        ),
           ],
         );
 
@@ -1065,8 +1254,8 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Sales Tracking', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.black87)),
-        const SizedBox(height: 16),
+        _buildSectionHeader('Sales Tracking', 'Revenue analytics and monthly/daily breakdowns', Icons.trending_up_rounded, Colors.green),
+        const SizedBox(height: 20),
         FutureBuilder(
           future: _supabaseService.getAllSubscriptions(),
           builder: (context, snapshot) {
@@ -1091,13 +1280,13 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
             return Column(
               children: [
                 // Summary Cards
-                Wrap(
-                  spacing: 16,
-                  runSpacing: 16,
+                Row(
                   children: [
-                    _buildProfitCard('Total Sales', '₱${totalRevenue.toStringAsFixed(2)}', Colors.green),
-                    _buildProfitCard('Avg Monthly', '₱${avgMonthly.toStringAsFixed(2)}', Colors.blue),
-                    _buildProfitCard('Active Subs', '${subscriptions.where((s) => s['status'] == 'active').length}', const Color(0xFFFF4D97)),
+                    Expanded(child: _buildProfitCard('Total Sales', '₱${totalRevenue.toStringAsFixed(2)}', Colors.green)),
+                    const SizedBox(width: 16),
+                    Expanded(child: _buildProfitCard('Avg Monthly', '₱${avgMonthly.toStringAsFixed(2)}', Colors.blue)),
+                    const SizedBox(width: 16),
+                    Expanded(child: _buildProfitCard('Active Subs', '${subscriptions.where((s) => s['status'] == 'active').length}', const Color(0xFFFF4D97))),
                   ],
                 ),
                 const SizedBox(height: 24),
@@ -1446,7 +1635,6 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
 
   Widget _buildProfitCard(String title, String value, Color color) {
     return Container(
-      width: 200,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1516,14 +1704,16 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            _buildSectionHeader('Audit Logs', 'Track all system events and admin activity', Icons.receipt_long_rounded, Colors.indigo),
+            const SizedBox(height: 20),
             // Summary Cards
-            Wrap(
-              spacing: 16,
-              runSpacing: 16,
+            Row(
               children: [
-                _buildKpiCard('Total Events', '${logs.length}', '+${logs.isNotEmpty ? 8 : 0}%', const Color(0xFF7C3AED)),
-                _buildKpiCard('Last 24 Hours', '$last24HourLogsCount', '+${last24HourLogsCount > 0 ? 15 : 0}%', Colors.blue),
-                _buildKpiCard('Top Action', topAction, '+12%', Colors.indigo),
+                Expanded(child: _buildKpiCard('Total Events', '${logs.length}', '+${logs.isNotEmpty ? 8 : 0}%', const Color(0xFF7C3AED))),
+                const SizedBox(width: 16),
+                Expanded(child: _buildKpiCard('Last 24 Hours', '$last24HourLogsCount', '+${last24HourLogsCount > 0 ? 15 : 0}%', Colors.blue)),
+                const SizedBox(width: 16),
+                Expanded(child: _buildKpiCard('Top Action', topAction, '+12%', Colors.indigo)),
               ],
             ),
             const SizedBox(height: 24),
@@ -1531,7 +1721,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Audit Log Details', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.black87)),
+                const Text('Audit Log Details', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1A1D2E))),
                 Row(
                   children: [
                     ElevatedButton.icon(
@@ -1622,16 +1812,19 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                     ),
                   ],
                 ),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: DataTable(
-                    headingRowColor: MaterialStateProperty.all(Colors.grey[50]),
-                    dataRowHeight: 56,
-                    headingRowHeight: 48,
-                    dividerThickness: 1,
-                    columnSpacing: 24,
-                    columns: const [
-                      DataColumn(label: Text('Time', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
+                child: LayoutBuilder(
+                  builder: (context, constraints) => SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                      child: DataTable(
+                        headingRowColor: WidgetStateProperty.all(Colors.grey[50]),
+                        dataRowHeight: 56,
+                        headingRowHeight: 48,
+                        dividerThickness: 1,
+                        columnSpacing: 24,
+                        columns: const [
+                          DataColumn(label: Text('Time', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
                       DataColumn(label: Text('Actor', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
                       DataColumn(label: Text('Action', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
                       DataColumn(label: Text('Target', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
@@ -1643,7 +1836,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                       final isEvenRow = index % 2 == 0;
 
                       return DataRow(
-                        color: MaterialStateProperty.all(
+                        color: WidgetStateProperty.all(
                           isEvenRow ? Colors.white : Colors.grey[50],
                         ),
                         cells: [
@@ -1664,6 +1857,8 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                   ),
                 ),
               ),
+            ),
+          ),
           ],
         );
       },
@@ -1672,7 +1867,6 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
 
   Widget _buildKpiCard(String title, String value, String delta, Color color) {
     return Container(
-      width: 240,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -1755,7 +1949,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: role,
+              initialValue: role,
               items: const [
                 DropdownMenuItem(value: 'user', child: Text('User')),
                 DropdownMenuItem(value: 'admin', child: Text('Admin')),
@@ -1828,7 +2022,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: billingPeriod,
+                  initialValue: billingPeriod,
                   items: const [
                     DropdownMenuItem(value: 'month', child: Text('Monthly')),
                     DropdownMenuItem(value: 'year', child: Text('Yearly')),
@@ -1919,7 +2113,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: billingPeriod,
+                  initialValue: billingPeriod,
                   items: const [
                     DropdownMenuItem(value: 'month', child: Text('Monthly')),
                     DropdownMenuItem(value: 'year', child: Text('Yearly')),
@@ -2252,6 +2446,45 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
     return Colors.grey; // Free
   }
 
+  Widget _buildSectionHeader(String title, String subtitle, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [color.withOpacity(0.06), Colors.transparent],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.15), width: 1.5),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color, size: 22),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Color(0xFF1A1D2E))),
+                const SizedBox(height: 2),
+                Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showLogoutDialog() {
     showDialog(
       context: context,
@@ -2292,55 +2525,4 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
     );
   }
 
-  Widget _buildMobileAdmin() {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Admin Dashboard'),
-        elevation: 0,
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _showLogoutDialog,
-          ),
-        ],
-      ),
-      body: _buildCurrentSection(),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentSection,
-        onTap: (index) => setState(() => _currentSection = index),
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: const Color(0xFFFF4D97),
-        unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard_outlined),
-            activeIcon: Icon(Icons.dashboard),
-            label: 'Dashboard',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.people_outlined),
-            activeIcon: Icon(Icons.people),
-            label: 'Accounts',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.card_membership_outlined),
-            activeIcon: Icon(Icons.card_membership),
-            label: 'Subscriptions',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.attach_money_outlined),
-            activeIcon: Icon(Icons.attach_money),
-            label: 'Profit',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.receipt_outlined),
-            activeIcon: Icon(Icons.receipt),
-            label: 'Logs',
-          ),
-        ],
-      ),
-    );
-  }
 }

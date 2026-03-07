@@ -369,14 +369,70 @@ class SupabaseService {
   /// Get user's subscriptions with plan details
   Future<List<Map<String, dynamic>>> getUserSubscriptions(String userId) async {
     try {
-      final response = await client
+      final modernResponse = await client
           .from('user_subscriptions')
           .select('*, subscription_plans(name, display_name, price, currency, billing_period, badge_text, badge_color, daily_scan_limit, available_looks, can_save_results, can_export_hd, remove_watermark)')
           .eq('user_id', userId)
           .order('created_at', ascending: false);
-      final subscriptions = List<Map<String, dynamic>>.from(response);
-      await _expireExpiredSubscriptions(subscriptions);
-      return subscriptions;
+
+        final modernSubscriptions = List<Map<String, dynamic>>.from(modernResponse)
+          .map((subscription) => {
+            ...subscription,
+            '_source': 'user_subscriptions',
+            })
+          .toList();
+      await _expireExpiredSubscriptions(modernSubscriptions);
+
+      final legacyResponse = await client
+          .from('subscriptions')
+          .select('id, account_id, plan, plan_id, status, current_period_end, created_at')
+          .eq('account_id', userId)
+          .order('created_at', ascending: false);
+
+      final now = DateTime.now();
+      final legacySubscriptions = List<Map<String, dynamic>>.from(legacyResponse).map((legacy) {
+        final statusRaw = (legacy['status'] ?? 'active').toString();
+        final statusLower = statusRaw.toLowerCase();
+        final periodEnd = legacy['current_period_end']?.toString();
+        final parsedEnd = periodEnd == null ? null : DateTime.tryParse(periodEnd);
+
+        final normalizedStatus = (statusLower == 'active' && parsedEnd != null && parsedEnd.isBefore(now))
+            ? 'expired'
+            : statusRaw;
+
+        final legacyPlanName = (legacy['plan'] ?? 'legacy_plan').toString();
+        final displayName = legacyPlanName
+            .split('_')
+            .where((part) => part.trim().isNotEmpty)
+            .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
+            .join(' ');
+
+        return {
+          'id': legacy['id'],
+          'user_id': legacy['account_id'],
+          'plan_id': legacy['plan_id'],
+          'status': normalizedStatus,
+          'current_period_end': legacy['current_period_end'],
+          'created_at': legacy['created_at'],
+          '_source': 'subscriptions',
+          'subscription_plans': {
+            'name': legacyPlanName,
+            'display_name': displayName.isEmpty ? legacyPlanName : displayName,
+            'price': 0,
+            'currency': 'PHP',
+            'billing_period': '',
+          },
+        };
+      }).toList();
+
+      final merged = [...modernSubscriptions, ...legacySubscriptions];
+      merged.sort((a, b) {
+        final aDate = DateTime.tryParse((a['created_at'] ?? '').toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final bDate = DateTime.tryParse((b['created_at'] ?? '').toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return bDate.compareTo(aDate);
+      });
+
+      return merged;
     } catch (e) {
       throw 'Failed to fetch user subscriptions: $e';
     }
