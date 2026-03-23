@@ -110,6 +110,59 @@ class _InstructionsPageState extends State<InstructionsPage> {
     );
   }
 
+  Widget _buildWhyThisColorSection({
+    required String title,
+    required String description,
+  }) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.85),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: const Color(0xFFFF4D97).withOpacity(0.18),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.auto_awesome,
+                size: 18,
+                color: Color(0xFFFF4D97),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFFFF4D97),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            description,
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey[800],
+              height: 1.6,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildAIStepsPager() {
     if (_loadingAI) {
       return Container(
@@ -222,7 +275,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 360,
+          height: 470,
           child: PageView.builder(
             controller: _pageController,
             itemCount: _aiSteps.length,
@@ -236,7 +289,10 @@ class _InstructionsPageState extends State<InstructionsPage> {
               final stepNumber = step['stepNumber']?.toString() ?? '';
               final title = step['title']?.toString() ?? '';
               final instruction = step['instruction']?.toString() ?? '';
+              final whyThisColorSuitsYou =
+                  step['whyThisColorSuitsYou']?.toString() ?? '';
               final targetArea = step['targetArea']?.toString() ?? '';
+              final isFinalLookStep = step['stepNumber'] == 7;
 
               return Container(
                 width: double.infinity,
@@ -249,36 +305,45 @@ class _InstructionsPageState extends State<InstructionsPage> {
                     color: const Color(0xFFFF4D97).withOpacity(0.15),
                   ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Step $stepNumber • $title',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFFFF4D97),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Step $stepNumber • $title',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFFFF4D97),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      instruction,
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: Colors.grey[800],
-                        height: 1.7,
+                      const SizedBox(height: 16),
+                      Text(
+                        instruction,
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: Colors.grey[800],
+                          height: 1.7,
+                        ),
                       ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      'Target Area: $targetArea',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey[600],
-                        fontStyle: FontStyle.italic,
+                      if (whyThisColorSuitsYou.trim().isNotEmpty)
+                        _buildWhyThisColorSection(
+                          title: isFinalLookStep
+                              ? 'Why this look suits you'
+                              : 'Why this color suits you',
+                          description: whyThisColorSuitsYou,
+                        ),
+                      const SizedBox(height: 18),
+                      Text(
+                        'Target Area: $targetArea',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey[600],
+                          fontStyle: FontStyle.italic,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               );
             },
