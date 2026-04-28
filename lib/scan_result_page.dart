@@ -569,7 +569,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
         {
           'name': 'Ruby Red Lipstick',
           'brand': 'Glamour Beauty',
-          'price': '\$24.99',
+          'price': '₱1,374',
           'rating': '4.8',
           'icon': Icons.color_lens,
           'color': Colors.red,
@@ -577,7 +577,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
         {
           'name': 'Rosy Pink Matte',
           'brand': 'Elegant Cosmetics',
-          'price': '\$19.99',
+          'price': '₱1,099',
           'rating': '4.7',
           'icon': Icons.color_lens,
           'color': Colors.pink,
@@ -585,7 +585,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
         {
           'name': 'Nude Bliss',
           'brand': 'Natural Beauty',
-          'price': '\$22.99',
+          'price': '₱1,264',
           'rating': '4.6',
           'icon': Icons.color_lens,
           'color': Colors.brown,
@@ -595,7 +595,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
         {
           'name': 'Shimmer Eyeshadow Palette',
           'brand': 'Eye Couture',
-          'price': '\$34.99',
+          'price': '₱1,924',
           'rating': '4.9',
           'icon': Icons.remove_red_eye,
           'color': Colors.purple,
@@ -603,7 +603,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
         {
           'name': 'Golden Hour Palette',
           'brand': 'Sun Glow',
-          'price': '\$29.99',
+          'price': '₱1,649',
           'rating': '4.8',
           'icon': Icons.remove_red_eye,
           'color': Colors.amber,
@@ -611,7 +611,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
         {
           'name': 'Smokey Noir Set',
           'brand': 'Dark Matter',
-          'price': '\$27.99',
+          'price': '₱1,539',
           'rating': '4.7',
           'icon': Icons.remove_red_eye,
           'color': Colors.grey,
@@ -621,7 +621,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
         {
           'name': 'Perfect Coverage Foundation',
           'brand': 'Pro Base',
-          'price': '\$39.99',
+          'price': '₱2,199',
           'rating': '4.8',
           'icon': Icons.face,
           'color': Colors.amber,
@@ -629,7 +629,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
         {
           'name': 'Flawless Finish',
           'brand': 'Skin Perfect',
-          'price': '\$35.99',
+          'price': '₱1,979',
           'rating': '4.7',
           'icon': Icons.face,
           'color': Colors.orange,
@@ -637,7 +637,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
         {
           'name': 'Natural Glow Base',
           'brand': 'Pure Beauty',
-          'price': '\$32.99',
+          'price': '₱1,814',
           'rating': '4.6',
           'icon': Icons.face,
           'color': Colors.brown,
@@ -647,7 +647,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
         {
           'name': 'Rose Blush',
           'brand': 'Cheek Perfection',
-          'price': '\$22.99',
+          'price': '₱1,264',
           'rating': '4.8',
           'icon': Icons.favorite,
           'color': Colors.pink,
@@ -655,7 +655,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
         {
           'name': 'Coral Peach Blush',
           'brand': 'Warm Tones',
-          'price': '\$21.99',
+          'price': '₱1,209',
           'rating': '4.7',
           'icon': Icons.favorite,
           'color': Colors.deepOrange,
@@ -663,7 +663,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
         {
           'name': 'Sunset Bronze',
           'brand': 'Bronzer Blend',
-          'price': '\$24.99',
+          'price': '₱1,374',
           'rating': '4.9',
           'icon': Icons.favorite,
           'color': Colors.brown,
@@ -673,7 +673,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
         {
           'name': 'Brow Defining Pencil',
           'brand': 'Brow Expert',
-          'price': '\$18.99',
+          'price': '₱1,044',
           'rating': '4.7',
           'icon': Icons.edit,
           'color': Colors.brown,
@@ -681,7 +681,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
         {
           'name': 'Micro Brow Pen',
           'brand': 'Precision Beauty',
-          'price': '\$21.99',
+          'price': '₱1,209',
           'rating': '4.8',
           'icon': Icons.edit,
           'color': Colors.grey,
@@ -689,7 +689,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
         {
           'name': 'Brow Filler Gel',
           'brand': 'Hold Strong',
-          'price': '\$17.99',
+          'price': '₱989',
           'rating': '4.6',
           'icon': Icons.edit,
           'color': Colors.blueGrey,
@@ -699,7 +699,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
         {
           'name': 'Waterproof Liquid Eyeliner',
           'brand': 'Line Perfect',
-          'price': '\$16.99',
+          'price': '₱934',
           'rating': '4.8',
           'icon': Icons.brush,
           'color': Colors.black,
@@ -707,7 +707,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
         {
           'name': 'Gel Eyeliner',
           'brand': 'Smooth Lines',
-          'price': '\$19.99',
+          'price': '₱1,099',
           'rating': '4.7',
           'icon': Icons.brush,
           'color': Colors.indigo,
@@ -715,7 +715,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
         {
           'name': 'Felt Tip Eyeliner',
           'brand': 'Precision Ink',
-          'price': '\$18.99',
+          'price': '₱1,044',
           'rating': '4.9',
           'icon': Icons.brush,
           'color': Colors.black87,

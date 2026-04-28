@@ -12,6 +12,7 @@ import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'utils/logout_util.dart';
 
 import 'instructions_page.dart';
 import 'look_engine.dart';
@@ -20,6 +21,7 @@ import 'painters/makeup_overlay_painter.dart';
 import 'scan_result_page.dart';
 import 'home_screen.dart';
 import 'screens/admin_screen_new.dart';
+import 'screens/client_screen.dart';
 import 'auth/login_supabase_page.dart';
 
 Future<void> main() async {
@@ -170,8 +172,8 @@ class AuthCheckScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 16),
                           ElevatedButton(
-                            onPressed: () async {
-                              await Supabase.instance.client.auth.signOut();
+                            onPressed: () {
+                              showLogoutConfirmationDialog(context, role: 'unknown');
                             },
                             child: const Text('Sign out'),
                           ),
@@ -185,6 +187,12 @@ class AuthCheckScreen extends StatelessWidget {
               final role = roleSnapshot.data;
               if (role == 'admin') {
                 return const AdminScreenNew();
+              }
+              if (role == 'client') {
+                return const ClientScreen();
+              }
+              if (role == 'user') {
+                return const HomeScreen();
               }
 
               return _showRoleDialog(context, role ?? 'unknown', session.user.id, session.user.email ?? 'unknown');
@@ -202,6 +210,12 @@ class AuthCheckScreen extends StatelessWidget {
 Widget _showRoleDialog(BuildContext context, String role, String userId, String email) {
   if (role == 'admin') {
     return const AdminScreenNew();
+  }
+  if (role == 'client') {
+    return const ClientScreen();
+  }
+  if (role == 'user') {
+    return const HomeScreen();
   }
 
   return Scaffold(
@@ -221,13 +235,8 @@ Widget _showRoleDialog(BuildContext context, String role, String userId, String 
         ),
         actions: [
           TextButton(
-            onPressed: () async {
-              await Supabase.instance.client.auth.signOut();
-              if (context.mounted) {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => const LoginSupabasePage()),
-                );
-              }
+            onPressed: () {
+              showLogoutConfirmationDialog(context, role: role);
             },
             child: const Text('Sign out'),
           ),

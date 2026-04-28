@@ -1,5 +1,6 @@
 // lib/screens/subscription_tab.dart
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/supabase_service.dart';
 
 class SubscriptionTab extends StatefulWidget {
@@ -544,7 +545,7 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
             ),
             const SizedBox(height: 12),
             const Text(
-              'This will activate your subscription. You can cancel anytime.',
+              'You will be redirected to PayMongo to complete payment.',
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ],
@@ -562,67 +563,21 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
               Navigator.pop(context);
 
               try {
-                // Get current user
-                final currentUser = _supabaseService.client.auth.currentUser;
-                if (currentUser == null) {
-                  throw 'User not logged in';
-                }
-
-                // Calculate end date based on billing period
-                DateTime endDate;
-                final period = billingPeriod.toLowerCase();
-                if (period.contains('day')) {
-                  endDate = DateTime.now().add(const Duration(days: 1));
-                } else if (period.contains('week')) {
-                  endDate = DateTime.now().add(const Duration(days: 7));
-                } else if (period.contains('month')) {
-                  endDate = DateTime.now().add(const Duration(days: 30));
-                } else if (period.contains('year')) {
-                  endDate = DateTime.now().add(const Duration(days: 365));
-                } else if (period.contains('lifetime')) {
-                  endDate = DateTime.now().add(const Duration(days: 36500));
-                } else {
-                  endDate = DateTime.now().add(const Duration(days: 30));
-                }
-
-                // Create the subscription in database
-                await _supabaseService.createUserSubscription(
-                  accountId: currentUser.id,
+                final response = await _supabaseService.createPaymongoCheckoutForPlan(
                   planId: _selectedPlan!['id'],
-                  status: 'active',
-                  currentPeriodEnd: endDate,
-                  amountPaid: price.toDouble(),
                 );
 
-                // Log subscription purchase for audit
-                await _supabaseService.logAdminAction(
-                  action: 'subscription_purchase',
-                  target: 'subscription',
-                  metadata: {
-                    'plan_name': planName,
-                    'price': price,
-                    'billing_period': billingPeriod,
-                    'purchase_time': DateTime.now().toIso8601String(),
-                    'end_date': endDate.toIso8601String(),
-                  },
-                );
-
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('$planName subscription activated! 🎉'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                  setState(() {
-                    _selectedPlan = null;
-                  });
+                final checkoutUrl = response['checkout_url']?.toString();
+                if (checkoutUrl == null || checkoutUrl.isEmpty) {
+                  throw 'Missing checkout URL';
                 }
+
+                await _openCheckoutUrl(checkoutUrl);
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Failed to activate subscription: $e'),
+                      content: Text('Failed to start checkout: $e'),
                       backgroundColor: Colors.red,
                     ),
                   );
@@ -640,5 +595,21 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
         ],
       ),
     );
+  }
+
+  Future<void> _openCheckoutUrl(String url) async {
+    final uri = Uri.parse(url);
+    final launched = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
+    if (!launched && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open checkout link.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 }

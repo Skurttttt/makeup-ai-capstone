@@ -35,3 +35,28 @@ dependencies:
 ```
 
 Then run: flutter pub get
+
+## Step 5: PayMongo (Payments)
+Create PayMongo API keys and add these Supabase Edge Function secrets:
+
+```
+PAYMONGO_SECRET_KEY=your_paymongo_secret_key
+PAYMONGO_SUCCESS_URL=https://your-domain.com/payment/success
+PAYMONGO_CANCEL_URL=https://your-domain.com/payment/cancel
+```
+
+Deploy Edge Functions:
+- create-paymongo-checkout
+- paymongo-webhook
+
+Create a PayMongo webhook that points to:
+```
+https://<your-project>.supabase.co/functions/v1/paymongo-webhook
+```
+
+Enable these webhook events:
+- checkout_session.payment.paid
+- payment.failed
+- subscription.past_due
+- subscription.unpaid
+- subscription.updated

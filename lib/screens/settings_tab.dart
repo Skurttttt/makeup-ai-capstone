@@ -1,8 +1,7 @@
 // lib/screens/settings_tab.dart
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../auth/login_supabase_page.dart';
-import '../services/supabase_service.dart';
+import '../utils/logout_util.dart';
 
 class SettingsTab extends StatefulWidget {
   const SettingsTab({super.key});
@@ -301,60 +300,7 @@ class _SettingsTabState extends State<SettingsTab> {
   }
 
   void _showLogoutDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.grey),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final navigator = Navigator.of(context, rootNavigator: true);
-              navigator.pop();
-              
-              // Log user logout before signing out
-              try {
-                final supabaseService = SupabaseService();
-                await supabaseService.logAdminAction(
-                  action: 'user_logout',
-                  target: 'auth',
-                  metadata: {
-                    'email': Supabase.instance.client.auth.currentUser?.email,
-                    'logout_time': DateTime.now().toIso8601String(),
-                  },
-                );
-              } catch (e) {
-                debugPrint('Failed to log logout audit: $e');
-              }
-              
-              await Supabase.instance.client.auth.signOut();
-              
-              if (context.mounted) {
-                navigator.pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const LoginSupabasePage()),
-                  (route) => false,
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text('Logout'),
-          ),
-        ],
-      ),
-    );
+    showLogoutConfirmationDialog(context, role: 'user');
   }
 
   void _showSavedLooksDialog(BuildContext context) {

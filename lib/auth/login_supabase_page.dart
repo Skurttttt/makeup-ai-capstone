@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../home_screen.dart';
 import '../screens/admin_screen_new.dart';
+import '../screens/client_screen.dart';
 import '../services/supabase_service.dart';
 import 'register_supabase_page.dart';
 import 'forgot_password_page.dart';
@@ -21,7 +22,6 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
   bool _obscurePassword = true;
   bool _rememberMe = false;
   bool _isLoading = false;
-  String _selectedClientType = 'individual'; // 'individual' or 'business'
 
   @override
   void dispose() {
@@ -61,28 +61,18 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
 
       // Check user role and route accordingly
       String? role;
+      String? accountType;
       try {
         final profile = await Supabase.instance.client
             .from('accounts')
-            .select('role')
+            .select('role, account_type')
             .eq('id', user!.id)
             .single();
         role = profile['role'] as String?;
+        accountType = profile['account_type'] as String?;
       } catch (_) {
         role = 'user';
-      }
-
-      // Keep account/client type fields synchronized with selected login type
-      try {
-        await Supabase.instance.client
-            .from('accounts')
-            .update({
-              'client_type': _selectedClientType,
-              'account_type': _selectedClientType,
-            })
-            .eq('id', user!.id);
-      } catch (e) {
-        debugPrint('Failed to sync account/client type: $e');
+        accountType = 'individual';
       }
 
       if (!mounted) return;
@@ -107,6 +97,10 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
       if (role?.toLowerCase() == 'admin') {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const AdminScreenNew()),
+        );
+      } else if (accountType == 'business' || role?.toLowerCase() == 'client') {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const ClientScreen()),
         );
       } else {
         Navigator.of(context).pushReplacement(
@@ -139,7 +133,10 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
       backgroundColor: Colors.white,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 16),
+          padding: EdgeInsets.symmetric(
+            horizontal: horizontalPadding,
+            vertical: 16,
+          ),
           physics: const BouncingScrollPhysics(),
           child: Center(
             child: ConstrainedBox(
@@ -191,7 +188,7 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
                         height: 1.5,
                       ),
                     ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 24),
 
                     // Email Field
                     TextFormField(
@@ -202,8 +199,14 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
                       decoration: InputDecoration(
                         labelText: 'Email Address',
                         hintText: 'example@email.com',
-                        prefixIcon: const Icon(Icons.email_outlined, color: Color(0xFFFF4D97)),
-                        prefixIconConstraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                        prefixIcon: const Icon(
+                          Icons.email_outlined,
+                          color: Color(0xFFFF4D97),
+                        ),
+                        prefixIconConstraints: const BoxConstraints(
+                          minWidth: 48,
+                          minHeight: 48,
+                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(color: Colors.grey[300]!),
@@ -214,17 +217,29 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFFF4D97), width: 2),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFFF4D97),
+                            width: 2,
+                          ),
                         ),
                         errorBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Colors.red, width: 1),
+                          borderSide: const BorderSide(
+                            color: Colors.red,
+                            width: 1,
+                          ),
                         ),
                         focusedErrorBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Colors.red, width: 2),
+                          borderSide: const BorderSide(
+                            color: Colors.red,
+                            width: 2,
+                          ),
                         ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
                         labelStyle: const TextStyle(fontSize: 14),
                       ),
                       style: const TextStyle(fontSize: 16),
@@ -250,19 +265,32 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
                       decoration: InputDecoration(
                         labelText: 'Password',
                         hintText: 'Enter your password',
-                        prefixIcon: const Icon(Icons.lock_outlined, color: Color(0xFFFF4D97)),
-                        prefixIconConstraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                        prefixIcon: const Icon(
+                          Icons.lock_outlined,
+                          color: Color(0xFFFF4D97),
+                        ),
+                        prefixIconConstraints: const BoxConstraints(
+                          minWidth: 48,
+                          minHeight: 48,
+                        ),
                         suffixIcon: Container(
-                          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                          constraints: const BoxConstraints(
+                            minWidth: 48,
+                            minHeight: 48,
+                          ),
                           child: IconButton(
                             padding: EdgeInsets.zero,
                             icon: Icon(
-                              _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                              _obscurePassword
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
                               color: Colors.grey[600],
                               size: 22,
                             ),
                             onPressed: () {
-                              setState(() => _obscurePassword = !_obscurePassword);
+                              setState(
+                                () => _obscurePassword = !_obscurePassword,
+                              );
                             },
                           ),
                         ),
@@ -276,17 +304,29 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFFF4D97), width: 2),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFFF4D97),
+                            width: 2,
+                          ),
                         ),
                         errorBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Colors.red, width: 1),
+                          borderSide: const BorderSide(
+                            color: Colors.red,
+                            width: 1,
+                          ),
                         ),
                         focusedErrorBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Colors.red, width: 2),
+                          borderSide: const BorderSide(
+                            color: Colors.red,
+                            width: 2,
+                          ),
                         ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
                         labelStyle: const TextStyle(fontSize: 14),
                       ),
                       style: const TextStyle(fontSize: 16),
@@ -315,7 +355,9 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
                                     setState(() => _rememberMe = !_rememberMe);
                                   },
                             child: MouseRegion(
-                              cursor: _isLoading ? SystemMouseCursors.forbidden : SystemMouseCursors.click,
+                              cursor: _isLoading
+                                  ? SystemMouseCursors.forbidden
+                                  : SystemMouseCursors.click,
                               child: Row(
                                 children: [
                                   Checkbox(
@@ -323,7 +365,10 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
                                     onChanged: _isLoading
                                         ? null
                                         : (value) {
-                                            setState(() => _rememberMe = value ?? false);
+                                            setState(
+                                              () =>
+                                                  _rememberMe = value ?? false,
+                                            );
                                           },
                                     activeColor: const Color(0xFFFF4D97),
                                     visualDensity: VisualDensity.compact,
@@ -331,7 +376,10 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
                                   const Flexible(
                                     child: Text(
                                       'Remember me',
-                                      style: TextStyle(fontSize: 13, color: Colors.black87),
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.black87,
+                                      ),
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
@@ -347,16 +395,21 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (_) => const ForgotPasswordPage(),
+                                      builder: (_) =>
+                                          const ForgotPasswordPage(),
                                     ),
                                   );
                                 },
                           child: MouseRegion(
-                            cursor: _isLoading ? SystemMouseCursors.forbidden : SystemMouseCursors.click,
+                            cursor: _isLoading
+                                ? SystemMouseCursors.forbidden
+                                : SystemMouseCursors.click,
                             child: Text(
                               'Forgot Password?',
                               style: TextStyle(
-                                color: _isLoading ? Colors.grey : const Color(0xFFFF4D97),
+                                color: _isLoading
+                                    ? Colors.grey
+                                    : const Color(0xFFFF4D97),
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -364,75 +417,6 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
                           ),
                         ),
                       ],
-                    ),
-
-                    const SizedBox(height: 28),
-
-                    // Client Type Selection
-                    const Text(
-                      'Login As:',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[300]!),
-                        borderRadius: BorderRadius.circular(12),
-                        color: Colors.grey[50],
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          isExpanded: true,
-                          value: _selectedClientType,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          dropdownColor: Colors.white,
-                          items: [
-                            DropdownMenuItem(
-                              value: 'individual',
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.person, color: Color(0xFFFF4D97), size: 22),
-                                  const SizedBox(width: 12),
-                                  const Flexible(
-                                    child: Text(
-                                      'Individual User',
-                                      style: TextStyle(fontSize: 14, color: Colors.black87),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: 'business',
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.business, color: Color(0xFFFF4D97), size: 22),
-                                  const SizedBox(width: 12),
-                                  const Flexible(
-                                    child: Text(
-                                      'Business/Makeup Brand',
-                                      style: TextStyle(fontSize: 14, color: Colors.black87),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                          onChanged: _isLoading
-                              ? null
-                              : (String? value) {
-                                  setState(() {
-                                    _selectedClientType = value ?? 'individual';
-                                  });
-                                },
-                        ),
-                      ),
                     ),
 
                     const SizedBox(height: 28),
@@ -457,7 +441,9 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
                                 height: 24,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2.5,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
+                                  ),
                                 ),
                               )
                             : const Text(
@@ -477,7 +463,9 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
                     // Divider
                     Row(
                       children: [
-                        Expanded(child: Divider(color: Colors.grey[300], thickness: 1)),
+                        Expanded(
+                          child: Divider(color: Colors.grey[300], thickness: 1),
+                        ),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 12),
                           child: Text(
@@ -489,7 +477,9 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
                             ),
                           ),
                         ),
-                        Expanded(child: Divider(color: Colors.grey[300], thickness: 1)),
+                        Expanded(
+                          child: Divider(color: Colors.grey[300], thickness: 1),
+                        ),
                       ],
                     ),
 
@@ -512,16 +502,21 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
                               : () {
                                   Navigator.of(context).pushReplacement(
                                     MaterialPageRoute(
-                                      builder: (_) => const RegisterSupabasePage(),
+                                      builder: (_) =>
+                                          const RegisterSupabasePage(),
                                     ),
                                   );
                                 },
                           child: MouseRegion(
-                            cursor: _isLoading ? SystemMouseCursors.forbidden : SystemMouseCursors.click,
+                            cursor: _isLoading
+                                ? SystemMouseCursors.forbidden
+                                : SystemMouseCursors.click,
                             child: Text(
                               'Sign Up',
                               style: TextStyle(
-                                color: _isLoading ? Colors.grey : const Color(0xFFFF4D97),
+                                color: _isLoading
+                                    ? Colors.grey
+                                    : const Color(0xFFFF4D97),
                                 fontWeight: FontWeight.w600,
                                 fontSize: 13,
                               ),

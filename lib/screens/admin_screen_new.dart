@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../services/supabase_service.dart';
 import '../utils/export_helper.dart';
+import '../utils/logout_util.dart';
 
 class AdminScreenNew extends StatefulWidget {
   const AdminScreenNew({super.key});
@@ -2486,43 +2487,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
   }
 
   void _showLogoutDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: Colors.black54)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              // Log admin logout before signing out
-              try {
-                await _supabaseService.logAdminAction(
-                  action: 'admin_logout',
-                  target: 'auth',
-                  metadata: {
-                    'email': _supabaseService.client.auth.currentUser?.email,
-                    'logout_time': DateTime.now().toIso8601String(),
-                  },
-                );
-              } catch (e) {
-                debugPrint('Failed to log logout audit: $e');
-              }
-              
-              await _supabaseService.signOut();
-              if (mounted) {
-                Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Logout', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
+    showLogoutConfirmationDialog(context, role: 'admin');
   }
 
 }
