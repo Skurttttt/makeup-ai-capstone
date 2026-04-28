@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'look_engine.dart';
 import 'openai_service.dart';
-import 'skin_analyzer.dart';
 
 class InstructionsPage extends StatefulWidget {
   final LookResult look;

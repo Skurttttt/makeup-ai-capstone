@@ -581,6 +581,60 @@ class SupabaseService {
     }
   }
 
+  // ==================== PAYMENTS (PAYMONGO) ====================
+
+  Future<Map<String, dynamic>> createPaymongoCheckoutForPlan({
+    required String planId,
+    String? successUrl,
+    String? cancelUrl,
+  }) async {
+    try {
+      final response = await client.functions.invoke(
+        'create-paymongo-checkout',
+        body: {
+          'kind': 'subscription',
+          'plan_id': planId,
+          if (successUrl != null) 'success_url': successUrl,
+          if (cancelUrl != null) 'cancel_url': cancelUrl,
+        },
+      );
+
+      if (response.status != 200) {
+        throw response.data ?? 'Failed to create PayMongo checkout session';
+      }
+
+      return Map<String, dynamic>.from(response.data as Map);
+    } catch (e) {
+      throw 'Failed to create PayMongo checkout session: $e';
+    }
+  }
+
+  Future<Map<String, dynamic>> createPaymongoCheckoutForOrder({
+    required List<Map<String, dynamic>> items,
+    String? successUrl,
+    String? cancelUrl,
+  }) async {
+    try {
+      final response = await client.functions.invoke(
+        'create-paymongo-checkout',
+        body: {
+          'kind': 'order',
+          'items': items,
+          if (successUrl != null) 'success_url': successUrl,
+          if (cancelUrl != null) 'cancel_url': cancelUrl,
+        },
+      );
+
+      if (response.status != 200) {
+        throw response.data ?? 'Failed to create PayMongo checkout session';
+      }
+
+      return Map<String, dynamic>.from(response.data as Map);
+    } catch (e) {
+      throw 'Failed to create PayMongo checkout session: $e';
+    }
+  }
+
   // ==================== AUDIT LOGS ====================
 
   /// Log admin action

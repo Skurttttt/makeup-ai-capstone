@@ -666,7 +666,7 @@ class AdminDashboardTab extends StatelessWidget {
               ),
               _StatCard(
                 title: 'Revenue',
-                value: '\$5,230',
+                value: '₱287,650',
                 icon: Icons.attach_money,
                 color: Colors.green,
               ),
