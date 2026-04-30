@@ -600,7 +600,10 @@ class SupabaseService {
       );
 
       if (response.status != 200) {
-        throw response.data ?? 'Failed to create PayMongo checkout session';
+        final respData = response.data;
+        final msg = 'Function error (status: ${response.status}): ${respData ?? response.toString()}';
+        debugPrint(msg);
+        throw msg;
       }
 
       return Map<String, dynamic>.from(response.data as Map);
@@ -626,7 +629,10 @@ class SupabaseService {
       );
 
       if (response.status != 200) {
-        throw response.data ?? 'Failed to create PayMongo checkout session';
+        final respData = response.data;
+        final msg = 'Function error (status: ${response.status}): ${respData ?? response.toString()}';
+        debugPrint(msg);
+        throw msg;
       }
 
       return Map<String, dynamic>.from(response.data as Map);

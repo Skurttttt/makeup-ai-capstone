@@ -48,6 +48,10 @@ dependencies:
   google_sign_in: ^7.2.0
   sign_in_with_apple: ^7.0.1
   image_picker: ^1.2.1
+  html: ^0.15.6
+  file_picker: ^11.0.2
+  palette_generator: ^0.3.3+7
+  image: ^4.8.0
 
 dev_dependencies:
   flutter_test:

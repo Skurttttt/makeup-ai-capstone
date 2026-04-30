@@ -512,6 +512,8 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
     final planName = _selectedPlan!['display_name'] ?? _selectedPlan!['name'] ?? 'N/A';
     final price = _selectedPlan!['price'] ?? 0;
     final billingPeriod = _selectedPlan!['billing_period'] ?? '';
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
 
     showDialog(
       context: context,
@@ -552,7 +554,7 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => navigator.pop(),
             child: const Text(
               'Cancel',
               style: TextStyle(color: Colors.grey),
@@ -560,7 +562,7 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
           ),
           ElevatedButton(
             onPressed: () async {
-              Navigator.pop(context);
+              navigator.pop();
 
               try {
                 final response = await _supabaseService.createPaymongoCheckoutForPlan(
@@ -575,7 +577,7 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
                 await _openCheckoutUrl(checkoutUrl);
               } catch (e) {
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  scaffoldMessenger.showSnackBar(
                     SnackBar(
                       content: Text('Failed to start checkout: $e'),
                       backgroundColor: Colors.red,

@@ -30,13 +30,35 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-    const paymongoKey = Deno.env.get("PAYMONGO_SECRET_KEY") ?? "";
+    let paymongoKey = Deno.env.get("PAYMONGO_SECRET_KEY") ?? "";
 
-    if (!supabaseUrl || !supabaseServiceKey || !paymongoKey) {
-      return new Response(JSON.stringify({ error: "Missing server configuration" }), {
+    // If some configuration is missing, try reading PayMongo config from the database
+    // This allows storing secrets in a DB table when you have DB access but cannot set
+    // function environment variables directly.
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return new Response(JSON.stringify({ error: "Missing server configuration (SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY)" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    const dbClient = createClient(supabaseUrl, supabaseServiceKey);
+
+    // If PAYMONGO key missing from env but DB client is available, try reading it from `app_config`
+    if (!paymongoKey && dbClient) {
+      try {
+        const { data: cfg, error: cfgErr } = await dbClient
+          .from("app_config")
+          .select("value")
+          .eq("key", "PAYMONGO_SECRET_KEY")
+          .maybeSingle();
+
+        if (!cfgErr && cfg && (cfg as any).value) {
+          paymongoKey = (cfg as any).value;
+        }
+      } catch (e) {
+        // ignore and fallback to env
+      }
     }
 
     const authHeader = req.headers.get("Authorization");
@@ -68,8 +90,24 @@ serve(async (req) => {
       });
     }
 
-    const successUrl = body.success_url ?? Deno.env.get("PAYMONGO_SUCCESS_URL") ?? "";
-    const cancelUrl = body.cancel_url ?? Deno.env.get("PAYMONGO_CANCEL_URL") ?? "";
+    let successUrl = body.success_url ?? Deno.env.get("PAYMONGO_SUCCESS_URL") ?? "";
+    let cancelUrl = body.cancel_url ?? Deno.env.get("PAYMONGO_CANCEL_URL") ?? "";
+
+    // If URLs missing in env, try DB fallback
+    if ((!successUrl || !cancelUrl) && dbClient) {
+      try {
+        if (!successUrl) {
+          const { data: s, error: sErr } = await dbClient.from("app_config").select("value").eq("key", "PAYMONGO_SUCCESS_URL").maybeSingle();
+          if (!sErr && s && (s as any).value) successUrl = (s as any).value;
+        }
+        if (!cancelUrl) {
+          const { data: c, error: cErr } = await dbClient.from("app_config").select("value").eq("key", "PAYMONGO_CANCEL_URL").maybeSingle();
+          if (!cErr && c && (c as any).value) cancelUrl = (c as any).value;
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
 
     if (!successUrl || !cancelUrl) {
       return new Response(JSON.stringify({ error: "Missing success or cancel URL" }), {
