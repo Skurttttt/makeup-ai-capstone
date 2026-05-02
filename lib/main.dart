@@ -26,7 +26,7 @@ import 'auth/login_supabase_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: "assets/.env");
+  await dotenv.load(fileName: ".env");
 
   // Initialize Supabase
   try {
