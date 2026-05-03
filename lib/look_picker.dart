@@ -5,11 +5,7 @@ class LookPicker extends StatelessWidget {
   final MakeupLookPreset value;
   final ValueChanged<MakeupLookPreset> onChanged;
 
-  const LookPicker({
-    super.key,
-    required this.value,
-    required this.onChanged,
-  });
+  const LookPicker({super.key, required this.value, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {

@@ -243,7 +243,7 @@ class SupabaseService {
   /// Get all users (admin only)
   Future<List<Map<String, dynamic>>> getAllUsers() async {
     try {
-        final response = await client
+      final response = await client
           .from('accounts')
           .select()
           .order('created_at', ascending: false);
@@ -257,7 +257,7 @@ class SupabaseService {
   /// Get analytics data (admin only)
   Future<Map<String, dynamic>> getAnalyticsData() async {
     try {
-        final totalUsers = await client
+      final totalUsers = await client
           .from('accounts')
           .select()
           .then((data) => data.length);
@@ -291,15 +291,15 @@ class SupabaseService {
 
       final path = '$userId/scans/$fileName';
 
-      await client.storage.from('scan-images').uploadBinary(
+      await client.storage
+          .from('scan-images')
+          .uploadBinary(
             path,
             fileBytes,
             fileOptions: const FileOptions(cacheControl: '3600', upsert: false),
           );
 
-      final publicUrl = client.storage
-          .from('scan-images')
-          .getPublicUrl(path);
+      final publicUrl = client.storage.from('scan-images').getPublicUrl(path);
 
       return publicUrl;
     } catch (e) {
@@ -316,7 +316,9 @@ class SupabaseService {
 
   // ==================== SUBSCRIPTIONS ====================
 
-  Future<void> _expireExpiredSubscriptions(List<Map<String, dynamic>> subscriptions) async {
+  Future<void> _expireExpiredSubscriptions(
+    List<Map<String, dynamic>> subscriptions,
+  ) async {
     final now = DateTime.now();
     final List<Future<void>> updates = [];
 
@@ -371,64 +373,83 @@ class SupabaseService {
     try {
       final modernResponse = await client
           .from('user_subscriptions')
-          .select('*, subscription_plans(name, display_name, price, currency, billing_period, badge_text, badge_color, daily_scan_limit, available_looks, can_save_results, can_export_hd, remove_watermark)')
+          .select(
+            '*, subscription_plans(name, display_name, price, currency, billing_period, badge_text, badge_color, daily_scan_limit, available_looks, can_save_results, can_export_hd, remove_watermark)',
+          )
           .eq('user_id', userId)
           .order('created_at', ascending: false);
 
-        final modernSubscriptions = List<Map<String, dynamic>>.from(modernResponse)
-          .map((subscription) => {
-            ...subscription,
-            '_source': 'user_subscriptions',
-            })
-          .toList();
+      final modernSubscriptions =
+          List<Map<String, dynamic>>.from(modernResponse)
+              .map(
+                (subscription) => {
+                  ...subscription,
+                  '_source': 'user_subscriptions',
+                },
+              )
+              .toList();
       await _expireExpiredSubscriptions(modernSubscriptions);
 
       final legacyResponse = await client
           .from('subscriptions')
-          .select('id, account_id, plan, plan_id, status, current_period_end, created_at')
+          .select(
+            'id, account_id, plan, plan_id, status, current_period_end, created_at',
+          )
           .eq('account_id', userId)
           .order('created_at', ascending: false);
 
       final now = DateTime.now();
-      final legacySubscriptions = List<Map<String, dynamic>>.from(legacyResponse).map((legacy) {
-        final statusRaw = (legacy['status'] ?? 'active').toString();
-        final statusLower = statusRaw.toLowerCase();
-        final periodEnd = legacy['current_period_end']?.toString();
-        final parsedEnd = periodEnd == null ? null : DateTime.tryParse(periodEnd);
+      final legacySubscriptions =
+          List<Map<String, dynamic>>.from(legacyResponse).map((legacy) {
+            final statusRaw = (legacy['status'] ?? 'active').toString();
+            final statusLower = statusRaw.toLowerCase();
+            final periodEnd = legacy['current_period_end']?.toString();
+            final parsedEnd = periodEnd == null
+                ? null
+                : DateTime.tryParse(periodEnd);
 
-        final normalizedStatus = (statusLower == 'active' && parsedEnd != null && parsedEnd.isBefore(now))
-            ? 'expired'
-            : statusRaw;
+            final normalizedStatus =
+                (statusLower == 'active' &&
+                    parsedEnd != null &&
+                    parsedEnd.isBefore(now))
+                ? 'expired'
+                : statusRaw;
 
-        final legacyPlanName = (legacy['plan'] ?? 'legacy_plan').toString();
-        final displayName = legacyPlanName
-            .split('_')
-            .where((part) => part.trim().isNotEmpty)
-            .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
-            .join(' ');
+            final legacyPlanName = (legacy['plan'] ?? 'legacy_plan').toString();
+            final displayName = legacyPlanName
+                .split('_')
+                .where((part) => part.trim().isNotEmpty)
+                .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
+                .join(' ');
 
-        return {
-          'id': legacy['id'],
-          'user_id': legacy['account_id'],
-          'plan_id': legacy['plan_id'],
-          'status': normalizedStatus,
-          'current_period_end': legacy['current_period_end'],
-          'created_at': legacy['created_at'],
-          '_source': 'subscriptions',
-          'subscription_plans': {
-            'name': legacyPlanName,
-            'display_name': displayName.isEmpty ? legacyPlanName : displayName,
-            'price': 0,
-            'currency': 'PHP',
-            'billing_period': '',
-          },
-        };
-      }).toList();
+            return {
+              'id': legacy['id'],
+              'user_id': legacy['account_id'],
+              'plan_id': legacy['plan_id'],
+              'status': normalizedStatus,
+              'current_period_end': legacy['current_period_end'],
+              'created_at': legacy['created_at'],
+              '_source': 'subscriptions',
+              'subscription_plans': {
+                'name': legacyPlanName,
+                'display_name': displayName.isEmpty
+                    ? legacyPlanName
+                    : displayName,
+                'price': 0,
+                'currency': 'PHP',
+                'billing_period': '',
+              },
+            };
+          }).toList();
 
       final merged = [...modernSubscriptions, ...legacySubscriptions];
       merged.sort((a, b) {
-        final aDate = DateTime.tryParse((a['created_at'] ?? '').toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
-        final bDate = DateTime.tryParse((b['created_at'] ?? '').toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final aDate =
+            DateTime.tryParse((a['created_at'] ?? '').toString()) ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        final bDate =
+            DateTime.tryParse((b['created_at'] ?? '').toString()) ??
+            DateTime.fromMillisecondsSinceEpoch(0);
         return bDate.compareTo(aDate);
       });
 
@@ -443,19 +464,22 @@ class SupabaseService {
     try {
       final response = await client
           .from('user_subscriptions')
-          .select('id, user_id, plan_id, status, started_at, current_period_start, current_period_end, amount_paid, created_at, updated_at, accounts(full_name, email), subscription_plans(name, display_name, price, currency, billing_period)')
+          .select(
+            'id, user_id, plan_id, status, started_at, current_period_start, current_period_end, amount_paid, created_at, updated_at, accounts(full_name, email), subscription_plans(name, display_name, price, currency, billing_period)',
+          )
           .order('created_at', ascending: false);
       final subscriptions = List<Map<String, dynamic>>.from(response);
-      
+
       // Use amount_paid as the primary price source
       for (var sub in subscriptions) {
         if (sub['amount_paid'] != null) {
           sub['price'] = sub['amount_paid'];
-        } else if (sub['subscription_plans'] != null && sub['subscription_plans']['price'] != null) {
+        } else if (sub['subscription_plans'] != null &&
+            sub['subscription_plans']['price'] != null) {
           sub['price'] = sub['subscription_plans']['price'];
         }
       }
-      
+
       return subscriptions;
     } catch (e) {
       throw 'Failed to fetch subscriptions: $e';
@@ -572,10 +596,7 @@ class SupabaseService {
   /// Delete subscription (admin only)
   Future<void> deleteSubscription(String subscriptionId) async {
     try {
-      await client
-          .from('user_subscriptions')
-          .delete()
-          .eq('id', subscriptionId);
+      await client.from('user_subscriptions').delete().eq('id', subscriptionId);
     } catch (e) {
       throw 'Failed to delete subscription: $e';
     }
@@ -601,7 +622,8 @@ class SupabaseService {
 
       if (response.status != 200) {
         final respData = response.data;
-        final msg = 'Function error (status: ${response.status}): ${respData ?? response.toString()}';
+        final msg =
+            'Function error (status: ${response.status}): ${respData ?? response.toString()}';
         debugPrint(msg);
         throw msg;
       }
@@ -630,7 +652,8 @@ class SupabaseService {
 
       if (response.status != 200) {
         final respData = response.data;
-        final msg = 'Function error (status: ${response.status}): ${respData ?? response.toString()}';
+        final msg =
+            'Function error (status: ${response.status}): ${respData ?? response.toString()}';
         debugPrint(msg);
         throw msg;
       }
@@ -655,7 +678,7 @@ class SupabaseService {
         debugPrint('⚠️ Cannot log action: No user logged in');
         return;
       }
-      
+
       await client.from('audit_logs').insert({
         'actor_id': currentUser.id,
         'action': action,
@@ -707,7 +730,10 @@ class SupabaseService {
   }
 
   /// Listen to subscription changes
-  RealtimeChannel subscribeToSubscriptions(String userId, {VoidCallback? onChange}) {
+  RealtimeChannel subscribeToSubscriptions(
+    String userId, {
+    VoidCallback? onChange,
+  }) {
     return client
         .channel('user_subscriptions:user_id=eq.$userId')
         .onPostgresChanges(

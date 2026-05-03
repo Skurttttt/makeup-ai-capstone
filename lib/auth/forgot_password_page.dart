@@ -36,7 +36,9 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             icon: const Icon(
               Icons.check_circle,
               color: Color(0xFFFF4D97),
@@ -122,13 +124,19 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                   decoration: InputDecoration(
                     labelText: 'Email',
                     hintText: 'Enter your email',
-                    prefixIcon: const Icon(Icons.email_outlined, color: Color(0xFFFF4D97)),
+                    prefixIcon: const Icon(
+                      Icons.email_outlined,
+                      color: Color(0xFFFF4D97),
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFFFF4D97), width: 2),
+                      borderSide: const BorderSide(
+                        color: Color(0xFFFF4D97),
+                        width: 2,
+                      ),
                     ),
                   ),
                   validator: (value) {
@@ -160,7 +168,9 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                           width: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
                           ),
                         )
                       : const Text(

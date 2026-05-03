@@ -24,8 +24,10 @@ class BlushPainter {
 
   // ✅ UPDATED: Increase "stay away from nose" limits
   static const double anchorUpFactor = 0.02;
-  static const double anchorOutFactor = 0.055; // push anchor more toward cheekbone
-  static const double anchorInLimitFactor = 0.16; // keep blush away from nose bridge
+  static const double anchorOutFactor =
+      0.055; // push anchor more toward cheekbone
+  static const double anchorInLimitFactor =
+      0.16; // keep blush away from nose bridge
 
   BlushPainter({
     required this.face,
@@ -60,8 +62,9 @@ class BlushPainter {
 
     // Final adjusted intensity with visibility boost
     final k0 = intensity.clamp(0.0, 1.0);
-    final k = (k0 * lookStrength * autoBoost * darkKBoost * brightKCut * visBoost)
-        .clamp(0.0, 1.0);
+    final k =
+        (k0 * lookStrength * autoBoost * darkKBoost * brightKCut * visBoost)
+            .clamp(0.0, 1.0);
 
     // ✅ Console debug only (NO visual overlays)
     if (debugMode) {
@@ -106,12 +109,19 @@ class BlushPainter {
   }
 
   // ✅ NEW: Get cheek center using contour-based placement
-  ui.Offset _getCheekCenter(bool left, ui.Rect faceBox, double faceW, double faceH) {
+  ui.Offset _getCheekCenter(
+    bool left,
+    ui.Rect faceBox,
+    double faceW,
+    double faceH,
+  ) {
     final noseCenterX = faceBox.left + faceW * 0.5;
 
     // Calculate cheek anchor (starting point)
     final cheekAnchor = ui.Offset(
-      left ? faceBox.left + faceW * anchorInLimitFactor : faceBox.right - faceW * anchorInLimitFactor,
+      left
+          ? faceBox.left + faceW * anchorInLimitFactor
+          : faceBox.right - faceW * anchorInLimitFactor,
       faceBox.top + faceH * 0.55 + faceH * anchorUpFactor,
     );
 
@@ -124,7 +134,9 @@ class BlushPainter {
 
     if (cheekContour != null && cheekContour.length >= 3) {
       // Use actual cheek contour points
-      final offsets = cheekContour.map((p) => ui.Offset(p.x.toDouble(), p.y.toDouble())).toList();
+      final offsets = cheekContour
+          .map((p) => ui.Offset(p.x.toDouble(), p.y.toDouble()))
+          .toList();
       final cheekCenter = _centroid(offsets);
 
       // Blend: anchor gives stability, contour centroid gives correct placement
@@ -160,7 +172,12 @@ class BlushPainter {
   }
 
   // ✅ NEW: Get face oval band points (approximation)
-  List<ui.Offset> _getFaceOvalBand(bool left, ui.Rect faceBox, double faceW, double faceH) {
+  List<ui.Offset> _getFaceOvalBand(
+    bool left,
+    ui.Rect faceBox,
+    double faceW,
+    double faceH,
+  ) {
     final band = <ui.Offset>[];
     final yStart = faceBox.top + faceH * 0.45;
     final yEnd = faceBox.top + faceH * 0.65;
@@ -178,7 +195,14 @@ class BlushPainter {
     return band;
   }
 
-  void _drawCheek(Canvas canvas, Offset center, double faceW, double lum, double k, bool left) {
+  void _drawCheek(
+    Canvas canvas,
+    Offset center,
+    double faceW,
+    double lum,
+    double k,
+    bool left,
+  ) {
     final t = (1 - lum).clamp(0.0, 1.0);
 
     // Adjust softness based on look style
@@ -212,7 +236,10 @@ class BlushPainter {
     final paint = Paint()
       ..shader = shader
       ..blendMode = _getBlendModeFromLookStyle()
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, _getBlurRadiusFromLookStyle());
+      ..maskFilter = MaskFilter.blur(
+        BlurStyle.normal,
+        _getBlurRadiusFromLookStyle(),
+      );
 
     canvas.drawCircle(center, radius, paint);
   }
@@ -259,7 +286,8 @@ class BlushPainter {
   }
 
   double _luminance01(Color color) {
-    return (0.2126 * color.red + 0.7152 * color.green + 0.0722 * color.blue) / 255.0;
+    return (0.2126 * color.red + 0.7152 * color.green + 0.0722 * color.blue) /
+        255.0;
   }
 
   double _saturation01(Color color) {

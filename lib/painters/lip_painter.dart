@@ -27,11 +27,16 @@ class LipPainter {
     final lower = face.contours[FaceContourType.lowerLipBottom]?.points;
 
     // If contours missing, do nothing (avoid weird artifacts)
-    if (upper == null || lower == null || upper.length < 6 || lower.length < 6) return;
+    if (upper == null || lower == null || upper.length < 6 || lower.length < 6)
+      return;
 
     // Convert to Offsets
-    final upperPts = upper.map((p) => ui.Offset(p.x.toDouble(), p.y.toDouble())).toList();
-    final lowerPts = lower.map((p) => ui.Offset(p.x.toDouble(), p.y.toDouble())).toList();
+    final upperPts = upper
+        .map((p) => ui.Offset(p.x.toDouble(), p.y.toDouble()))
+        .toList();
+    final lowerPts = lower
+        .map((p) => ui.Offset(p.x.toDouble(), p.y.toDouble()))
+        .toList();
 
     // Build a closed lip region path (upper + reversed lower)
     final lipPath = _buildLipRegionPath(upperPts, lowerPts);
@@ -103,10 +108,7 @@ class LipPainter {
         ..shader = ui.Gradient.radial(
           center,
           max(lipW, lipH) * 0.75,
-          [
-            lipstickColor.withOpacity(0.10 * k),
-            lipstickColor.withOpacity(0.0),
-          ],
+          [lipstickColor.withOpacity(0.10 * k), lipstickColor.withOpacity(0.0)],
           const [0.0, 1.0],
         )
         ..blendMode = BlendMode.multiply
@@ -131,10 +133,7 @@ class LipPainter {
       final highlightShader = ui.Gradient.radial(
         highlightCenter,
         max(lipW, lipH) * 0.55,
-        [
-          Colors.white.withOpacity(0.12 * k),
-          Colors.white.withOpacity(0.0),
-        ],
+        [Colors.white.withOpacity(0.12 * k), Colors.white.withOpacity(0.0)],
         const [0.0, 1.0],
       );
 
@@ -145,7 +144,10 @@ class LipPainter {
           ..style = PaintingStyle.fill
           ..shader = highlightShader
           ..blendMode = BlendMode.screen
-          ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, sigmaSoft * 0.85),
+          ..maskFilter = ui.MaskFilter.blur(
+            ui.BlurStyle.normal,
+            sigmaSoft * 0.85,
+          ),
       );
     }
 
@@ -158,7 +160,10 @@ class LipPainter {
         ..strokeWidth = max(0.8, lipW * 0.03)
         ..color = lipstickColor.withOpacity(0.06 * k)
         ..blendMode = BlendMode.softLight
-        ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, sigmaFeather * 0.95),
+        ..maskFilter = ui.MaskFilter.blur(
+          ui.BlurStyle.normal,
+          sigmaFeather * 0.95,
+        ),
     );
 
     canvas.restore();
@@ -168,7 +173,10 @@ class LipPainter {
     // Smooth upper & lower with Catmull-Rom from your utils
     final upperPath = DrawingUtils.catmullRomToBezierPath(upper, tension: 0.72);
     final lowerRev = lower.reversed.toList();
-    final lowerPath = DrawingUtils.catmullRomToBezierPath(lowerRev, tension: 0.72);
+    final lowerPath = DrawingUtils.catmullRomToBezierPath(
+      lowerRev,
+      tension: 0.72,
+    );
 
     // Combine into closed region
     final p = Path();

@@ -46,9 +46,9 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
     }
 
     if (_passwordController.text != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Passwords do not match')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Passwords do not match')));
       return;
     }
 
@@ -66,7 +66,9 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Email already exists. Please use another email or delete the old account.'),
+                content: Text(
+                  'Email already exists. Please use another email or delete the old account.',
+                ),
                 backgroundColor: Colors.red,
               ),
             );
@@ -102,9 +104,7 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
 
       // Navigate to verification page
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => EmailVerificationPage(email: email),
-        ),
+        MaterialPageRoute(builder: (_) => EmailVerificationPage(email: email)),
       );
     } catch (e) {
       if (mounted) {
@@ -154,7 +154,10 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 16),
+          padding: EdgeInsets.symmetric(
+            horizontal: horizontalPadding,
+            vertical: 16,
+          ),
           physics: const BouncingScrollPhysics(),
           child: Center(
             child: ConstrainedBox(
@@ -192,8 +195,14 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
                       decoration: InputDecoration(
                         labelText: 'Full Name',
                         hintText: 'John Doe',
-                        prefixIcon: const Icon(Icons.person_outline, color: Color(0xFFFF4D97)),
-                        prefixIconConstraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                        prefixIcon: const Icon(
+                          Icons.person_outline,
+                          color: Color(0xFFFF4D97),
+                        ),
+                        prefixIconConstraints: const BoxConstraints(
+                          minWidth: 48,
+                          minHeight: 48,
+                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(color: Colors.grey[300]!),
@@ -204,13 +213,22 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFFF4D97), width: 2),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFFF4D97),
+                            width: 2,
+                          ),
                         ),
                         errorBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Colors.red, width: 1),
+                          borderSide: const BorderSide(
+                            color: Colors.red,
+                            width: 1,
+                          ),
                         ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
                         labelStyle: const TextStyle(fontSize: 14),
                       ),
                       style: const TextStyle(fontSize: 16),
@@ -236,8 +254,14 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
                       decoration: InputDecoration(
                         labelText: 'Email Address',
                         hintText: 'example@email.com',
-                        prefixIcon: const Icon(Icons.email_outlined, color: Color(0xFFFF4D97)),
-                        prefixIconConstraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                        prefixIcon: const Icon(
+                          Icons.email_outlined,
+                          color: Color(0xFFFF4D97),
+                        ),
+                        prefixIconConstraints: const BoxConstraints(
+                          minWidth: 48,
+                          minHeight: 48,
+                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(color: Colors.grey[300]!),
@@ -248,13 +272,22 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFFF4D97), width: 2),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFFF4D97),
+                            width: 2,
+                          ),
                         ),
                         errorBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Colors.red, width: 1),
+                          borderSide: const BorderSide(
+                            color: Colors.red,
+                            width: 1,
+                          ),
                         ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
                         labelStyle: const TextStyle(fontSize: 14),
                       ),
                       style: const TextStyle(fontSize: 16),
@@ -280,19 +313,32 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
                       decoration: InputDecoration(
                         labelText: 'Password',
                         hintText: 'At least 6 characters',
-                        prefixIcon: const Icon(Icons.lock_outlined, color: Color(0xFFFF4D97)),
-                        prefixIconConstraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                        prefixIcon: const Icon(
+                          Icons.lock_outlined,
+                          color: Color(0xFFFF4D97),
+                        ),
+                        prefixIconConstraints: const BoxConstraints(
+                          minWidth: 48,
+                          minHeight: 48,
+                        ),
                         suffixIcon: Container(
-                          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                          constraints: const BoxConstraints(
+                            minWidth: 48,
+                            minHeight: 48,
+                          ),
                           child: IconButton(
                             padding: EdgeInsets.zero,
                             icon: Icon(
-                              _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                              _obscurePassword
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
                               color: Colors.grey[600],
                               size: 22,
                             ),
                             onPressed: () {
-                              setState(() => _obscurePassword = !_obscurePassword);
+                              setState(
+                                () => _obscurePassword = !_obscurePassword,
+                              );
                             },
                           ),
                         ),
@@ -306,13 +352,22 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFFF4D97), width: 2),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFFF4D97),
+                            width: 2,
+                          ),
                         ),
                         errorBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Colors.red, width: 1),
+                          borderSide: const BorderSide(
+                            color: Colors.red,
+                            width: 1,
+                          ),
                         ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
                         labelStyle: const TextStyle(fontSize: 14),
                       ),
                       style: const TextStyle(fontSize: 16),
@@ -338,19 +393,33 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
                       decoration: InputDecoration(
                         labelText: 'Confirm Password',
                         hintText: 'Re-enter your password',
-                        prefixIcon: const Icon(Icons.lock_outlined, color: Color(0xFFFF4D97)),
-                        prefixIconConstraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                        prefixIcon: const Icon(
+                          Icons.lock_outlined,
+                          color: Color(0xFFFF4D97),
+                        ),
+                        prefixIconConstraints: const BoxConstraints(
+                          minWidth: 48,
+                          minHeight: 48,
+                        ),
                         suffixIcon: Container(
-                          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                          constraints: const BoxConstraints(
+                            minWidth: 48,
+                            minHeight: 48,
+                          ),
                           child: IconButton(
                             padding: EdgeInsets.zero,
                             icon: Icon(
-                              _obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
+                              _obscureConfirmPassword
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
                               color: Colors.grey[600],
                               size: 22,
                             ),
                             onPressed: () {
-                              setState(() => _obscureConfirmPassword = !_obscureConfirmPassword);
+                              setState(
+                                () => _obscureConfirmPassword =
+                                    !_obscureConfirmPassword,
+                              );
                             },
                           ),
                         ),
@@ -364,13 +433,22 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFFF4D97), width: 2),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFFF4D97),
+                            width: 2,
+                          ),
                         ),
                         errorBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Colors.red, width: 1),
+                          borderSide: const BorderSide(
+                            color: Colors.red,
+                            width: 1,
+                          ),
                         ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
                         labelStyle: const TextStyle(fontSize: 14),
                       ),
                       style: const TextStyle(fontSize: 16),
@@ -402,7 +480,9 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
                               onChanged: _isLoading
                                   ? null
                                   : (value) {
-                                      setState(() => _acceptTerms = value ?? false);
+                                      setState(
+                                        () => _acceptTerms = value ?? false,
+                                      );
                                     },
                               activeColor: const Color(0xFFFF4D97),
                               visualDensity: VisualDensity.compact,
@@ -410,7 +490,10 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
                             const Flexible(
                               child: Text(
                                 'I agree to Terms & Conditions',
-                                style: TextStyle(fontSize: 13, color: Colors.black87),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.black87,
+                                ),
                               ),
                             ),
                           ],
@@ -440,7 +523,9 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
                                 height: 24,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2.5,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
+                                  ),
                                 ),
                               )
                             : const Text(
@@ -463,7 +548,10 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
                       children: [
                         Text(
                           'Already have an account? ',
-                          style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 13,
+                          ),
                         ),
                         GestureDetector(
                           onTap: _isLoading

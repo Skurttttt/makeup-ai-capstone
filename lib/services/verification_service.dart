@@ -18,7 +18,10 @@ class VerificationService {
   Future<void> sendConfirmationEmail(String email) async {
     try {
       final confirmUrl = dotenv.env['CONFIRM_URL'];
-      final redirectTo = (confirmUrl != null && confirmUrl.isNotEmpty && confirmUrl != 'https://your-domain.com/confirm')
+      final redirectTo =
+          (confirmUrl != null &&
+              confirmUrl.isNotEmpty &&
+              confirmUrl != 'https://your-domain.com/confirm')
           ? confirmUrl
           : null;
 

@@ -66,20 +66,29 @@ class _ScanTabState extends State<ScanTab> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.camera_alt_outlined, size: 48, color: Colors.black45),
+                    const Icon(
+                      Icons.camera_alt_outlined,
+                      size: 48,
+                      color: Colors.black45,
+                    ),
                     const SizedBox(height: 12),
                     Text(
                       _cameraError!,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.black54, fontSize: 14),
+                      style: const TextStyle(
+                        color: Colors.black54,
+                        fontSize: 14,
+                      ),
                     ),
                   ],
                 ),
               ),
             )
           : _frontCamera == null
-              ? const Center(child: CircularProgressIndicator(color: Color(0xFFFF4D97)))
-              : CameraScreen(camera: _frontCamera!, scannedItem: null),
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFFFF4D97)),
+            )
+          : CameraScreen(camera: _frontCamera!, scannedItem: null),
     );
   }
 }

@@ -159,7 +159,8 @@ class LookEngine {
   /// - Else warm/cool/neutral
   static Undertone _undertoneKey(FaceProfile? p) {
     if (p == null) return Undertone.neutral;
-    if (p.undertoneConfidence < _minUndertoneConfidence) return Undertone.neutral;
+    if (p.undertoneConfidence < _minUndertoneConfidence)
+      return Undertone.neutral;
     if (p.undertone == Undertone.warm) return Undertone.warm;
     if (p.undertone == Undertone.cool) return Undertone.cool;
     return Undertone.neutral;
@@ -318,7 +319,10 @@ class LookEngine {
     ),
   };
 
-  static _LookVariant _variantFor(MakeupLookPreset preset, FaceProfile? profile) {
+  static _LookVariant _variantFor(
+    MakeupLookPreset preset,
+    FaceProfile? profile,
+  ) {
     final pal = _palettes[preset] ?? _palettes[MakeupLookPreset.softGlam]!;
     if (preset == MakeupLookPreset.debugPainterTest) return pal.neutral;
 
@@ -342,7 +346,8 @@ class LookEngine {
     final v = _variantFor(preset, profile);
 
     double intensity = pal.baseIntensity;
-    if (preset != MakeupLookPreset.debugPainterTest && _lowSkinConfidence(profile)) {
+    if (preset != MakeupLookPreset.debugPainterTest &&
+        _lowSkinConfidence(profile)) {
       intensity = (intensity * 0.88).clamp(0.0, 1.0);
     }
 
@@ -374,8 +379,13 @@ class LookEngine {
     final cfg = configFromPreset(preset, profile: profile);
     final shape = profile?.faceShape ?? FaceShape.unknown;
 
-    final forcedNeutral = profile != null && profile.undertoneConfidence < _minUndertoneConfidence;
-    final undertoneNote = _undertoneNote(_undertoneKey(profile), forcedNeutral: forcedNeutral);
+    final forcedNeutral =
+        profile != null &&
+        profile.undertoneConfidence < _minUndertoneConfidence;
+    final undertoneNote = _undertoneNote(
+      _undertoneKey(profile),
+      forcedNeutral: forcedNeutral,
+    );
     final confidenceNote = _confidenceNote(profile);
 
     final blushPlacement = _blushPlacement(shape);
@@ -475,7 +485,12 @@ class LookEngine {
         return const LookResult(
           lookName: '🔧 Debug Painter Test',
           lipstickColor: Color(0xFFFF0000),
-          blushColor: Color.fromARGB(102, 255, 112, 195), // ✅ soft pink w/ alpha (smooth on camera)
+          blushColor: Color.fromARGB(
+            102,
+            255,
+            112,
+            195,
+          ), // ✅ soft pink w/ alpha (smooth on camera)
           eyeshadowColor: Color(0xFF0000FF),
           steps: [
             'This is a DEBUG mode to test all painters.',
@@ -541,7 +556,9 @@ class LookEngine {
   }
 
   static String _eyePlacement(FaceShape faceShape, MakeupLookPreset preset) {
-    final isDramatic = preset == MakeupLookPreset.emo || preset == MakeupLookPreset.boldEditorial;
+    final isDramatic =
+        preset == MakeupLookPreset.emo ||
+        preset == MakeupLookPreset.boldEditorial;
     switch (faceShape) {
       case FaceShape.round:
         return isDramatic
@@ -576,7 +593,8 @@ class LookEngine {
 
   static String _confidenceNote(FaceProfile? p) {
     if (p == null) return 'Profile: no analysis → using default settings.';
-    if (!_lowSkinConfidence(p)) return 'Skin confidence: good → using full look intensity.';
+    if (!_lowSkinConfidence(p))
+      return 'Skin confidence: good → using full look intensity.';
     return 'Skin confidence: low → slightly reduced intensity to blend more naturally.';
   }
 

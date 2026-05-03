@@ -6,7 +6,10 @@ import '../screens/admin_screen_new.dart';
 import '../home_screen.dart';
 
 class AppRouter {
-  static Route<dynamic> generateRoute(RouteSettings settings, AuthService authService) {
+  static Route<dynamic> generateRoute(
+    RouteSettings settings,
+    AuthService authService,
+  ) {
     switch (settings.name) {
       case '/':
         // Route to appropriate screen based on authentication and role
@@ -36,9 +39,7 @@ class AppRouter {
       default:
         return MaterialPageRoute(
           builder: (_) => Scaffold(
-            body: Center(
-              child: Text('No route defined for ${settings.name}'),
-            ),
+            body: Center(child: Text('No route defined for ${settings.name}')),
           ),
         );
     }

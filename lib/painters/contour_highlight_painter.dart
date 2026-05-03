@@ -86,8 +86,10 @@ class ContourHighlightPainter {
     final roll = (face.headEulerAngleZ ?? 0.0).abs();
 
     // 1.0 at normal pose → down to ~0.55 at high yaw/roll
-    final poseAttenuation =
-        (1.0 - (max(yaw / 35.0, roll / 35.0))).clamp(0.55, 1.0);
+    final poseAttenuation = (1.0 - (max(yaw / 35.0, roll / 35.0))).clamp(
+      0.55,
+      1.0,
+    );
 
     final kk = (k * poseAttenuation).clamp(0.0, 1.0);
 

@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 enum SkinTone { light, medium, tan, deep }
+
 enum Undertone { warm, cool, neutral }
 
 class SkinAnalysisResult {
@@ -183,8 +184,11 @@ class SkinAnalyzer {
       final xi = poly[i].dx, yi = poly[i].dy;
       final xj = poly[j].dx, yj = poly[j].dy;
 
-      final intersects = ((yi > p.dy) != (yj > p.dy)) &&
-          (p.dx < (xj - xi) * (p.dy - yi) / ((yj - yi) == 0 ? 1e-9 : (yj - yi)) + xi);
+      final intersects =
+          ((yi > p.dy) != (yj > p.dy)) &&
+          (p.dx <
+              (xj - xi) * (p.dy - yi) / ((yj - yi) == 0 ? 1e-9 : (yj - yi)) +
+                  xi);
 
       if (intersects) inside = !inside;
     }
@@ -288,7 +292,12 @@ class SkinAnalyzer {
 
   // ---------- Sampling rectangles ----------
 
-  static ui.Rect _rectForRegion(_Region region, ui.Rect box, int imgW, int imgH) {
+  static ui.Rect _rectForRegion(
+    _Region region,
+    ui.Rect box,
+    int imgW,
+    int imgH,
+  ) {
     final x0 = box.left;
     final y0 = box.top;
     final bw = box.width;
@@ -358,7 +367,8 @@ class SkinAnalyzer {
         total++;
 
         // Skip pixels inside exclusion polygons (eyes/lips/eyebrows)
-        if (exclusions.isNotEmpty && _isInsideAnyExclusion(x.toDouble(), y.toDouble(), exclusions)) {
+        if (exclusions.isNotEmpty &&
+            _isInsideAnyExclusion(x.toDouble(), y.toDouble(), exclusions)) {
           continue;
         }
 

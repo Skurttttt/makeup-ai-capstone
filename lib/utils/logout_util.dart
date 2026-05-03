@@ -3,7 +3,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../auth/login_supabase_page.dart';
 import '../services/supabase_service.dart';
 
-Future<void> showLogoutConfirmationDialog(BuildContext context, {String role = 'user'}) async {
+Future<void> showLogoutConfirmationDialog(
+  BuildContext context, {
+  String role = 'user',
+}) async {
   return showDialog(
     context: context,
     builder: (BuildContext dialogContext) => AlertDialog(

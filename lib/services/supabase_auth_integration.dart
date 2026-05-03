@@ -83,11 +83,7 @@ class SupabaseAuthIntegration {
             role = UserRole.user;
         }
 
-        await _authService.login(
-          email: email,
-          password: password,
-          role: role,
-        );
+        await _authService.login(email: email, password: password, role: role);
       }
     } catch (e) {
       throw 'Login failed: $e';

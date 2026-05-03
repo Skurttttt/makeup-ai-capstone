@@ -96,7 +96,9 @@ class _AdminScreenState extends State<AdminScreen> {
               // TODO: Implement logout
               // context.read<AuthService>().logout();
               if (context.mounted) {
-                Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+                Navigator.of(
+                  context,
+                ).pushNamedAndRemoveUntil('/', (route) => false);
               }
             },
             style: ElevatedButton.styleFrom(
@@ -172,9 +174,16 @@ class _WebSidebar extends StatelessWidget {
             style: TextStyle(fontSize: 12, color: Colors.grey),
           ),
           SizedBox(height: 24),
-          _WebNavItem(icon: Icons.dashboard_outlined, label: 'Overview', isActive: true),
+          _WebNavItem(
+            icon: Icons.dashboard_outlined,
+            label: 'Overview',
+            isActive: true,
+          ),
           _WebNavItem(icon: Icons.people_outline, label: 'Accounts'),
-          _WebNavItem(icon: Icons.card_membership_outlined, label: 'Subscriptions'),
+          _WebNavItem(
+            icon: Icons.card_membership_outlined,
+            label: 'Subscriptions',
+          ),
           _WebNavItem(textIcon: '₱', label: 'Profit'),
           _WebNavItem(icon: Icons.receipt_long_outlined, label: 'Audit Logs'),
           _WebNavItem(icon: Icons.settings_outlined, label: 'Settings'),
@@ -203,7 +212,9 @@ class _WebNavItem extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: isActive ? const Color(0xFFFF4D97).withOpacity(0.12) : Colors.transparent,
+        color: isActive
+            ? const Color(0xFFFF4D97).withOpacity(0.12)
+            : Colors.transparent,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
@@ -268,12 +279,18 @@ class _WebTopBar extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
                 ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
+                contentPadding: const EdgeInsets.symmetric(
+                  vertical: 0,
+                  horizontal: 12,
+                ),
               ),
             ),
           ),
           const SizedBox(width: 16),
-          IconButton(onPressed: () {}, icon: const Icon(Icons.notifications_none)),
+          IconButton(
+            onPressed: () {},
+            icon: const Icon(Icons.notifications_none),
+          ),
           const SizedBox(width: 8),
           CircleAvatar(
             radius: 16,
@@ -296,7 +313,11 @@ class _WebKpiGrid extends StatelessWidget {
       runSpacing: 16,
       children: const [
         _WebKpiCard(title: 'Total Accounts', value: '12,482', delta: '+4.2%'),
-        _WebKpiCard(title: 'Active Subscriptions', value: '3,128', delta: '+2.1%'),
+        _WebKpiCard(
+          title: 'Active Subscriptions',
+          value: '3,128',
+          delta: '+2.1%',
+        ),
         _WebKpiCard(title: 'Monthly Profit', value: '£24,560', delta: '+6.8%'),
         _WebKpiCard(title: 'Churn Rate', value: '1.8%', delta: '-0.3%'),
       ],
@@ -330,9 +351,15 @@ class _WebKpiCard extends StatelessWidget {
         children: [
           Text(title, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
           const SizedBox(height: 8),
-          Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+          ),
           const SizedBox(height: 8),
-          Text(delta, style: const TextStyle(fontSize: 12, color: Color(0xFF16A34A))),
+          Text(
+            delta,
+            style: const TextStyle(fontSize: 12, color: Color(0xFF16A34A)),
+          ),
         ],
       ),
     );
@@ -373,27 +400,33 @@ class _WebAccountsTable extends StatelessWidget {
             DataColumn(label: Text('Last Active')),
           ],
           rows: const [
-            DataRow(cells: [
-              DataCell(Text('Sarah M.')),
-              DataCell(Text('sarah.m@example.com')),
-              DataCell(Text('Premium')),
-              DataCell(Text('Active')),
-              DataCell(Text('2m ago')),
-            ]),
-            DataRow(cells: [
-              DataCell(Text('John Doe')),
-              DataCell(Text('john.doe@example.com')),
-              DataCell(Text('Pro')),
-              DataCell(Text('Active')),
-              DataCell(Text('12m ago')),
-            ]),
-            DataRow(cells: [
-              DataCell(Text('Emma W.')),
-              DataCell(Text('emma.w@example.com')),
-              DataCell(Text('Free')),
-              DataCell(Text('Trial')),
-              DataCell(Text('1h ago')),
-            ]),
+            DataRow(
+              cells: [
+                DataCell(Text('Sarah M.')),
+                DataCell(Text('sarah.m@example.com')),
+                DataCell(Text('Premium')),
+                DataCell(Text('Active')),
+                DataCell(Text('2m ago')),
+              ],
+            ),
+            DataRow(
+              cells: [
+                DataCell(Text('John Doe')),
+                DataCell(Text('john.doe@example.com')),
+                DataCell(Text('Pro')),
+                DataCell(Text('Active')),
+                DataCell(Text('12m ago')),
+              ],
+            ),
+            DataRow(
+              cells: [
+                DataCell(Text('Emma W.')),
+                DataCell(Text('emma.w@example.com')),
+                DataCell(Text('Free')),
+                DataCell(Text('Trial')),
+                DataCell(Text('1h ago')),
+              ],
+            ),
           ],
         ),
       ),
@@ -410,10 +443,26 @@ class _WebSubscriptionsCard extends StatelessWidget {
       title: 'Subscriptions',
       child: Column(
         children: const [
-          _SubscriptionRow(label: 'Premium', value: '1,204', color: Color(0xFFFF4D97)),
-          _SubscriptionRow(label: 'Pro', value: '812', color: Color(0xFF6366F1)),
-          _SubscriptionRow(label: 'Trial', value: '356', color: Color(0xFF22C55E)),
-          _SubscriptionRow(label: 'Expired', value: '102', color: Color(0xFFF97316)),
+          _SubscriptionRow(
+            label: 'Premium',
+            value: '1,204',
+            color: Color(0xFFFF4D97),
+          ),
+          _SubscriptionRow(
+            label: 'Pro',
+            value: '812',
+            color: Color(0xFF6366F1),
+          ),
+          _SubscriptionRow(
+            label: 'Trial',
+            value: '356',
+            color: Color(0xFF22C55E),
+          ),
+          _SubscriptionRow(
+            label: 'Expired',
+            value: '102',
+            color: Color(0xFFF97316),
+          ),
         ],
       ),
     );
@@ -437,7 +486,11 @@ class _SubscriptionRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
-          Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
           const SizedBox(width: 8),
           Expanded(child: Text(label)),
           Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -469,11 +522,14 @@ class _WebGainsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _WebSection(
-       title: 'Profit',
+      title: 'Profit',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-               const Text('Monthly Profit', style: TextStyle(fontWeight: FontWeight.w600)),
+          const Text(
+            'Monthly Profit',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 12),
           Wrap(
             spacing: 12,
@@ -578,24 +634,30 @@ class _WebAuditLog extends StatelessWidget {
             DataColumn(label: Text('Target')),
           ],
           rows: const [
-            DataRow(cells: [
-              DataCell(Text('10:12 AM')),
-              DataCell(Text('admin@facetune.com')),
-              DataCell(Text('Updated plan')),
-              DataCell(Text('john.doe@example.com')),
-            ]),
-            DataRow(cells: [
-              DataCell(Text('9:44 AM')),
-              DataCell(Text('admin@facetune.com')),
-              DataCell(Text('Refund issued')),
-              DataCell(Text('emma.w@example.com')),
-            ]),
-            DataRow(cells: [
-              DataCell(Text('Yesterday')),
-              DataCell(Text('system')),
-              DataCell(Text('Subscription expired')),
-              DataCell(Text('mike.j@example.com')),
-            ]),
+            DataRow(
+              cells: [
+                DataCell(Text('10:12 AM')),
+                DataCell(Text('admin@facetune.com')),
+                DataCell(Text('Updated plan')),
+                DataCell(Text('john.doe@example.com')),
+              ],
+            ),
+            DataRow(
+              cells: [
+                DataCell(Text('9:44 AM')),
+                DataCell(Text('admin@facetune.com')),
+                DataCell(Text('Refund issued')),
+                DataCell(Text('emma.w@example.com')),
+              ],
+            ),
+            DataRow(
+              cells: [
+                DataCell(Text('Yesterday')),
+                DataCell(Text('system')),
+                DataCell(Text('Subscription expired')),
+                DataCell(Text('mike.j@example.com')),
+              ],
+            ),
           ],
         ),
       ),
@@ -621,7 +683,10 @@ class _WebSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          Text(
+            title,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 12),
           child,
         ],
@@ -714,10 +779,30 @@ class AdminUsersTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final users = [
-      {'name': 'Sarah M.', 'email': 'sarah.m@example.com', 'status': 'Active', 'role': 'User'},
-      {'name': 'John Doe', 'email': 'john.doe@example.com', 'status': 'Premium', 'role': 'User'},
-      {'name': 'Emma Wilson', 'email': 'emma.w@example.com', 'status': 'Active', 'role': 'User'},
-      {'name': 'Mike Johnson', 'email': 'mike.j@example.com', 'status': 'Inactive', 'role': 'User'},
+      {
+        'name': 'Sarah M.',
+        'email': 'sarah.m@example.com',
+        'status': 'Active',
+        'role': 'User',
+      },
+      {
+        'name': 'John Doe',
+        'email': 'john.doe@example.com',
+        'status': 'Premium',
+        'role': 'User',
+      },
+      {
+        'name': 'Emma Wilson',
+        'email': 'emma.w@example.com',
+        'status': 'Active',
+        'role': 'User',
+      },
+      {
+        'name': 'Mike Johnson',
+        'email': 'mike.j@example.com',
+        'status': 'Inactive',
+        'role': 'User',
+      },
     ];
 
     return SingleChildScrollView(
@@ -749,8 +834,8 @@ class AdminUsersTab extends StatelessWidget {
                   backgroundColor: user['status'] == 'Active'
                       ? Colors.green[100]
                       : user['status'] == 'Premium'
-                          ? const Color(0xFFFF4D97).withOpacity(0.2)
-                          : Colors.grey[200],
+                      ? const Color(0xFFFF4D97).withOpacity(0.2)
+                      : Colors.grey[200],
                 ),
               ),
             );
@@ -882,10 +967,11 @@ class AdminSettingsTab extends StatelessWidget {
             width: double.infinity,
             child: ElevatedButton(
               onPressed: () {},
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text(
+                'Clear Cache',
+                style: TextStyle(color: Colors.white),
               ),
-              child: const Text('Clear Cache', style: TextStyle(color: Colors.white)),
             ),
           ),
         ],
@@ -927,10 +1013,7 @@ class _StatCard extends StatelessWidget {
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 4),
-          Text(
-            title,
-            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-          ),
+          Text(title, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
         ],
       ),
     );
@@ -968,9 +1051,15 @@ class _ActivityItem extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 2),
-                Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                Text(
+                  subtitle,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
               ],
             ),
           ),
@@ -1021,7 +1110,10 @@ class _FeatureStat extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
-            Text('$percentage%', style: const TextStyle(fontWeight: FontWeight.w600)),
+            Text(
+              '$percentage%',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
           ],
         ),
         const SizedBox(height: 6),

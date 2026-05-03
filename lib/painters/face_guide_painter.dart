@@ -132,10 +132,7 @@ class FaceGuidePainter extends CustomPainter {
     textPainter.layout();
     textPainter.paint(
       canvas,
-      Offset(
-        centerX - textPainter.width / 2,
-        ovalRect.bottom + 20,
-      ),
+      Offset(centerX - textPainter.width / 2, ovalRect.bottom + 20),
     );
   }
 

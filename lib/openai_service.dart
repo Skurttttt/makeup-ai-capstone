@@ -14,7 +14,9 @@ class OpenAIService {
   }) async {
     // 🔍 DEBUG: Add debug prints at the very top
     debugPrint('API KEY EMPTY: ${apiKey.isEmpty}');
-    debugPrint('API KEY PREFIX: ${apiKey.isNotEmpty ? apiKey.substring(0, 5) : "empty"}');
+    debugPrint(
+      'API KEY PREFIX: ${apiKey.isNotEmpty ? apiKey.substring(0, 5) : "empty"}',
+    );
     debugPrint('Calling OpenAI now...');
 
     if (apiKey.isEmpty) {
@@ -27,7 +29,8 @@ class OpenAIService {
       );
     }
 
-    final prompt = '''
+    final prompt =
+        '''
 You are a professional makeup artist AI assistant.
 
 Your task is to generate a personalized, beginner-friendly, step-by-step makeup tutorial.
@@ -94,9 +97,9 @@ Return ONLY JSON. No extra text.
         {
           "role": "system",
           "content":
-              "You are a makeup tutorial generator that returns only valid JSON."
+              "You are a makeup tutorial generator that returns only valid JSON.",
         },
-        {"role": "user", "content": prompt}
+        {"role": "user", "content": prompt},
       ],
       "temperature": 0.3,
       "max_tokens": 700,
@@ -191,8 +194,9 @@ Return ONLY JSON. No extra text.
         faceShape: faceShape,
       );
 
-      final hasAnyMeaningfulInstruction =
-          steps.any((step) => (step['instruction']?.toString().trim().isNotEmpty ?? false));
+      final hasAnyMeaningfulInstruction = steps.any(
+        (step) => (step['instruction']?.toString().trim().isNotEmpty ?? false),
+      );
 
       if (!hasAnyMeaningfulInstruction) {
         debugPrint('No meaningful instructions found. Using fallback steps.');
@@ -310,7 +314,8 @@ Return ONLY JSON. No extra text.
     final shape = (faceShape ?? 'balanced').toLowerCase();
 
     final isSoft = look.contains('soft') || look.contains('glam');
-    final isBold = look.contains('bold') ||
+    final isBold =
+        look.contains('bold') ||
         look.contains('editorial') ||
         look.contains('emo');
     final isNatural = look.contains('natural') || look.contains('everyday');
@@ -318,10 +323,10 @@ Return ONLY JSON. No extra text.
     final intensityWord = isBold
         ? 'a more defined'
         : isNatural
-            ? 'a very soft'
-            : isSoft
-                ? 'a soft-glam'
-                : 'a balanced';
+        ? 'a very soft'
+        : isSoft
+        ? 'a soft-glam'
+        : 'a balanced';
 
     final baseTone = switch (under) {
       'warm' => 'golden or peach-toned',
@@ -346,18 +351,25 @@ Return ONLY JSON. No extra text.
     };
 
     final blushPlacement = switch (shape) {
-      'round' => 'Place blush slightly higher and blend upward toward the temples to create a lifted effect.',
-      'square' => 'Blend blush softly on the outer cheeks and sweep it upward to soften strong angles.',
-      'heart' => 'Keep blush slightly lower on the cheeks and blend outward for balance.',
-      'oval' => 'Place blush on the apples of the cheeks and blend slightly upward for a naturally balanced finish.',
-      _ => 'Place blush on the cheeks and blend outward and upward for a soft finish.',
+      'round' =>
+        'Place blush slightly higher and blend upward toward the temples to create a lifted effect.',
+      'square' =>
+        'Blend blush softly on the outer cheeks and sweep it upward to soften strong angles.',
+      'heart' =>
+        'Keep blush slightly lower on the cheeks and blend outward for balance.',
+      'oval' =>
+        'Place blush on the apples of the cheeks and blend slightly upward for a naturally balanced finish.',
+      _ =>
+        'Place blush on the cheeks and blend outward and upward for a soft finish.',
     };
 
     final eyeshadowPlacement = switch (shape) {
       'round' => 'Blend the outer corner slightly upward to elongate the eyes.',
-      'square' => 'Keep the blending soft and rounded to balance sharper features.',
+      'square' =>
+        'Keep the blending soft and rounded to balance sharper features.',
       'heart' => 'Focus a bit more color on the outer lid to add balance.',
-      'oval' => 'Blend evenly across the lid and slightly into the crease for a balanced look.',
+      'oval' =>
+        'Blend evenly across the lid and slightly into the crease for a balanced look.',
       _ => 'Blend softly across the lid and crease.',
     };
 
@@ -386,10 +398,9 @@ Return ONLY JSON. No extra text.
       {
         'stepNumber': 4,
         'title': 'Eyeliner',
-        'instruction':
-            isBold
-                ? 'Trace a more defined eyeliner close to the lash line and extend the outer edge slightly for extra shape. Keep both sides thin first, then build slowly.'
-                : 'Trace a thin eyeliner close to the lash line to softly define the eyes. Keep the outer edge small and lifted for a clean beginner-friendly finish.',
+        'instruction': isBold
+            ? 'Trace a more defined eyeliner close to the lash line and extend the outer edge slightly for extra shape. Keep both sides thin first, then build slowly.'
+            : 'Trace a thin eyeliner close to the lash line to softly define the eyes. Keep the outer edge small and lifted for a clean beginner-friendly finish.',
         'targetArea': 'eyeliner',
       },
       {

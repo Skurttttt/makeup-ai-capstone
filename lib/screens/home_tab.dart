@@ -96,7 +96,10 @@ class HomeTab extends StatelessWidget {
                             Container(
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.5),
+                                  width: 2,
+                                ),
                                 boxShadow: [
                                   BoxShadow(
                                     color: Colors.black.withOpacity(0.15),
@@ -108,7 +111,11 @@ class HomeTab extends StatelessWidget {
                               child: CircleAvatar(
                                 radius: 26,
                                 backgroundColor: Colors.white.withOpacity(0.25),
-                                child: const Icon(Icons.person, color: Colors.white, size: 28),
+                                child: const Icon(
+                                  Icons.person,
+                                  color: Colors.white,
+                                  size: 28,
+                                ),
                               ),
                             ),
                           ],
@@ -155,11 +162,14 @@ class HomeTab extends StatelessWidget {
                 // Popular Looks
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: _buildSectionHeader('Popular Looks', onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('View all popular looks')),
-                    );
-                  }),
+                  child: _buildSectionHeader(
+                    'Popular Looks',
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('View all popular looks')),
+                      );
+                    },
+                  ),
                 ),
                 const SizedBox(height: 10),
                 SizedBox(
@@ -168,14 +178,34 @@ class HomeTab extends StatelessWidget {
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     children: [
-                      _buildLookCard('Natural', Icons.face_retouching_natural,
-                          const LinearGradient(colors: [Color(0xFF43E97B), Color(0xFF38F9D7)])),
-                      _buildLookCard('Glam', Icons.auto_awesome,
-                          const LinearGradient(colors: [Color(0xFFB06AB3), Color(0xFF4568DC)])),
-                      _buildLookCard('Everyday', Icons.wb_sunny,
-                          const LinearGradient(colors: [Color(0xFFF7971E), Color(0xFFFFD200)])),
-                      _buildLookCard('Emo', Icons.dark_mode,
-                          const LinearGradient(colors: [Color(0xFF232526), Color(0xFF414345)])),
+                      _buildLookCard(
+                        'Natural',
+                        Icons.face_retouching_natural,
+                        const LinearGradient(
+                          colors: [Color(0xFF43E97B), Color(0xFF38F9D7)],
+                        ),
+                      ),
+                      _buildLookCard(
+                        'Glam',
+                        Icons.auto_awesome,
+                        const LinearGradient(
+                          colors: [Color(0xFFB06AB3), Color(0xFF4568DC)],
+                        ),
+                      ),
+                      _buildLookCard(
+                        'Everyday',
+                        Icons.wb_sunny,
+                        const LinearGradient(
+                          colors: [Color(0xFFF7971E), Color(0xFFFFD200)],
+                        ),
+                      ),
+                      _buildLookCard(
+                        'Emo',
+                        Icons.dark_mode,
+                        const LinearGradient(
+                          colors: [Color(0xFF232526), Color(0xFF414345)],
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -235,9 +265,9 @@ class HomeTab extends StatelessWidget {
   Widget _buildQuickScanCard(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Open camera to scan')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Open camera to scan')));
       },
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -266,7 +296,11 @@ class HomeTab extends StatelessWidget {
                 color: Colors.white.withOpacity(0.25),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.face_retouching_natural, color: Colors.white, size: 22),
+              child: const Icon(
+                Icons.face_retouching_natural,
+                color: Colors.white,
+                size: 22,
+              ),
             ),
             const SizedBox(height: 8),
             const Text(
@@ -334,7 +368,10 @@ class HomeTab extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.3),
                       borderRadius: BorderRadius.circular(20),
@@ -416,7 +453,9 @@ class HomeTab extends StatelessWidget {
             height: 100,
             decoration: BoxDecoration(
               gradient: gradient,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(16),
+              ),
             ),
             child: Icon(icon, size: 44, color: Colors.white.withOpacity(0.95)),
           ),
@@ -432,10 +471,7 @@ class HomeTab extends StatelessWidget {
           const SizedBox(height: 3),
           Text(
             'Tap to try',
-            style: TextStyle(
-              fontSize: 11,
-              color: Colors.grey[500],
-            ),
+            style: TextStyle(fontSize: 11, color: Colors.grey[500]),
           ),
           const SizedBox(height: 10),
         ],
@@ -468,7 +504,12 @@ class HomeTab extends StatelessWidget {
     );
   }
 
-  Widget _buildBeautyTipCard(String title, String subtitle, IconData icon, Color color) {
+  Widget _buildBeautyTipCard(
+    String title,
+    String subtitle,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
       padding: const EdgeInsets.all(14),
@@ -513,10 +554,7 @@ class HomeTab extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[500],
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                 ),
               ],
             ),
@@ -559,7 +597,11 @@ class HomeTab extends StatelessWidget {
                   color: Colors.orange.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(9),
                 ),
-                child: const Icon(Icons.wb_sunny, color: Colors.orange, size: 20),
+                child: const Icon(
+                  Icons.wb_sunny,
+                  color: Colors.orange,
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -586,10 +628,7 @@ class HomeTab extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             'Sunny · good for makeup',
-            style: TextStyle(
-              fontSize: 11,
-              color: Colors.grey[500],
-            ),
+            style: TextStyle(fontSize: 11, color: Colors.grey[500]),
           ),
         ],
       ),

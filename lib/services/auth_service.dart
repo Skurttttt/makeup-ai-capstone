@@ -13,7 +13,11 @@ class AuthService extends ChangeNotifier {
   bool get isAuthenticated => _isAuthenticated;
   bool get isAdmin => _userRole == UserRole.admin;
 
-  Future<void> login({required String email, required String password, required UserRole role}) async {
+  Future<void> login({
+    required String email,
+    required String password,
+    required UserRole role,
+  }) async {
     try {
       // Simulate login delay
       await Future.delayed(const Duration(milliseconds: 500));
