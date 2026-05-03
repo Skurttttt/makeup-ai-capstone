@@ -6,7 +6,11 @@ class InstructionsPage extends StatefulWidget {
   final LookResult look;
   final FaceProfile? faceProfile;
 
-  const InstructionsPage({super.key, required this.look, this.faceProfile});
+  const InstructionsPage({
+    super.key,
+    required this.look,
+    this.faceProfile,
+  });
 
   @override
   State<InstructionsPage> createState() => _InstructionsPageState();
@@ -95,7 +99,11 @@ class _InstructionsPageState extends State<InstructionsPage> {
         const SizedBox(height: 8),
         Text(
           'Here are your personalized AI makeup instructions for this look.',
-          style: TextStyle(fontSize: 14, color: Colors.grey[700], height: 1.5),
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.grey[700],
+            height: 1.5,
+          ),
         ),
       ],
     );
@@ -109,7 +117,9 @@ class _InstructionsPageState extends State<InstructionsPage> {
         decoration: BoxDecoration(
           color: const Color(0xFFFF4D97).withOpacity(0.05),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFFF4D97).withOpacity(0.15)),
+          border: Border.all(
+            color: const Color(0xFFFF4D97).withOpacity(0.15),
+          ),
         ),
         child: Row(
           children: [
@@ -141,11 +151,17 @@ class _InstructionsPageState extends State<InstructionsPage> {
         decoration: BoxDecoration(
           color: Colors.red.withOpacity(0.05),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.red.withOpacity(0.15)),
+          border: Border.all(
+            color: Colors.red.withOpacity(0.15),
+          ),
         ),
         child: Text(
           _aiError!,
-          style: TextStyle(fontSize: 13, color: Colors.red[700], height: 1.5),
+          style: TextStyle(
+            fontSize: 13,
+            color: Colors.red[700],
+            height: 1.5,
+          ),
         ),
       );
     }
@@ -365,9 +381,9 @@ class _InstructionsPageState extends State<InstructionsPage> {
           const SizedBox(height: 16),
           Text(
             'Note: AI tips use your look name and skin analysis. No face image data is sent.',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Colors.grey[500],
+                ),
           ),
           const SizedBox(height: 24),
         ],

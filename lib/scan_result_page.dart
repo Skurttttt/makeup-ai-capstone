@@ -69,7 +69,10 @@ class _ScanResultPageState extends State<ScanResultPage> {
 
     // ✅ Reduce preview decode size for performance
     // (Allowed: 640–720px)
-    final codec = await ui.instantiateImageCodec(bytes, targetWidth: 720);
+    final codec = await ui.instantiateImageCodec(
+      bytes,
+      targetWidth: 720,
+    );
 
     final frame = await codec.getNextFrame();
     final previewImage = frame.image;
@@ -144,8 +147,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
   @override
   Widget build(BuildContext context) {
     final faceForOverlay = _previewFace ?? widget.detectedFace;
-    final canOverlay =
-        _uiImage != null && faceForOverlay != null && widget.look != null;
+    final canOverlay = _uiImage != null && faceForOverlay != null && widget.look != null;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -244,9 +246,8 @@ class _ScanResultPageState extends State<ScanResultPage> {
     required bool canOverlay,
     required Face? faceForOverlay,
   }) {
-    final double? aspect = _uiImage != null
-        ? (_uiImage!.width.toDouble() / _uiImage!.height.toDouble())
-        : null;
+    final double? aspect =
+        _uiImage != null ? (_uiImage!.width.toDouble() / _uiImage!.height.toDouble()) : null;
 
     return Container(
       width: double.infinity,
@@ -282,16 +283,13 @@ class _ScanResultPageState extends State<ScanResultPage> {
                                 blushColor: widget.look!.blushColor,
                                 eyeshadowColor: widget.look!.eyeshadowColor,
                                 intensity: intensityValue,
-                                faceShape:
-                                    widget.faceProfile?.faceShape ??
-                                    FaceShape.oval,
+                                faceShape: widget.faceProfile?.faceShape ?? FaceShape.oval,
                                 preset: MakeupLookPreset.softGlam,
                                 debugMode: false,
                                 isLiveMode: false,
-                                eyelinerStyle: LookEngine.configFromPreset(
-                                  _currentPreset,
-                                  profile: widget.faceProfile,
-                                ).eyelinerStyle,
+                                eyelinerStyle: LookEngine
+                                    .configFromPreset(_currentPreset, profile: widget.faceProfile)
+                                    .eyelinerStyle,
                                 skinColor: widget.faceProfile != null
                                     ? Color.fromARGB(
                                         255,
@@ -313,18 +311,18 @@ class _ScanResultPageState extends State<ScanResultPage> {
                   ),
                 )
               : widget.scannedImagePath != null
-              ? Center(
-                  child: FittedBox(
-                    fit: BoxFit.contain,
-                    child: Image.file(
-                      File(widget.scannedImagePath!),
-                      errorBuilder: (context, error, stackTrace) {
-                        return _buildPlaceholder();
-                      },
-                    ),
-                  ),
-                )
-              : _buildPlaceholder(),
+                  ? Center(
+                      child: FittedBox(
+                        fit: BoxFit.contain,
+                        child: Image.file(
+                          File(widget.scannedImagePath!),
+                          errorBuilder: (context, error, stackTrace) {
+                            return _buildPlaceholder();
+                          },
+                        ),
+                      ),
+                    )
+                  : _buildPlaceholder(),
         ),
       ),
     );
@@ -378,18 +376,12 @@ class _ScanResultPageState extends State<ScanResultPage> {
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     side: const BorderSide(color: Color(0xFFFF4D97), width: 2),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        Icons.arrow_back,
-                        size: 18,
-                        color: Color(0xFFFF4D97),
-                      ),
+                      Icon(Icons.arrow_back, size: 18, color: Color(0xFFFF4D97)),
                       SizedBox(width: 6),
                       Text(
                         'Back',
@@ -421,9 +413,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     backgroundColor: const Color(0xFFFF4D97),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     elevation: 0,
                   ),
                   child: const Row(
@@ -453,18 +443,12 @@ class _ScanResultPageState extends State<ScanResultPage> {
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 backgroundColor: const Color(0xFFFF4D97),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 elevation: 0,
               ),
               child: const Text(
                 'Buy Products',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
               ),
             ),
           ),
@@ -535,10 +519,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
                           const SizedBox(width: 4),
                           Text(
                             product['rating'] as String,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[700],
-                            ),
+                            style: TextStyle(fontSize: 12, color: Colors.grey[700]),
                           ),
                           const SizedBox(width: 12),
                           Text(
@@ -566,21 +547,12 @@ class _ScanResultPageState extends State<ScanResultPage> {
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFF4D97),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   ),
                   child: const Text(
                     'Add',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
                   ),
                 ),
               ],
@@ -759,13 +731,8 @@ class _ScanResultPageState extends State<ScanResultPage> {
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Buy Products',
-          style: TextStyle(fontWeight: FontWeight.w600),
-        ),
-        content: const Text(
-          'This will take you to our recommended products for your selected look.',
-        ),
+        title: const Text('Buy Products', style: TextStyle(fontWeight: FontWeight.w600)),
+        content: const Text('This will take you to our recommended products for your selected look.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -778,9 +745,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFFF4D97),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
             child: const Text('Continue'),
           ),

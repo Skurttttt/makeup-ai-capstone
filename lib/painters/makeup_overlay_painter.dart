@@ -76,9 +76,7 @@ class MakeupOverlayPainter extends CustomPainter {
     debugPrint('🎨 Debug mode: $debugMode');
     debugPrint('🎨 Is live mode: $isLiveMode');
     if (leftCheekLuminance != null && rightCheekLuminance != null) {
-      debugPrint(
-        '🎨 Cheek luminance: L=$leftCheekLuminance, R=$rightCheekLuminance',
-      );
+      debugPrint('🎨 Cheek luminance: L=$leftCheekLuminance, R=$rightCheekLuminance');
     }
     debugPrint('✅ MakeupOverlayPainter initialized');
   }
@@ -119,9 +117,7 @@ class MakeupOverlayPainter extends CustomPainter {
 
     debugPrint('🎨 Building eyeliner paths...');
     final paths = eyelinerPainter.buildPaths();
-    debugPrint(
-      '🎨 Eyeliner paths built: left=${paths.left != null}, right=${paths.right != null}',
-    );
+    debugPrint('🎨 Eyeliner paths built: left=${paths.left != null}, right=${paths.right != null}');
 
     // ✅ Eyeshadow painter (uses eyeliner paths)
     debugPrint('🎨 Creating eyeshadow painter with eyeliner paths...');
@@ -134,7 +130,10 @@ class MakeupOverlayPainter extends CustomPainter {
     );
 
     // ✅ Palette-driven brow color (NO hardcoding)
-    final browColor = LookEngine.browColorFromPreset(preset, profile: profile);
+    final browColor = LookEngine.browColorFromPreset(
+      preset,
+      profile: profile,
+    );
 
     debugPrint('🎨 Creating eyebrow painter...');
     final eyebrowPainter = EyebrowPainter(
@@ -223,7 +222,7 @@ class MakeupOverlayPainter extends CustomPainter {
   bool shouldRepaint(covariant MakeupOverlayPainter old) {
     // Optimize: only repaint if intensity changed by more than 5%
     final intensityChanged = (old.intensity - intensity).abs() > 0.05;
-
+    
     final shouldRepaint =
         old.image != image ||
         old.face != face ||
