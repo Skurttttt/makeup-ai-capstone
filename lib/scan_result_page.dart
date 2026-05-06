@@ -8,7 +8,6 @@ import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'instructions_page.dart';
 import 'look_engine.dart';
 import 'painters/makeup_overlay_painter.dart';
-import 'skin_analyzer.dart';
 
 class ScanResultPage extends StatefulWidget {
   final String? scannedImagePath;

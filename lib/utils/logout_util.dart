@@ -16,6 +16,9 @@ Future<void> showLogoutConfirmationDialog(
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(dialogContext),
+          style: TextButton.styleFrom(
+            foregroundColor: Colors.grey,
+          ),
           child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
         ),
         ElevatedButton(
@@ -49,11 +52,12 @@ Future<void> showLogoutConfirmationDialog(
           },
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.red,
+            foregroundColor: Colors.white,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
           ),
-          child: const Text('Logout'),
+          child: const Text('Logout', style: TextStyle(color: Colors.white)),
         ),
       ],
     ),

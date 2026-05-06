@@ -363,6 +363,12 @@ class _MarketTabState extends State<MarketTab>
     );
   }
 
+  // Helper for readable contrast on chips
+  Color _contrastColor(Color background) {
+    final luminance = background.computeLuminance();
+    return luminance > 0.5 ? Colors.black87 : Colors.white;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1201,6 +1207,7 @@ class _MarketTabState extends State<MarketTab>
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                       height: 1.3,
+                      color: Colors.black87,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -1237,7 +1244,8 @@ class _MarketTabState extends State<MarketTab>
                                 : () => _addToCart(product),
                             style: OutlinedButton.styleFrom(
                               side: const BorderSide(color: Color(0xFFFF4D97)),
-                              padding: EdgeInsets.zero,
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              foregroundColor: const Color(0xFFFF4D97),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(6),
                               ),
@@ -1274,7 +1282,7 @@ class _MarketTabState extends State<MarketTab>
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFFFF4D97),
                               foregroundColor: Colors.white,
-                              padding: EdgeInsets.zero,
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(6),
                               ),
@@ -1293,6 +1301,7 @@ class _MarketTabState extends State<MarketTab>
                                     style: TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
+                                      color: Colors.white,
                                     ),
                                   ),
                           ),
@@ -1373,7 +1382,10 @@ class _MarketTabState extends State<MarketTab>
                                 SizedBox(height: 16),
                                 Text(
                                   'Your cart is empty',
-                                  style: TextStyle(color: Colors.grey),
+                                  style: TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 16,
+                                  ),
                                 ),
                               ],
                             ),
@@ -1410,6 +1422,7 @@ class _MarketTabState extends State<MarketTab>
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w500,
+                                  color: Colors.black87,
                                 ),
                               ),
                               Text(
@@ -1450,6 +1463,7 @@ class _MarketTabState extends State<MarketTab>
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
+                                  color: Colors.white,
                                 ),
                               ),
                             ),
@@ -1505,14 +1519,36 @@ class _MarketTabState extends State<MarketTab>
                   style: const TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 14,
+                    color: Colors.black87,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
                 if (item['variation'] != null)
-                  Text(
-                    '${item['variation']['color_name']}',
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${item['variation']['color_name']}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      Text(
+                        (item['variation']['stock'] is int &&
+                                (item['variation']['stock'] as int) > 0)
+                            ? 'Stock: ${item['variation']['stock']}'
+                            : 'Out of stock',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: (item['variation']['stock'] is int &&
+                                  (item['variation']['stock'] as int) > 0)
+                              ? Colors.grey.shade500
+                              : Colors.red.shade400,
+                        ),
+                      ),
+                    ],
                   ),
                 Text(
                   '₱${price.toStringAsFixed(2)}',
@@ -1542,6 +1578,7 @@ class _MarketTabState extends State<MarketTab>
                   style: const TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 14,
+                    color: Colors.black87,
                   ),
                 ),
               ),
@@ -1708,6 +1745,7 @@ class _MarketTabState extends State<MarketTab>
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 18,
+                            color: Colors.black87,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -1728,6 +1766,7 @@ class _MarketTabState extends State<MarketTab>
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
                               fontSize: 13,
+                              color: Colors.black87,
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -1747,6 +1786,7 @@ class _MarketTabState extends State<MarketTab>
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
                               fontSize: 13,
+                              color: Colors.black87,
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -1768,6 +1808,12 @@ class _MarketTabState extends State<MarketTab>
                               final chipColor =
                                   _safeParseColor(hexCode) ??
                                   const Color(0xFFFF4D97);
+                              final stockLabel = varOutOfStock
+                                  ? 'Out of stock'
+                                  : 'Stock: ${varStock ?? 0}';
+
+                              // Use contrast helper for readable text
+                              final contrast = _contrastColor(chipColor);
 
                               return FilterChip(
                                 label: Column(
@@ -1778,7 +1824,7 @@ class _MarketTabState extends State<MarketTab>
                                         fontWeight: FontWeight.w600,
                                         fontSize: 12,
                                         color: isSelected
-                                            ? Colors.white
+                                            ? contrast
                                             : Colors.black87,
                                       ),
                                     ),
@@ -1788,10 +1834,22 @@ class _MarketTabState extends State<MarketTab>
                                         style: TextStyle(
                                           fontSize: 10,
                                           color: isSelected
-                                              ? Colors.white70
+                                              ? contrast.withOpacity(0.8)
                                               : Colors.black54,
                                         ),
                                       ),
+                                    Text(
+                                      stockLabel,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                        color: isSelected
+                                            ? contrast.withOpacity(0.8)
+                                            : (varOutOfStock
+                                                  ? Colors.red.shade400
+                                                  : Colors.black54),
+                                      ),
+                                    ),
                                   ],
                                 ),
                                 selected: isSelected,
@@ -1820,6 +1878,7 @@ class _MarketTabState extends State<MarketTab>
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
                               fontSize: 13,
+                              color: Colors.black87,
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -1850,6 +1909,7 @@ class _MarketTabState extends State<MarketTab>
                                         '$selectedQuantity',
                                         style: const TextStyle(
                                           fontWeight: FontWeight.w600,
+                                          color: Colors.black87,
                                         ),
                                       ),
                                     ),
@@ -1898,6 +1958,7 @@ class _MarketTabState extends State<MarketTab>
                                   style: TextStyle(
                                     fontWeight: FontWeight.w600,
                                     fontSize: 14,
+                                    color: Colors.black87,
                                   ),
                                 ),
                                 Text(
@@ -1913,7 +1974,7 @@ class _MarketTabState extends State<MarketTab>
                           ),
                           const SizedBox(height: 16),
                         ],
-                        // Action Buttons
+                        // Action Buttons - FIXED with explicit foregroundColor
                         Row(
                           children: [
                             Expanded(
@@ -1928,13 +1989,21 @@ class _MarketTabState extends State<MarketTab>
                                         );
                                       },
                                 icon: const Icon(Icons.shopping_cart, size: 18),
-                                label: const Text('Add to Cart'),
+                                label: const Text(
+                                  'Add to Cart',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
                                 style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFFFF4D97),
                                   side: const BorderSide(
                                     color: Color(0xFFFF4D97),
                                   ),
                                   padding: const EdgeInsets.symmetric(
                                     vertical: 14,
+                                    horizontal: 12,
                                   ),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(10),
@@ -1955,11 +2024,19 @@ class _MarketTabState extends State<MarketTab>
                                         );
                                       },
                                 icon: const Icon(Icons.flash_on, size: 18),
-                                label: const Text('Buy Now'),
+                                label: const Text(
+                                  'Buy Now',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFFFF4D97),
+                                  foregroundColor: Colors.white,
                                   padding: const EdgeInsets.symmetric(
                                     vertical: 14,
+                                    horizontal: 12,
                                   ),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(10),
@@ -2064,21 +2141,26 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
     try {
       final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) {
+        throw 'Please sign in to place an order.';
+      }
 
       final orderData = {
-        'buyer_id': user?.id,
+        'buyer_id': user.id,
         'buyer_name': _nameController.text.trim(),
         'buyer_email': _emailController.text.trim(),
         'buyer_phone': _phoneController.text.trim(),
-        'shipping_address':
-            '${_addressController.text.trim()}, ${_cityController.text.trim()} ${_postalCodeController.text.trim()}',
+        'shipping_address': _addressController.text.trim(),
+        'shipping_city': _cityController.text.trim(),
+        'shipping_postal_code': _postalCodeController.text.trim(),
         'subtotal': _subtotal,
-        'shipping_fee': _shippingFee,
+        'shipping': _shippingFee,
         'tax': _tax,
-        'total_amount': _total,
+        'total': _total,
+        'currency': 'PHP',
+        'payment_provider': _selectedPaymentMethod,
         'payment_method': _selectedPaymentMethod,
         'status': 'pending',
-        'created_at': DateTime.now().toIso8601String(),
       };
 
       final orderResponse = await Supabase.instance.client
@@ -2098,6 +2180,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           'total_price':
               (item['price'] as num).toDouble() * (item['quantity'] as int),
           'variation_name': item['variation']?['color_name'],
+          'variation_hex':
+              item['variation']?['hex_code'] ?? item['variation']?['hex'],
         };
 
         await Supabase.instance.client
@@ -2159,21 +2243,27 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       appBar: AppBar(
         title: const Text(
           'Checkout',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
         ),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
         elevation: 1,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: const Icon(Icons.arrow_back, color: Colors.black87),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFFF4D97),
+            ),
             child: const Text(
               'Cancel',
-              style: TextStyle(color: Color(0xFFFF4D97)),
+              style: TextStyle(
+                color: Color(0xFFFF4D97),
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
@@ -2199,6 +2289,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
+                          color: Colors.black87,
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -2241,6 +2332,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                       style: const TextStyle(
                                         fontWeight: FontWeight.w600,
                                         fontSize: 13,
+                                        color: Colors.black87,
                                       ),
                                       maxLines: 2,
                                     ),
@@ -2311,6 +2403,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
+                          color: Colors.black87,
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -2381,6 +2474,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
+                          color: Colors.black87,
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -2399,10 +2493,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                   const Icon(Icons.credit_card),
                             ),
                             const SizedBox(width: 12),
-                            const Text('Credit / Debit Card'),
+                            const Text(
+                              'Credit / Debit Card',
+                              style: TextStyle(color: Colors.black87),
+                            ),
                           ],
                         ),
-                        subtitle: const Text('Pay securely with PayMongo'),
+                        subtitle: const Text(
+                          'Pay securely with PayMongo',
+                          style: TextStyle(color: Colors.black54),
+                        ),
                         activeColor: const Color(0xFFFF4D97),
                       ),
                       RadioListTile<String>(
@@ -2414,10 +2514,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           children: [
                             Icon(Icons.money, color: Colors.green),
                             SizedBox(width: 12),
-                            Text('Cash on Delivery'),
+                            Text(
+                              'Cash on Delivery',
+                              style: TextStyle(color: Colors.black87),
+                            ),
                           ],
                         ),
-                        subtitle: const Text('Pay when you receive the item'),
+                        subtitle: const Text(
+                          'Pay when you receive the item',
+                          style: TextStyle(color: Colors.black54),
+                        ),
                         activeColor: const Color(0xFFFF4D97),
                       ),
                     ],
@@ -2449,17 +2555,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   onPressed: _isProcessing ? null : _placeOrder,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFF4D97),
+                    foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                   child: _isProcessing
-                      ? Row(
+                      ? const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const SizedBox(
+                            SizedBox(
                               height: 20,
                               width: 20,
                               child: CircularProgressIndicator(
@@ -2467,10 +2574,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                 color: Colors.white,
                               ),
                             ),
-                            const SizedBox(width: 10),
+                            SizedBox(width: 10),
                             Text(
-                              'Place Order • ₱${_total.toStringAsFixed(2)}',
-                              style: const TextStyle(
+                              'Processing...',
+                              style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white,
@@ -2505,11 +2612,29 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }) {
     return TextFormField(
       controller: controller,
+      style: const TextStyle(color: Colors.black87),
       decoration: InputDecoration(
         labelText: label,
         hintText: hintText,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        prefixIcon: icon != null ? Icon(icon, size: 20) : null,
+        labelStyle: TextStyle(color: Colors.grey.shade700),
+        hintStyle: TextStyle(color: Colors.grey.shade400),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFFFF4D97)),
+        ),
+        prefixIcon: icon != null
+            ? Icon(icon, size: 20, color: Colors.grey.shade600)
+            : null,
+        filled: true,
+        fillColor: Colors.white,
       ),
       keyboardType: keyboardType,
       maxLines: maxLines,
@@ -2527,6 +2652,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             style: TextStyle(
               fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
               fontSize: isTotal ? 16 : 14,
+              color: Colors.black87,
             ),
           ),
           Text(

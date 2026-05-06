@@ -1,9 +1,41 @@
 // lib/screens/home_tab.dart
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../scan_result_page.dart';
 
-class HomeTab extends StatelessWidget {
+class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
+
+  @override
+  State<HomeTab> createState() => _HomeTabState();
+}
+
+class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
+  bool _animateIn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // small entrance animation
+    Future.delayed(const Duration(milliseconds: 120), () {
+      if (mounted) setState(() => _animateIn = true);
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchRecommended() async {
+    try {
+      final sup = Supabase.instance.client;
+      final res = await sup
+          .from('products')
+          .select()
+          .order('views', ascending: false)
+          .limit(6);
+      final data = (res as List).cast<Map<String, dynamic>>();
+      return data;
+    } catch (_) {
+      return [];
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -63,31 +95,40 @@ class HomeTab extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Text(
-                                    'Good day! 💄',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.white.withOpacity(0.85),
-                                      fontWeight: FontWeight.w500,
-                                      letterSpacing: 0.3,
+                                  AnimatedOpacity(
+                                    opacity: _animateIn ? 1 : 0,
+                                    duration: const Duration(milliseconds: 450),
+                                    child: Text(
+                                      'Good day! 💄',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.white.withOpacity(0.85),
+                                        fontWeight: FontWeight.w500,
+                                        letterSpacing: 0.3,
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(height: 4),
-                                  const Text(
-                                    'Express Your Style',
-                                    style: TextStyle(
+                                  AnimatedDefaultTextStyle(
+                                    duration: const Duration(milliseconds: 450),
+                                    style: const TextStyle(
                                       fontSize: 26,
                                       fontWeight: FontWeight.bold,
                                       color: Colors.white,
                                       height: 1.1,
                                     ),
+                                    child: const Text('Express Your Style'),
                                   ),
                                   const SizedBox(height: 6),
-                                  Text(
-                                    'Discover looks tailored for you',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.white.withOpacity(0.8),
+                                  AnimatedOpacity(
+                                    opacity: _animateIn ? 1 : 0,
+                                    duration: const Duration(milliseconds: 550),
+                                    child: Text(
+                                      'Discover looks tailored for you',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.white.withOpacity(0.8),
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -178,38 +219,168 @@ class HomeTab extends StatelessWidget {
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     children: [
-                      _buildLookCard(
-                        'Natural',
-                        Icons.face_retouching_natural,
-                        const LinearGradient(
-                          colors: [Color(0xFF43E97B), Color(0xFF38F9D7)],
+                      GestureDetector(
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Trying Natural look')),
+                          );
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const ScanResultPage()),
+                          );
+                        },
+                        child: _buildLookCard(
+                          'Natural',
+                          Icons.face_retouching_natural,
+                          const LinearGradient(
+                            colors: [Color(0xFF43E97B), Color(0xFF38F9D7)],
+                          ),
                         ),
                       ),
-                      _buildLookCard(
-                        'Glam',
-                        Icons.auto_awesome,
-                        const LinearGradient(
-                          colors: [Color(0xFFB06AB3), Color(0xFF4568DC)],
+                      GestureDetector(
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Trying Glam look')),
+                          );
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const ScanResultPage()),
+                          );
+                        },
+                        child: _buildLookCard(
+                          'Glam',
+                          Icons.auto_awesome,
+                          const LinearGradient(
+                            colors: [Color(0xFFB06AB3), Color(0xFF4568DC)],
+                          ),
                         ),
                       ),
-                      _buildLookCard(
-                        'Everyday',
-                        Icons.wb_sunny,
-                        const LinearGradient(
-                          colors: [Color(0xFFF7971E), Color(0xFFFFD200)],
+                      GestureDetector(
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Trying Everyday look')),
+                          );
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const ScanResultPage()),
+                          );
+                        },
+                        child: _buildLookCard(
+                          'Everyday',
+                          Icons.wb_sunny,
+                          const LinearGradient(
+                            colors: [Color(0xFFF7971E), Color(0xFFFFD200)],
+                          ),
                         ),
                       ),
-                      _buildLookCard(
-                        'Emo',
-                        Icons.dark_mode,
-                        const LinearGradient(
-                          colors: [Color(0xFF232526), Color(0xFF414345)],
+                      GestureDetector(
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Trying Emo look')),
+                          );
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const ScanResultPage()),
+                          );
+                        },
+                        child: _buildLookCard(
+                          'Emo',
+                          Icons.dark_mode,
+                          const LinearGradient(
+                            colors: [Color(0xFF232526), Color(0xFF414345)],
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 20),
+
+                // Recommended Products (personalized-ish)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: _buildSectionHeader('Recommended For You', onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Open marketplace')));
+                  }),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 150,
+                  child: FutureBuilder<List<Map<String, dynamic>>>(
+                    future: _fetchRecommended(),
+                    builder: (context, snap) {
+                      if (snap.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      final items = snap.data ?? [];
+                      if (items.isEmpty) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Center(child: Text('No recommendations yet', style: TextStyle(color: Colors.grey[600]))),
+                        );
+                      }
+                      return ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: items.length,
+                        itemBuilder: (context, i) {
+                          final p = items[i];
+                          return GestureDetector(
+                            onTap: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Open ${p['name'] ?? 'product'}')),
+                              );
+                            },
+                            child: Container(
+                              width: 220,
+                              margin: const EdgeInsets.only(right: 12),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8)],
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 80,
+                                    height: 150,
+                                    decoration: BoxDecoration(
+                                      borderRadius: const BorderRadius.horizontal(left: Radius.circular(12)),
+                                      image: p['image_url'] != null
+                                          ? DecorationImage(image: NetworkImage(p['image_url']), fit: BoxFit.cover)
+                                          : null,
+                                      color: p['image_url'] == null ? Colors.grey[200] : null,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(10),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Text(p['name'] ?? 'Product', style: const TextStyle(fontWeight: FontWeight.w700)),
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            p['brand'] ?? '',
+                                            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
 
                 // Beauty Tips
                 Padding(
