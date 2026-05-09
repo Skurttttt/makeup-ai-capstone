@@ -1,5 +1,5 @@
-// lib/home_screen.dart
 import 'package:flutter/material.dart';
+
 import 'screens/home_tab.dart';
 import 'screens/scan_tab.dart';
 import 'screens/market_tab.dart';
@@ -7,63 +7,77 @@ import 'screens/subscription_tab.dart';
 import 'screens/settings_tab.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final int initialIndex;
+
+  const HomeScreen({
+    super.key,
+    this.initialIndex = 0,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _currentIndex = 0;
+  late int _currentIndex;
 
-  final List<Widget> _tabs = [
-    const HomeTab(),
-    const ScanTab(),
-    const MarketTab(),
-    const SubscriptionTab(),
-    const SettingsTab(),
+  final List<Widget> _tabs = const [
+    HomeTab(),
+    ScanTab(),
+    MarketTab(),
+    SubscriptionTab(),
+    SettingsTab(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _tabs[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
+      backgroundColor: const Color(0xFFFFF7FA),
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _tabs,
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        height: 68,
+        backgroundColor: Colors.white,
+        indicatorColor: const Color(0xFFFF4D97).withOpacity(0.12),
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        onDestinationSelected: (index) {
           setState(() {
             _currentIndex = index;
           });
         },
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: const Color(0xFFFF4D97),
-        unselectedItemColor: Colors.grey,
-        selectedFontSize: 12,
-        unselectedFontSize: 12,
-        items: const [
-          BottomNavigationBarItem(
+        destinations: const [
+          NavigationDestination(
             icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home),
+            selectedIcon: Icon(Icons.home),
             label: 'Home',
           ),
-          BottomNavigationBarItem(
+          NavigationDestination(
             icon: Icon(Icons.face_retouching_natural_outlined),
-            activeIcon: Icon(Icons.face_retouching_natural),
+            selectedIcon: Icon(Icons.face_retouching_natural),
             label: 'Scan',
           ),
-          BottomNavigationBarItem(
+          NavigationDestination(
             icon: Icon(Icons.shopping_bag_outlined),
-            activeIcon: Icon(Icons.shopping_bag),
+            selectedIcon: Icon(Icons.shopping_bag),
             label: 'Market',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.card_membership_outlined),
-            activeIcon: Icon(Icons.card_membership),
+          NavigationDestination(
+            icon: Icon(Icons.workspace_premium_outlined),
+            selectedIcon: Icon(Icons.workspace_premium),
             label: 'Premium',
           ),
-          BottomNavigationBarItem(
+          NavigationDestination(
             icon: Icon(Icons.settings_outlined),
-            activeIcon: Icon(Icons.settings),
+            selectedIcon: Icon(Icons.settings),
             label: 'Settings',
           ),
         ],
