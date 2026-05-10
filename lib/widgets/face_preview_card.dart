@@ -74,40 +74,18 @@ class FacePreviewCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(28),
         border: Border.all(color: const Color(0xFFFFD9E9), width: 1.4),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFFFF4D97).withOpacity(0.10),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
-        ],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(25),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            _PreviewLayer(
-              uiImage: uiImage,
-              scannedImagePath: scannedImagePath,
-              canOverlay: canOverlay,
-              faceForOverlay: faceForOverlay,
-              look: look,
-              faceProfile: faceProfile,
-              preset: preset,
-              previewValues: previewValues,
-            ),
-            Positioned(
-              top: 14,
-              left: 14,
-              child: _PreviewChip(text: preset.label),
-            ),
-            const Positioned(
-              top: 14,
-              right: 14,
-              child: _PreviewChip(text: 'After'),
-            ),
-          ],
+        child: _PreviewLayer(
+          uiImage: uiImage,
+          scannedImagePath: scannedImagePath,
+          canOverlay: canOverlay,
+          faceForOverlay: faceForOverlay,
+          look: look,
+          faceProfile: faceProfile,
+          preset: preset,
+          previewValues: previewValues,
         ),
       ),
     );
@@ -217,31 +195,6 @@ class _PreviewLayer extends StatelessWidget {
         Icons.face_retouching_natural,
         size: 72,
         color: Color(0xFFFFB6D4),
-      ),
-    );
-  }
-}
-
-class _PreviewChip extends StatelessWidget {
-  final String text;
-
-  const _PreviewChip({required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.82),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        text,
-        style: const TextStyle(
-          color: Color(0xFFFF4D97),
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-        ),
       ),
     );
   }

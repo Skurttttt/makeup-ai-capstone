@@ -12,49 +12,30 @@ class BottomBeautyNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const pink = Color(0xFFFF4D97);
-    const inactive = Color(0xFF8E8E93);
+    const selectedBg = Color(0xFFFFE6F1);
+    const activeColor = Color(0xFF20171D);
+    const inactiveColor = Color(0xFF5A4F56);
 
     final items = const [
-      _BeautyNavItem(Icons.home_outlined, Icons.home, 'Home'),
-      _BeautyNavItem(
-        Icons.face_retouching_natural_outlined,
-        Icons.face_retouching_natural,
-        'Scan',
-      ),
-      _BeautyNavItem(
-        Icons.shopping_bag_outlined,
-        Icons.shopping_bag,
-        'Market',
-      ),
-      _BeautyNavItem(
-        Icons.card_membership_outlined,
-        Icons.card_membership,
-        'Premium',
-      ),
-      _BeautyNavItem(
-        Icons.settings_outlined,
-        Icons.settings,
-        'Settings',
-      ),
+      _BeautyNavItem(Icons.home_outlined, 'Home'),
+      _BeautyNavItem(Icons.face_retouching_natural_outlined, 'Scan'),
+      _BeautyNavItem(Icons.shopping_bag_outlined, 'Market'),
+      _BeautyNavItem(Icons.workspace_premium_outlined, 'Premium'),
+      _BeautyNavItem(Icons.settings_outlined, 'Settings'),
     ];
 
     return Container(
-      height: 64,
-      decoration: BoxDecoration(
+      height: 68, // Reduced from 88
+      width: double.infinity,
+      // Removed padding completely
+      decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(
           top: BorderSide(
-            color: Colors.black.withOpacity(0.06),
+            color: Color(0xFFF3EEF1),
+            width: 1,
           ),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 14,
-            offset: const Offset(0, -4),
-          ),
-        ],
       ),
       child: Row(
         children: List.generate(items.length, (index) {
@@ -65,20 +46,30 @@ class BottomBeautyNav extends StatelessWidget {
             child: InkWell(
               onTap: () => onTap(index),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    selected ? item.activeIcon : item.icon,
-                    size: 23,
-                    color: selected ? pink : inactive,
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    height: 32, // Reduced from 38
+                    width: 64, // Reduced from 78
+                    decoration: BoxDecoration(
+                      color: selected ? selectedBg : Colors.transparent,
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Icon(
+                      item.icon,
+                      size: 24, // Reduced from 28
+                      color: selected ? activeColor : inactiveColor,
+                    ),
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 2), // Reduced from 4
                   Text(
                     item.label,
                     style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                      color: selected ? pink : inactive,
+                      fontSize: 12, // Reduced from 14
+                      fontWeight:
+                          selected ? FontWeight.w700 : FontWeight.w500,
+                      color: selected ? activeColor : inactiveColor,
                     ),
                   ),
                 ],
@@ -93,8 +84,7 @@ class BottomBeautyNav extends StatelessWidget {
 
 class _BeautyNavItem {
   final IconData icon;
-  final IconData activeIcon;
   final String label;
 
-  const _BeautyNavItem(this.icon, this.activeIcon, this.label);
+  const _BeautyNavItem(this.icon, this.label);
 }
