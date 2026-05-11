@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/services.dart';
-import '../main.dart';
+import 'camera_screen.dart'; // Import the new file
 
 class ScanTab extends StatefulWidget {
   const ScanTab({super.key});

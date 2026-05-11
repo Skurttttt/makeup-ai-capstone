@@ -226,12 +226,9 @@ class EyelinerPainter {
 
       final lift = max(0.6, (faceBox.height * 0.0025));
       final settleDown = (eyeBounds.height * 0.013).clamp(0.4, 1.4);
-      final upperLifted = upper
-          .map((p) => ui.Offset(p.dx, p.dy - lift + settleDown))
-          .toList();
+      final upperLifted = upper.map((p) => ui.Offset(p.dx, p.dy - lift + settleDown)).toList();
 
-      final ordered = List<ui.Offset>.from(upperLifted)
-        ..sort((a, b) => a.dx.compareTo(b.dx));
+      final ordered = List<ui.Offset>.from(upperLifted)..sort((a, b) => a.dx.compareTo(b.dx));
 
       final extended = _extendUpperLid(
         upperOrdered: ordered,
@@ -240,10 +237,7 @@ class EyelinerPainter {
         openness: openness,
       );
 
-      final linerPath = DrawingUtils.catmullRomToBezierPath(
-        extended,
-        tension: 0.72,
-      );
+      final linerPath = DrawingUtils.catmullRomToBezierPath(extended, tension: 0.72);
 
       final eyeCombined = Path()..addPath(linerPath, Offset.zero);
 
@@ -253,15 +247,11 @@ class EyelinerPainter {
       final roll = face.headEulerAngleZ ?? 0.0;
       final allowByPose = yaw.abs() < 18 && roll.abs() < 22;
 
-      final styleAllowsWing =
-          style == EyelinerStyle.subtle || style == EyelinerStyle.emoWing;
-      if (!(allowByOpenness && allowByPose && styleAllowsWing))
-        return eyeCombined;
+      final styleAllowsWing = style == EyelinerStyle.subtle || style == EyelinerStyle.emoWing;
+      if (!(allowByOpenness && allowByPose && styleAllowsWing)) return eyeCombined;
 
       final endIdx = eyeOnLeftSideOfImage ? 0 : (extended.length - 1);
-      final prevIdx = eyeOnLeftSideOfImage
-          ? min(2, extended.length - 1)
-          : max(extended.length - 3, 0);
+      final prevIdx = eyeOnLeftSideOfImage ? min(2, extended.length - 1) : max(extended.length - 3, 0);
 
       final end = extended[endIdx];
       final prev = extended[prevIdx];
@@ -273,10 +263,7 @@ class EyelinerPainter {
       final wingLen = (eyeBounds.width * 0.14).clamp(3.0, 14.0).toDouble();
       final wingUp = (eyeBounds.height * 0.10).clamp(1.5, 10.0).toDouble();
 
-      final wingEnd = ui.Offset(
-        end.dx + outwardSign * wingLen,
-        end.dy - wingUp,
-      );
+      final wingEnd = ui.Offset(end.dx + outwardSign * wingLen, end.dy - wingUp);
 
       final wingPath = Path()
         ..moveTo(end.dx, end.dy)
@@ -293,10 +280,7 @@ class EyelinerPainter {
         final emoWingLen = wingLen * 1.5;
         final emoWingUp = wingUp * 1.3;
 
-        final emoWingEnd = ui.Offset(
-          end.dx + outwardSign * emoWingLen,
-          end.dy - emoWingUp,
-        );
+        final emoWingEnd = ui.Offset(end.dx + outwardSign * emoWingLen, end.dy - emoWingUp);
 
         final emoWingPath = Path()
           ..moveTo(end.dx, end.dy)
@@ -329,14 +313,14 @@ class EyelinerPainter {
   /// ✅ KEEP your eyeliner rendering EXACTLY the same
   void paint(Canvas canvas, Size size) {
     final k = intensity.clamp(0.0, 1.0);
-    if (k <= 0.0) return;
-
+    
+    // ✅ Early exit to avoid unnecessary work
+    if (k <= 0.01) return;
+    
     if (style == EyelinerStyle.none) return;
 
     // Ensure paths exist even if caller didn't call buildPaths()
-    if (lastEyelinerPath == null ||
-        lastLeftEyelinerPath == null ||
-        lastRightEyelinerPath == null) {
+    if (lastEyelinerPath == null || lastLeftEyelinerPath == null || lastRightEyelinerPath == null) {
       buildPaths();
     }
 

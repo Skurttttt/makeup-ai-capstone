@@ -1,4 +1,3 @@
-// lib/painters/eyeshadow_painter.dart
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
@@ -10,11 +9,9 @@ class EyeshadowPainter {
   final Color eyeshadowColor;
   final double intensity;
 
-  // ✅ per-eye eyeliner boundary
   final Path? leftEyelinerPath;
   final Path? rightEyelinerPath;
 
-  // ✅ fix your compile error: supports debugMode named param
   final bool debugMode;
 
   EyeshadowPainter({
@@ -27,7 +24,7 @@ class EyeshadowPainter {
   });
 
   void paint(Canvas canvas, Size size) {
-    if (intensity <= 0) return;
+    if (intensity <= 0.001) return;
 
     _paintEye(
       canvas: canvas,
@@ -55,84 +52,139 @@ class EyeshadowPainter {
     final eyeOffsets = pts
         .map((p) => Offset(p.x.toDouble(), p.y.toDouble()))
         .toList();
+
     final eyeBounds = DrawingUtils.boundsOf(eyeOffsets);
 
     final eyeW = eyeBounds.width;
     final eyeH = eyeBounds.height;
 
-    // ✅ 1) Region above eyeliner (eyelid area) - then subtract eyeball hole
-    final region = Path.from(eyelinerPath);
+    // FIXED: Reduced height to prevent extending too close to brow
+    final lidTop = eyeBounds.top - eyeH * 1.10;
+    final lidBottom = eyeBounds.top + eyeH * 0.08;
 
-    region.addRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTRB(
-          eyeBounds.left - eyeW * 0.08,
-          eyeBounds.top - eyeH * 1.35,
-          eyeBounds.right + eyeW * 0.08,
-          eyeBounds.top + eyeH * 0.12,
+    final lidPath = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTRB(
+            eyeBounds.left - eyeW * 0.14,
+            lidTop,
+            eyeBounds.right + eyeW * 0.14,
+            lidBottom,
+          ),
+          Radius.circular(eyeH * 0.55),
         ),
-        Radius.circular(eyeH * 0.35),
-      ),
-    );
+      );
 
     final eyeHole = DrawingUtils.pathFromPoints(eyeOffsets);
-    final finalRegion = Path.combine(PathOperation.difference, region, eyeHole);
 
-    // ✅ 2) Main lid wash (realistic, not muddy)
-    final lidShader = ui.Gradient.linear(
-      Offset(eyeBounds.center.dx, eyeBounds.top + eyeH * 0.25),
-      Offset(eyeBounds.center.dx, eyeBounds.top - eyeH * 1.05),
+    final safeLidRegion = Path.combine(
+      PathOperation.difference,
+      lidPath,
+      eyeHole,
+    );
+
+    final safeRegionAboveEyeliner = Path.combine(
+      PathOperation.difference,
+      safeLidRegion,
+      eyelinerPath,
+    );
+
+    // 1) SOFT BASE WASH
+    final baseShader = ui.Gradient.linear(
+      Offset(eyeBounds.center.dx, lidBottom),
+      Offset(eyeBounds.center.dx, lidTop),
       [
-        eyeshadowColor.withOpacity(0.30 * intensity),
+        eyeshadowColor.withOpacity(0.26 * intensity),
         eyeshadowColor.withOpacity(0.16 * intensity),
         Colors.transparent,
       ],
       const [0.0, 0.55, 1.0],
     );
 
-    final lidPaint = Paint()
-      ..shader = lidShader
-      ..blendMode = BlendMode.softLight
+    final basePaint = Paint()
+      ..shader = baseShader
+      ..blendMode = BlendMode.srcOver
       ..isAntiAlias = true
       ..maskFilter = ui.MaskFilter.blur(
         ui.BlurStyle.normal,
-        (eyeH * 0.55).clamp(4.0, 18.0),
+        (eyeH * 0.24).clamp(2.0, 6.0),
       );
 
-    canvas.drawPath(finalRegion, lidPaint);
+    canvas.drawPath(safeRegionAboveEyeliner, basePaint);
 
-    // ✅ 3) Crease depth (industry/capstone realism)
+    // 2) CREASE SHADING - Reduced strength
+    final creaseY = eyeBounds.top - eyeH * 0.75;
+
+    final creaseRect = Rect.fromCenter(
+      center: Offset(eyeBounds.center.dx, creaseY),
+      width: eyeW * 1.15,
+      height: eyeH * 0.75,
+    );
+
+    final creasePath = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          creaseRect,
+          Radius.circular(eyeH * 0.45),
+        ),
+      );
+
+    final creaseRegion = Path.combine(
+      PathOperation.intersect,
+      safeRegionAboveEyeliner,
+      creasePath,
+    );
+
+    final creasePaint = Paint()
+      ..color = eyeshadowColor.withOpacity(0.10 * intensity) // Reduced from 0.18
+      ..blendMode = BlendMode.multiply
+      ..isAntiAlias = true
+      ..maskFilter = ui.MaskFilter.blur(
+        ui.BlurStyle.normal,
+        (eyeH * 0.20).clamp(1.8, 5.0),
+      );
+
+    canvas.drawPath(creaseRegion, creasePaint);
+
+    // 3) OUTER CORNER DEPTH - Fixed position and reduced strength
     final isLeft = eyeType == FaceContourType.leftEye;
-    final outerX = isLeft ? eyeBounds.left : eyeBounds.right;
+    final outerX = isLeft
+        ? eyeBounds.left + eyeW * 0.08
+        : eyeBounds.right - eyeW * 0.08;
 
-    final creaseShader = ui.Gradient.radial(
-      Offset(outerX, eyeBounds.top - eyeH * 0.25),
-      (eyeW * 0.95).clamp(18.0, 90.0),
+    final outerShader = ui.Gradient.radial(
+      Offset(
+        outerX,
+        eyeBounds.top - eyeH * 0.30,
+      ),
+      (eyeW * 0.58).clamp(14.0, 55.0),
       [
-        eyeshadowColor.withOpacity(0.18 * intensity),
-        eyeshadowColor.withOpacity(0.06 * intensity),
+        eyeshadowColor.withOpacity(0.14 * intensity), // Reduced from 0.24
+        eyeshadowColor.withOpacity(0.04 * intensity), // Reduced from 0.10
         Colors.transparent,
       ],
       const [0.0, 0.55, 1.0],
     );
 
-    final creasePaint = Paint()
-      ..shader = creaseShader
+    final outerPaint = Paint()
+      ..shader = outerShader
       ..blendMode = BlendMode.multiply
       ..isAntiAlias = true
       ..maskFilter = ui.MaskFilter.blur(
         ui.BlurStyle.normal,
-        (eyeH * 0.40).clamp(3.0, 14.0),
+        (eyeH * 0.24).clamp(2.0, 5.5), // Softened blur
       );
 
-    canvas.drawPath(finalRegion, creasePaint);
+    canvas.drawPath(safeRegionAboveEyeliner, outerPaint);
 
     if (debugMode) {
       final dbg = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.0
+        ..strokeWidth = 1
         ..color = Colors.green.withOpacity(0.7);
+
       canvas.drawRect(eyeBounds, dbg);
+      canvas.drawPath(safeRegionAboveEyeliner, dbg);
     }
   }
 }

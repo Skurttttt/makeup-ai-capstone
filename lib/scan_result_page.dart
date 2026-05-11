@@ -5,9 +5,21 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
+import 'home_screen.dart';
 import 'instructions_page.dart';
 import 'look_engine.dart';
-import 'painters/makeup_overlay_painter.dart';
+import 'widgets/bottom_beauty_nav.dart';
+import 'widgets/face_preview_card.dart';
+import 'widgets/beauty_slider.dart';
+
+enum MakeupControlArea {
+  lips,
+  eyebrows,
+  eyeshadow,
+  eyeliner,
+  blush,
+  general,
+}
 
 class ScanResultPage extends StatefulWidget {
   final String? scannedImagePath;
@@ -35,13 +47,21 @@ class _ScanResultPageState extends State<ScanResultPage> {
   ui.Image? _uiImage;
   Face? _previewFace;
 
-  final ValueNotifier<double> _sliderValue = ValueNotifier<double>(0.75);
-  final ValueNotifier<double> _appliedIntensity = ValueNotifier<double>(0.75);
+  MakeupControlArea _selectedArea = MakeupControlArea.general;
+
+  final ValueNotifier<MakeupPreviewValues> _previewValues =
+      ValueNotifier<MakeupPreviewValues>(
+    const MakeupPreviewValues(
+      globalIntensity: 0.85,
+      lipOpacity: 0.85,
+      blushOpacity: 0.70,
+      eyeOpacity: 0.80,
+      linerOpacity: 0.85,
+      browOpacity: 0.75,
+    ),
+  );
 
   late final MakeupLookPreset _currentPreset;
-
-  String selectedFilter = 'Natural';
-  final List<String> filters = ['Natural', 'Everyday', 'Glam'];
 
   @override
   void initState() {
@@ -52,8 +72,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
 
   @override
   void dispose() {
-    _sliderValue.dispose();
-    _appliedIntensity.dispose();
+    _previewValues.dispose();
     super.dispose();
   }
 
@@ -62,38 +81,27 @@ class _ScanResultPageState extends State<ScanResultPage> {
     if (path == null) return;
 
     final bytes = await File(path).readAsBytes();
-
-    final codec = await ui.instantiateImageCodec(
-      bytes,
-      targetWidth: 720,
-    );
-
+    final codec = await ui.instantiateImageCodec(bytes, targetWidth: 720);
     final frame = await codec.getNextFrame();
-    final previewImage = frame.image;
 
     if (!mounted) return;
 
     setState(() {
-      _uiImage = previewImage;
+      _uiImage = frame.image;
       _previewFace = null;
     });
 
     try {
-      final tmpFile = await _writeUiImageToTempPng(previewImage);
+      final tmpFile = await _writeUiImageToTempPng(frame.image);
       final face = await _detectFaceOnFile(tmpFile.path);
 
       if (!mounted) return;
 
-      setState(() {
-        _previewFace = face;
-      });
-
+      setState(() => _previewFace = face);
       tmpFile.delete().catchError((_) => tmpFile);
     } catch (_) {
       if (!mounted) return;
-      setState(() {
-        _previewFace = null;
-      });
+      setState(() => _previewFace = null);
     }
   }
 
@@ -103,10 +111,10 @@ class _ScanResultPageState extends State<ScanResultPage> {
       throw Exception('Failed to encode preview image.');
     }
 
-    final Uint8List pngBytes = byteData.buffer.asUint8List();
-
+    final pngBytes = byteData.buffer.asUint8List();
     final dir = await Directory.systemTemp.createTemp('ft_preview_');
     final file = File('${dir.path}/preview.png');
+
     await file.writeAsBytes(pngBytes, flush: true);
     return file;
   }
@@ -125,11 +133,101 @@ class _ScanResultPageState extends State<ScanResultPage> {
     try {
       final input = InputImage.fromFilePath(filePath);
       final faces = await detector.processImage(input);
-      if (faces.isEmpty) return null;
-      return faces.first;
+      return faces.isEmpty ? null : faces.first;
     } finally {
       await detector.close();
     }
+  }
+
+  double _valueForArea(MakeupPreviewValues values) {
+    switch (_selectedArea) {
+      case MakeupControlArea.lips:
+        return values.lipOpacity;
+      case MakeupControlArea.eyebrows:
+        return values.browOpacity;
+      case MakeupControlArea.eyeshadow:
+        return values.eyeOpacity;
+      case MakeupControlArea.eyeliner:
+        return values.linerOpacity;
+      case MakeupControlArea.blush:
+        return values.blushOpacity;
+      case MakeupControlArea.general:
+        return values.globalIntensity;
+    }
+  }
+
+  String _titleForArea() {
+    switch (_selectedArea) {
+      case MakeupControlArea.lips:
+        return 'Lips Opacity';
+      case MakeupControlArea.eyebrows:
+        return 'Eyebrows Opacity';
+      case MakeupControlArea.eyeshadow:
+        return 'Eyeshadow Opacity';
+      case MakeupControlArea.eyeliner:
+        return 'Eyeliner Opacity';
+      case MakeupControlArea.blush:
+        return 'Blush Opacity';
+      case MakeupControlArea.general:
+        return 'General Opacity';
+    }
+  }
+
+  String _subtitleForArea() {
+    switch (_selectedArea) {
+      case MakeupControlArea.lips:
+        return 'Adjust lip makeup intensity';
+      case MakeupControlArea.eyebrows:
+        return 'Adjust eyebrow makeup intensity';
+      case MakeupControlArea.eyeshadow:
+        return 'Adjust eyeshadow intensity';
+      case MakeupControlArea.eyeliner:
+        return 'Adjust eyeliner intensity';
+      case MakeupControlArea.blush:
+        return 'Adjust blush intensity';
+      case MakeupControlArea.general:
+        return 'Adjust all makeup layers';
+    }
+  }
+
+  void _updateAreaValue(double value) {
+    final current = _previewValues.value;
+
+    switch (_selectedArea) {
+      case MakeupControlArea.lips:
+        _previewValues.value = current.copyWith(lipOpacity: value);
+        break;
+      case MakeupControlArea.eyebrows:
+        _previewValues.value = current.copyWith(browOpacity: value);
+        break;
+      case MakeupControlArea.eyeshadow:
+        _previewValues.value = current.copyWith(eyeOpacity: value);
+        break;
+      case MakeupControlArea.eyeliner:
+        _previewValues.value = current.copyWith(linerOpacity: value);
+        break;
+      case MakeupControlArea.blush:
+        _previewValues.value = current.copyWith(blushOpacity: value);
+        break;
+      case MakeupControlArea.general:
+        _previewValues.value = current.copyWith(globalIntensity: value);
+        break;
+    }
+  }
+
+  void _resetAll() {
+    _previewValues.value = const MakeupPreviewValues(
+      globalIntensity: 0.85,
+      lipOpacity: 0.85,
+      blushOpacity: 0.70,
+      eyeOpacity: 0.80,
+      linerOpacity: 0.85,
+      browOpacity: 0.75,
+    );
+
+    setState(() {
+      _selectedArea = MakeupControlArea.general;
+    });
   }
 
   @override
@@ -139,320 +237,251 @@ class _ScanResultPageState extends State<ScanResultPage> {
         _uiImage != null && faceForOverlay != null && widget.look != null;
 
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Style Preview',
-          style: TextStyle(
-            color: Colors.black,
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        centerTitle: true,
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    height: 320,
-                    child: _buildPhotoContainer(
-                      canOverlay: canOverlay,
-                      faceForOverlay: faceForOverlay,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  if (_uiImage != null && widget.look != null)
-                    Row(
-                      children: [
-                        const Text('Opacity', style: TextStyle(fontSize: 12)),
-                        Expanded(
-                          child: ValueListenableBuilder<double>(
-                            valueListenable: _sliderValue,
-                            builder: (context, v, _) {
-                              return Slider(
-                                value: v,
-                                min: 0.0,
-                                max: 1.0,
-                                divisions: 20,
-                                label: '${(v * 100).round()}%',
-                                onChanged: (newV) {
-                                  _sliderValue.value = newV;
-                                },
-                                onChangeEnd: (endV) {
-                                  _appliedIntensity.value = endV;
-                                },
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  if (widget.scannedItem != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      'Recommended Products for ${widget.scannedItem}',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _buildRecommendedProducts(),
-                  ],
-                  const SizedBox(height: 20),
-                ],
-              ),
+      backgroundColor: const Color(0xFFFFF7FA),
+      bottomNavigationBar: BottomBeautyNav(
+        currentIndex: 1,
+        onTap: (index) {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(
+              builder: (_) => HomeScreen(initialIndex: index),
             ),
-          ),
-          _buildBottomButtons(),
-        ],
+            (route) => false,
+          );
+        },
       ),
-    );
-  }
+      body: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final h = constraints.maxHeight;
+              final previewHeight = (h * 0.42).clamp(320.0, 410.0);
 
-  Widget _buildPhotoContainer({
-    required bool canOverlay,
-    required Face? faceForOverlay,
-  }) {
-    final double? aspect = _uiImage != null
-        ? (_uiImage!.width.toDouble() / _uiImage!.height.toDouble())
-        : null;
-
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: const Color(0xFFFF4D97).withOpacity(0.3),
-          width: 2,
-        ),
-      ),
-      child: AspectRatio(
-        aspectRatio: aspect ?? (3 / 4),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(18),
-          child: _uiImage != null && canOverlay
-              ? Center(
-                  child: FittedBox(
-                    fit: BoxFit.contain,
-                    child: SizedBox(
-                      width: _uiImage!.width.toDouble(),
-                      height: _uiImage!.height.toDouble(),
-                      child: RepaintBoundary(
-                        child: ValueListenableBuilder<double>(
-                          valueListenable: _appliedIntensity,
-                          builder: (context, intensityValue, _) {
-                            return CustomPaint(
-                              painter: MakeupOverlayPainter(
-                                image: _uiImage!,
-                                face: faceForOverlay!,
-                                lipstickColor: widget.look!.lipstickColor,
-                                blushColor: widget.look!.blushColor,
-                                eyeshadowColor: widget.look!.eyeshadowColor,
-                                intensity: intensityValue,
-                                faceShape:
-                                    widget.faceProfile?.faceShape ??
-                                        FaceShape.oval,
-                                preset: _currentPreset,
-                                debugMode: false,
-                                isLiveMode: false,
-                                eyelinerStyle: LookEngine.configFromPreset(
-                                  _currentPreset,
-                                  profile: widget.faceProfile,
-                                ).eyelinerStyle,
-                                skinColor: widget.faceProfile != null
-                                    ? Color.fromARGB(
-                                        255,
-                                        widget.faceProfile!.avgR,
-                                        widget.faceProfile!.avgG,
-                                        widget.faceProfile!.avgB,
-                                      )
-                                    : Colors.transparent,
-                                sceneLuminance: 0.5,
-                                leftCheekLuminance: 0.5,
-                                rightCheekLuminance: 0.5,
-                                profile: widget.faceProfile,
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                  ),
-                )
-              : widget.scannedImagePath != null
-                  ? Center(
-                      child: FittedBox(
-                        fit: BoxFit.contain,
-                        child: Image.file(
-                          File(widget.scannedImagePath!),
-                          errorBuilder: (context, error, stackTrace) {
-                            return _buildPlaceholder();
-                          },
-                        ),
-                      ),
-                    )
-                  : _buildPlaceholder(),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPlaceholder() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.face_retouching_natural,
-            size: 80,
-            color: const Color(0xFFFF4D97).withOpacity(0.5),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Your Photo Preview',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey[600],
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBottomButtons() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    side: const BorderSide(
-                      color: Color(0xFFFF4D97),
-                      width: 2,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+              return SingleChildScrollView(
+                physics: const NeverScrollableScrollPhysics(),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                  child: Column(
                     children: [
-                      Icon(
-                        Icons.arrow_back,
-                        size: 18,
-                        color: Color(0xFFFF4D97),
-                      ),
-                      SizedBox(width: 6),
-                      Text(
-                        'Back',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFFFF4D97),
+                      const SizedBox(height: 2),
+
+                      _Header(onReset: _resetAll),
+
+                      const SizedBox(height: 4),
+
+                      Container(
+                        height: previewHeight,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(28),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFFF4D97).withOpacity(0.10),
+                              blurRadius: 22,
+                              offset: const Offset(0, 10),
+                            ),
+                          ],
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            FacePreviewCard(
+                              uiImage: _uiImage,
+                              scannedImagePath: widget.scannedImagePath,
+                              canOverlay: canOverlay,
+                              faceForOverlay: faceForOverlay,
+                              look: widget.look,
+                              faceProfile: widget.faceProfile,
+                              preset: _currentPreset,
+                              previewValues: _previewValues,
+                            ),
+                            Positioned(
+                              top: 12,
+                              left: 12,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.86),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: const Text(
+                                  'AI Preview',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFFFF4D97),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              top: 12,
+                              right: 12,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.35),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: const Text(
+                                  'Soft Glam',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
+
+                      const SizedBox(height: 18),
+
+                      _AreaSelector(
+                        selectedArea: _selectedArea,
+                        onSelected: (area) {
+                          setState(() => _selectedArea = area);
+                        },
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      ValueListenableBuilder<MakeupPreviewValues>(
+                        valueListenable: _previewValues,
+                        builder: (context, values, _) {
+                          final selectedValue = _valueForArea(values);
+
+                          return _SingleOpacityCard(
+                            title: _titleForArea(),
+                            subtitle: _subtitleForArea(),
+                            value: selectedValue,
+                            onChanged: _updateAreaValue,
+                          );
+                        },
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      _ActionCards(
+                        onProduct: () {},
+                        onTutorial: widget.look == null
+                            ? null
+                            : () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => InstructionsPage(
+                                      look: widget.look!,
+                                      faceProfile: widget.faceProfile,
+                                      scannedImagePath: widget.scannedImagePath,
+                                      detectedFace: faceForOverlay,
+                                      selectedPreset: _currentPreset,
+                                    ),
+                                  ),
+                                );
+                              },
+                      ),
+
+                      const SizedBox(height: 0),
                     ],
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: widget.look != null
-                      ? () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => InstructionsPage(
-                                look: widget.look!,
-                                faceProfile: widget.faceProfile,
-                                scannedImagePath: widget.scannedImagePath,
-                                detectedFace: _previewFace ?? widget.detectedFace,
-                                selectedPreset: _currentPreset,
-                              ),
-                            ),
-                          );
-                        }
-                      : null,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    backgroundColor: const Color(0xFFFF4D97),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Header extends StatelessWidget {
+  final VoidCallback onReset;
+
+  const _Header({
+    required this.onReset,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 74,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: GestureDetector(
+              onTap: onReset,
+              child: Container(
+                width: 58,
+                height: 58,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: const Color(0xFFFFD9E9),
+                    width: 1.2,
+                  ),
+                ),
+                child: const Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.restart_alt_rounded,
+                      color: Color(0xFFFF4D97),
+                      size: 26,
                     ),
-                    elevation: 0,
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.school, size: 18, color: Colors.white),
-                      SizedBox(width: 6),
-                      Text(
-                        'Tutorial',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                        ),
+                    SizedBox(height: 1),
+                    Text(
+                      'Reset',
+                      style: TextStyle(
+                        color: Color(0xFFFF4D97),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'Style Preview',
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5,
+                  color: Color(0xFF171725),
+                ),
+              ),
+              SizedBox(height: 2),
+              Text(
+                'Adjust opacity for each makeup area',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF74747A),
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _showBuyProductDialog,
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                backgroundColor: const Color(0xFFFF4D97),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 0,
-              ),
-              child: const Text(
-                'Buy Products',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: IconButton(
+              onPressed: () {},
+              icon: const Icon(
+                Icons.favorite_border_rounded,
+                color: Color(0xFFFF4D97),
+                size: 30,
               ),
             ),
           ),
@@ -460,326 +489,268 @@ class _ScanResultPageState extends State<ScanResultPage> {
       ),
     );
   }
+}
 
-  Widget _buildRecommendedProducts() {
-    final products = _getProductsByItem(widget.scannedItem ?? '');
+class _AreaSelector extends StatelessWidget {
+  final MakeupControlArea selectedArea;
+  final ValueChanged<MakeupControlArea> onSelected;
 
-    return Column(
-      children: List.generate(products.length, (index) {
-        final product = products[index];
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 16),
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey[200]!),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
+  const _AreaSelector({
+    required this.selectedArea,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final items = [
+      _AreaItem(MakeupControlArea.lips, Icons.favorite_rounded, 'Lips'),
+      _AreaItem(MakeupControlArea.eyebrows, Icons.remove_rounded, 'Eyebrows'),
+      _AreaItem(MakeupControlArea.eyeshadow, Icons.visibility_rounded, 'Eyeshadow'),
+      _AreaItem(MakeupControlArea.eyeliner, Icons.edit_rounded, 'Eyeliner'),
+      _AreaItem(MakeupControlArea.blush, Icons.brush_rounded, 'Blush'),
+      _AreaItem(MakeupControlArea.general, Icons.tune_rounded, 'General'),
+    ];
+
+    return SizedBox(
+      height: 128,
+      child: GridView.builder(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: EdgeInsets.zero,
+        itemCount: items.length,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          childAspectRatio: 2.35,
+        ),
+        itemBuilder: (context, index) {
+          final item = items[index];
+          final isSelected = item.area == selectedArea;
+
+          return GestureDetector(
+            onTap: () => onSelected(item.area),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              decoration: BoxDecoration(
+                color: isSelected ? const Color(0xFFFF4D97) : Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: isSelected
+                      ? const Color(0xFFFF4D97)
+                      : const Color(0xFFFFD9E9),
+                  width: isSelected ? 1.5 : 1,
                 ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: (product['color'] as Color).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    item.icon,
+                    size: 22,
+                    color: isSelected ? Colors.white : const Color(0xFF202124),
                   ),
-                  child: Icon(
-                    product['icon'] as IconData,
-                    size: 40,
-                    color: product['color'] as Color,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        product['name'] as String,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        product['brand'] as String,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          const Icon(Icons.star, size: 14, color: Colors.amber),
-                          const SizedBox(width: 4),
-                          Text(
-                            product['rating'] as String,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[700],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            product['price'] as String,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFFFF4D97),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('${product['name']} added to cart'),
-                        backgroundColor: const Color(0xFFFF4D97),
-                        duration: const Duration(seconds: 2),
-                      ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFF4D97),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                  ),
-                  child: const Text(
-                    'Add',
+                  const SizedBox(height: 3),
+                  Text(
+                    item.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
+                      fontWeight:
+                          isSelected ? FontWeight.w800 : FontWeight.w600,
+                      color: isSelected ? Colors.white : const Color(0xFF202124),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
-        );
-      }),
-    );
-  }
-
-  List<Map<String, dynamic>> _getProductsByItem(String item) {
-    final productMap = {
-      'Lips': [
-        {
-          'name': 'Ruby Red Lipstick',
-          'brand': 'Glamour Beauty',
-          'price': '\$24.99',
-          'rating': '4.8',
-          'icon': Icons.color_lens,
-          'color': Colors.red,
-        },
-        {
-          'name': 'Rosy Pink Matte',
-          'brand': 'Elegant Cosmetics',
-          'price': '\$19.99',
-          'rating': '4.7',
-          'icon': Icons.color_lens,
-          'color': Colors.pink,
-        },
-        {
-          'name': 'Nude Bliss',
-          'brand': 'Natural Beauty',
-          'price': '\$22.99',
-          'rating': '4.6',
-          'icon': Icons.color_lens,
-          'color': Colors.brown,
-        },
-      ],
-      'Eyes': [
-        {
-          'name': 'Shimmer Eyeshadow Palette',
-          'brand': 'Eye Couture',
-          'price': '\$34.99',
-          'rating': '4.9',
-          'icon': Icons.remove_red_eye,
-          'color': Colors.purple,
-        },
-        {
-          'name': 'Golden Hour Palette',
-          'brand': 'Sun Glow',
-          'price': '\$29.99',
-          'rating': '4.8',
-          'icon': Icons.remove_red_eye,
-          'color': Colors.amber,
-        },
-        {
-          'name': 'Smokey Noir Set',
-          'brand': 'Dark Matter',
-          'price': '\$27.99',
-          'rating': '4.7',
-          'icon': Icons.remove_red_eye,
-          'color': Colors.grey,
-        },
-      ],
-      'Foundation': [
-        {
-          'name': 'Perfect Coverage Foundation',
-          'brand': 'Pro Base',
-          'price': '\$39.99',
-          'rating': '4.8',
-          'icon': Icons.face,
-          'color': Colors.amber,
-        },
-        {
-          'name': 'Flawless Finish',
-          'brand': 'Skin Perfect',
-          'price': '\$35.99',
-          'rating': '4.7',
-          'icon': Icons.face,
-          'color': Colors.orange,
-        },
-        {
-          'name': 'Natural Glow Base',
-          'brand': 'Pure Beauty',
-          'price': '\$32.99',
-          'rating': '4.6',
-          'icon': Icons.face,
-          'color': Colors.brown,
-        },
-      ],
-      'Blush': [
-        {
-          'name': 'Rose Blush',
-          'brand': 'Cheek Perfection',
-          'price': '\$22.99',
-          'rating': '4.8',
-          'icon': Icons.favorite,
-          'color': Colors.pink,
-        },
-        {
-          'name': 'Coral Peach Blush',
-          'brand': 'Warm Tones',
-          'price': '\$21.99',
-          'rating': '4.7',
-          'icon': Icons.favorite,
-          'color': Colors.deepOrange,
-        },
-        {
-          'name': 'Sunset Bronze',
-          'brand': 'Bronzer Blend',
-          'price': '\$24.99',
-          'rating': '4.9',
-          'icon': Icons.favorite,
-          'color': Colors.brown,
-        },
-      ],
-      'Eyebrow': [
-        {
-          'name': 'Brow Defining Pencil',
-          'brand': 'Brow Expert',
-          'price': '\$18.99',
-          'rating': '4.7',
-          'icon': Icons.edit,
-          'color': Colors.brown,
-        },
-        {
-          'name': 'Micro Brow Pen',
-          'brand': 'Precision Beauty',
-          'price': '\$21.99',
-          'rating': '4.8',
-          'icon': Icons.edit,
-          'color': Colors.grey,
-        },
-        {
-          'name': 'Brow Filler Gel',
-          'brand': 'Hold Strong',
-          'price': '\$17.99',
-          'rating': '4.6',
-          'icon': Icons.edit,
-          'color': Colors.blueGrey,
-        },
-      ],
-      'Eyeliner': [
-        {
-          'name': 'Waterproof Liquid Eyeliner',
-          'brand': 'Line Perfect',
-          'price': '\$16.99',
-          'rating': '4.8',
-          'icon': Icons.brush,
-          'color': Colors.black,
-        },
-        {
-          'name': 'Gel Eyeliner',
-          'brand': 'Smooth Lines',
-          'price': '\$19.99',
-          'rating': '4.7',
-          'icon': Icons.brush,
-          'color': Colors.indigo,
-        },
-        {
-          'name': 'Felt Tip Eyeliner',
-          'brand': 'Precision Ink',
-          'price': '\$18.99',
-          'rating': '4.9',
-          'icon': Icons.brush,
-          'color': Colors.black87,
-        },
-      ],
-    };
-
-    return productMap[item] ?? [];
-  }
-
-  void _showBuyProductDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: const Text(
-          'Buy Products',
-          style: TextStyle(fontWeight: FontWeight.w600),
-        ),
-        content: const Text(
-          'This will take you to our recommended products for your selected look.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.grey),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF4D97),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+                ],
               ),
             ),
-            child: const Text('Continue'),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _AreaItem {
+  final MakeupControlArea area;
+  final IconData icon;
+  final String label;
+
+  const _AreaItem(this.area, this.icon, this.label);
+}
+
+class _SingleOpacityCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final double value;
+  final ValueChanged<double> onChanged;
+
+  const _SingleOpacityCard({
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 78,
+      padding: const EdgeInsets.fromLTRB(18, 12, 18, 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFFFFD9E9)),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF171725),
+                  ),
+                ),
+              ),
+              Text(
+                '${(value * 100).round()}%',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFFFF4D97),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 22,
+            child: BeautySlider(
+              value: value,
+              onChanged: onChanged,
+            ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ActionCards extends StatelessWidget {
+  final VoidCallback onProduct;
+  final VoidCallback? onTutorial;
+
+  const _ActionCards({
+    required this.onProduct,
+    required this.onTutorial,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _ActionCard(
+            icon: Icons.shopping_bag_outlined,
+            title: 'Product',
+            subtitle: 'Recommended for you',
+            color: const Color(0xFFFF4D97),
+            background: const Color(0xFFFFEEF6),
+            onTap: onProduct,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _ActionCard(
+            icon: Icons.school_outlined,
+            title: 'Tutorial',
+            subtitle: 'Step by step guide',
+            color: const Color(0xFF7B4CE0),
+            background: const Color(0xFFF4EEFF),
+            onTap: onTutorial,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ActionCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final Color background;
+  final VoidCallback? onTap;
+
+  const _ActionCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.background,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: onTap == null ? 0.45 : 1,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: Container(
+          height: 58,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: background,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: color.withOpacity(0.24)),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: color, size: 28),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: color.withOpacity(0.8),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: color,
+                size: 23,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
