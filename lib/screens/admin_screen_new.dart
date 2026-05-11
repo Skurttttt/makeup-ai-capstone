@@ -7,6 +7,16 @@ import '../services/supabase_service.dart';
 import '../utils/export_helper.dart';
 import '../utils/logout_util.dart';
 
+// Format currency to Philippine Peso (PHP)
+String formatPHP(double amount) {
+  final formatter = NumberFormat.currency(
+    locale: 'fil_PH',
+    symbol: '₱',
+    decimalDigits: amount == amount.toInt() ? 0 : 2,
+  );
+  return formatter.format(amount);
+}
+
 class AdminScreenNew extends StatefulWidget {
   const AdminScreenNew({super.key});
 
@@ -16,7 +26,8 @@ class AdminScreenNew extends StatefulWidget {
 
 class _AdminScreenNewState extends State<AdminScreenNew> {
   final _supabaseService = SupabaseService();
-  int _currentSection = 0; // 0: Dashboard, 1: Accounts, 2: Subscriptions, 3: Profits, 4: Audit Logs
+  int _currentSection =
+      0; // 0: Dashboard, 1: Accounts, 2: Subscriptions, 3: Profits, 4: Audit Logs
   late RealtimeChannel _accountsChannel;
   late RealtimeChannel _subscriptionsChannel;
   late RealtimeChannel _auditLogsChannel;
@@ -106,11 +117,11 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
 
   Widget _buildWebSidebar() {
     final sections = [
-      (label: 'Dashboard',     icon: Icons.dashboard_rounded,       idx: 0),
-      (label: 'Accounts',      icon: Icons.people_rounded,           idx: 1),
-      (label: 'Subscriptions', icon: Icons.card_membership_rounded,  idx: 2),
-      (label: 'Profit',        icon: Icons.bar_chart_rounded,        idx: 3),
-      (label: 'Audit Logs',    icon: Icons.receipt_long_rounded,     idx: 4),
+      (label: 'Dashboard', icon: Icons.dashboard_rounded, idx: 0),
+      (label: 'Accounts', icon: Icons.people_rounded, idx: 1),
+      (label: 'Subscriptions', icon: Icons.card_membership_rounded, idx: 2),
+      (label: 'Profit', icon: Icons.bar_chart_rounded, idx: 3),
+      (label: 'Audit Logs', icon: Icons.receipt_long_rounded, idx: 4),
     ];
 
     return Container(
@@ -118,7 +129,11 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
       decoration: const BoxDecoration(
         color: Color(0xFF111827),
         boxShadow: [
-          BoxShadow(color: Color(0x1A000000), blurRadius: 20, offset: Offset(4, 0)),
+          BoxShadow(
+            color: Color(0x1A000000),
+            blurRadius: 20,
+            offset: Offset(4, 0),
+          ),
         ],
       ),
       child: Column(
@@ -155,14 +170,29 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                       ),
                     ],
                   ),
-                  child: const Icon(Icons.face_retouching_natural, color: Colors.white, size: 24),
+                  child: const Icon(
+                    Icons.face_retouching_natural,
+                    color: Colors.white,
+                    size: 24,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 const Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('FaceTune Beauty', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: 0.2)),
-                    Text('Admin Console', style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
+                    Text(
+                      'FaceTune Beauty',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    Text(
+                      'Admin Console',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
+                    ),
                   ],
                 ),
               ],
@@ -173,11 +203,23 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
               children: [
-                Expanded(child: Container(height: 1, color: const Color(0xFF2A2D3E))),
+                Expanded(
+                  child: Container(height: 1, color: const Color(0xFF2A2D3E)),
+                ),
                 const SizedBox(width: 8),
-                Text('NAVIGATION', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.grey[600], letterSpacing: 1.5)),
+                Text(
+                  'NAVIGATION',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.grey[600],
+                    letterSpacing: 1.5,
+                  ),
+                ),
                 const SizedBox(width: 8),
-                Expanded(child: Container(height: 1, color: const Color(0xFF2A2D3E))),
+                Expanded(
+                  child: Container(height: 1, color: const Color(0xFF2A2D3E)),
+                ),
               ],
             ),
           ),
@@ -195,9 +237,16 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                     duration: const Duration(milliseconds: 200),
                     padding: EdgeInsets.zero,
                     decoration: BoxDecoration(
-                      color: isActive ? const Color(0xFFFF4D97).withOpacity(0.12) : Colors.transparent,
+                      color: isActive
+                          ? const Color(0xFFFF4D97).withOpacity(0.12)
+                          : Colors.transparent,
                       borderRadius: BorderRadius.circular(10),
-                      border: isActive ? Border.all(color: const Color(0xFFFF4D97).withOpacity(0.3), width: 1) : null,
+                      border: isActive
+                          ? Border.all(
+                              color: const Color(0xFFFF4D97).withOpacity(0.3),
+                              width: 1,
+                            )
+                          : null,
                     ),
                     child: Row(
                       children: [
@@ -206,7 +255,9 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                           width: 3,
                           height: 44,
                           decoration: BoxDecoration(
-                            color: isActive ? const Color(0xFFFF4D97) : Colors.transparent,
+                            color: isActive
+                                ? const Color(0xFFFF4D97)
+                                : Colors.transparent,
                             borderRadius: const BorderRadius.only(
                               topLeft: Radius.circular(10),
                               bottomLeft: Radius.circular(10),
@@ -217,7 +268,9 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                         Icon(
                           s.icon,
                           size: 19,
-                          color: isActive ? const Color(0xFFFF4D97) : const Color(0xFF6B7280),
+                          color: isActive
+                              ? const Color(0xFFFF4D97)
+                              : const Color(0xFF6B7280),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -225,20 +278,31 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                             s.label,
                             style: TextStyle(
                               fontSize: 13,
-                              fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-                              color: isActive ? Colors.white : const Color(0xFFB0B7C3),
+                              fontWeight: isActive
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
+                              color: isActive
+                                  ? Colors.white
+                                  : const Color(0xFFB0B7C3),
                             ),
                           ),
                         ),
                         if (isActive)
                           Container(
                             margin: const EdgeInsets.only(right: 12),
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: const Color(0xFFFF4D97).withOpacity(0.2),
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: const Icon(Icons.chevron_right_rounded, size: 14, color: Color(0xFFFF4D97)),
+                            child: const Icon(
+                              Icons.chevron_right_rounded,
+                              size: 14,
+                              color: Color(0xFFFF4D97),
+                            ),
                           ),
                       ],
                     ),
@@ -261,20 +325,45 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                 const CircleAvatar(
                   radius: 16,
                   backgroundColor: Color(0xFFFF4D97),
-                  child: Text('A', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
+                  child: Text(
+                    'A',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 10),
                 const Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Admin', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
-                      Text('admin@facetunebeauty.com', style: TextStyle(fontSize: 10, color: Color(0xFF6B7280)), overflow: TextOverflow.ellipsis),
+                      Text(
+                        'Admin',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                      Text(
+                        'admin@facetunebeauty.com',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Color(0xFF6B7280),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ],
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.logout_rounded, color: Color(0xFF6B7280), size: 18),
+                  icon: const Icon(
+                    Icons.logout_rounded,
+                    color: Color(0xFF6B7280),
+                    size: 18,
+                  ),
                   tooltip: 'Logout',
                   onPressed: _showLogoutDialog,
                   padding: EdgeInsets.zero,
@@ -288,7 +377,13 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
     );
   }
 
-  static const _sectionTitles = ['Dashboard', 'Accounts', 'Subscriptions', 'Profit', 'Audit Logs'];
+  static const _sectionTitles = [
+    'Dashboard',
+    'Accounts',
+    'Subscriptions',
+    'Profit',
+    'Audit Logs',
+  ];
   static const _sectionIcons = [
     Icons.dashboard_rounded,
     Icons.people_rounded,
@@ -299,14 +394,22 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
 
   Widget _buildWebTopBar() {
     final title = _sectionTitles[_currentSection];
-    final icon  = _sectionIcons[_currentSection];
+    final icon = _sectionIcons[_currentSection];
     return Container(
       height: 72,
       padding: const EdgeInsets.symmetric(horizontal: 28),
       decoration: const BoxDecoration(
         color: Colors.white,
-        border: Border(bottom: BorderSide(color: Color(0xFFE8EAF2), width: 1.5)),
-        boxShadow: [BoxShadow(color: Color(0x0A000000), blurRadius: 12, offset: Offset(0, 3))],
+        border: Border(
+          bottom: BorderSide(color: Color(0xFFE8EAF2), width: 1.5),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x0A000000),
+            blurRadius: 12,
+            offset: Offset(0, 3),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -314,7 +417,11 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
           const SizedBox(width: 10),
           Text(
             title,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1A1D2E)),
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1A1D2E),
+            ),
           ),
           const SizedBox(width: 8),
           Container(
@@ -325,7 +432,11 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
             ),
             child: Text(
               'Admin',
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: const Color(0xFFFF4D97)),
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFFFF4D97),
+              ),
             ),
           ),
           const Spacer(),
@@ -342,7 +453,14 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
               children: [
                 Icon(Icons.circle, size: 8, color: Colors.green[400]),
                 const SizedBox(width: 6),
-                Text('Live', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.green[700])),
+                Text(
+                  'Live',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.green[700],
+                  ),
+                ),
               ],
             ),
           ),
@@ -351,7 +469,11 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
             children: [
               IconButton(
                 onPressed: () {},
-                icon: const Icon(Icons.notifications_outlined, size: 22, color: Color(0xFF6B7280)),
+                icon: const Icon(
+                  Icons.notifications_outlined,
+                  size: 22,
+                  color: Color(0xFF6B7280),
+                ),
                 tooltip: 'Notifications',
               ),
               Positioned(
@@ -372,7 +494,13 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
           const CircleAvatar(
             radius: 17,
             backgroundColor: Color(0xFFFF4D97),
-            child: Text('A', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+            child: Text(
+              'A',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ],
       ),
@@ -381,12 +509,19 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
 
   Widget _buildLiveTime() {
     return StreamBuilder<DateTime>(
-      stream: Stream<DateTime>.periodic(const Duration(seconds: 1), (_) => DateTime.now()),
+      stream: Stream<DateTime>.periodic(
+        const Duration(seconds: 1),
+        (_) => DateTime.now(),
+      ),
       builder: (context, snapshot) {
         final now = snapshot.data ?? DateTime.now();
         return Text(
           DateFormat('MMM dd, yyyy • HH:mm').format(now),
-          style: const TextStyle(fontSize: 12, color: Colors.black87, fontWeight: FontWeight.w600),
+          style: const TextStyle(
+            fontSize: 12,
+            color: Colors.black87,
+            fontWeight: FontWeight.w600,
+          ),
         );
       },
     );
@@ -446,21 +581,138 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
           currentMonthProfit = 0.0;
         }
 
-        final activeSubscriptions = subscriptions.where((s) => s['status'] == 'active').length;
+        final activeSubscriptions = subscriptions
+            .where((s) => s['status'] == 'active')
+            .length;
         final totalAccounts = users.length;
+        final pendingSubscriptions = subscriptions
+            .where((s) => s['status'] == 'pending')
+            .length;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF1F2937), Color(0xFF111827)],
+                ),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.12),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color(0xFFFF4D97), Color(0xFFFF8CB8)],
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Icon(
+                      Icons.space_dashboard_rounded,
+                      color: Colors.white,
+                      size: 28,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Admin command center',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Use live account, subscription, and revenue signals to see what is happening, what might happen next, and where to act first.',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey.shade300,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      _buildAdminBadge('Live', const Color(0xFF10B981)),
+                      const SizedBox(height: 8),
+                      _buildAdminBadge(
+                        'Pending: $pendingSubscriptions',
+                        const Color(0xFFF59E0B),
+                      ),
+                      const SizedBox(height: 8),
+                      _buildAdminBadge(
+                        'Active: $activeSubscriptions',
+                        const Color(0xFF4F46E5),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
             Row(
               children: [
-                Expanded(child: _buildKpiCard('Total Accounts', '$totalAccounts', '+2.1%', Colors.blue)),
+                Expanded(
+                  child: _buildKpiCard(
+                    'Total Accounts',
+                    '$totalAccounts',
+                    '+2.1%',
+                    Colors.blue,
+                  ),
+                ),
                 const SizedBox(width: 16),
-                Expanded(child: _buildKpiCard('Active Subscriptions', '$activeSubscriptions', '+1.5%', const Color(0xFFFF4D97))),
+                Expanded(
+                  child: _buildKpiCard(
+                    'Active Subscriptions',
+                    '$activeSubscriptions',
+                    '+1.5%',
+                    const Color(0xFFFF4D97),
+                  ),
+                ),
                 const SizedBox(width: 16),
-                Expanded(child: _buildKpiCard('Monthly Sales', '₱${currentMonthProfit.toStringAsFixed(2)}', '+0%', Colors.green)),
+                Expanded(
+                  child: _buildKpiCard(
+                    'Monthly Sales',
+                    formatPHP(currentMonthProfit),
+                    '+0%',
+                    Colors.green,
+                  ),
+                ),
                 const SizedBox(width: 16),
-                Expanded(child: _buildKpiCard('Churn Rate', '1.8%', '-0.3%', Colors.orange)),
+                Expanded(
+                  child: _buildKpiCard(
+                    'Churn Rate',
+                    '1.8%',
+                    '-0.3%',
+                    Colors.orange,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -472,156 +724,36 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                   child: FutureBuilder(
                     future: _supabaseService.getAllSubscriptions(),
                     builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
 
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Text(
-                      'Error: ${snapshot.error}',
-                      style: const TextStyle(color: Colors.red, fontSize: 14),
-                    ),
-                  );
-                }
+                      if (snapshot.hasError) {
+                        return Center(
+                          child: Text(
+                            'Error: ${snapshot.error}',
+                            style: const TextStyle(
+                              color: Colors.red,
+                              fontSize: 14,
+                            ),
+                          ),
+                        );
+                      }
 
-                final subscriptions = snapshot.data ?? [];
-                final monthlyData = _calculateMonthlyProfits(subscriptions);
+                      final subscriptions = snapshot.data ?? [];
+                      final monthlyData = _calculateMonthlyProfits(
+                        subscriptions,
+                      );
 
-                return Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFE6E8F0), width: 1.5),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
-                        blurRadius: 12,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Monthly Sales Chart',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.black87),
-                      ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        height: 260,
-                        child: monthlyData.isEmpty
-                            ? const Center(
-                                child: Text(
-                                  'No subscription data available',
-                                  style: TextStyle(color: Colors.black54, fontSize: 14),
-                                ),
-                              )
-                            : LineChart(
-                                LineChartData(
-                                  gridData: FlGridData(
-                                    show: true,
-                                    drawVerticalLine: true,
-                                    horizontalInterval: 500,
-                                    getDrawingHorizontalLine: (value) {
-                                      return FlLine(
-                                        color: Colors.grey[300],
-                                        strokeWidth: 1,
-                                      );
-                                    },
-                                  ),
-                                  titlesData: FlTitlesData(
-                                    show: true,
-                                    rightTitles: const AxisTitles(
-                                      sideTitles: SideTitles(showTitles: false),
-                                    ),
-                                    topTitles: const AxisTitles(
-                                      sideTitles: SideTitles(showTitles: false),
-                                    ),
-                                    bottomTitles: AxisTitles(
-                                      sideTitles: SideTitles(
-                                        showTitles: true,
-                                        reservedSize: 30,
-                                        interval: 1,
-                                        getTitlesWidget: (value, meta) {
-                                          if (value.toInt() >= 0 && value.toInt() < monthlyData.length) {
-                                            return Padding(
-                                              padding: const EdgeInsets.only(top: 8.0),
-                                              child: Text(
-                                                monthlyData[value.toInt()]['month'],
-                                                style: const TextStyle(fontSize: 10, color: Colors.black87),
-                                              ),
-                                            );
-                                          }
-                                          return const Text('');
-                                        },
-                                      ),
-                                    ),
-                                    leftTitles: AxisTitles(
-                                      sideTitles: SideTitles(
-                                        showTitles: true,
-                                        interval: 500,
-                                        reservedSize: 50,
-                                        getTitlesWidget: (value, meta) {
-                                          return Text(
-                                            '₱${value.toInt()}',
-                                            style: const TextStyle(fontSize: 10, color: Colors.black87),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                  borderData: FlBorderData(
-                                    show: true,
-                                    border: Border.all(color: Colors.grey[300]!),
-                                  ),
-                                  minX: 0,
-                                  maxX: (monthlyData.length - 1).toDouble(),
-                                  minY: 0,
-                                  maxY: (monthlyData.map((d) => d['amount'] as double).reduce((a, b) => a > b ? a : b) * 1.2),
-                                  lineBarsData: [
-                                    LineChartBarData(
-                                      spots: List.generate(
-                                        monthlyData.length,
-                                        (index) => FlSpot(
-                                          index.toDouble(),
-                                          monthlyData[index]['amount'],
-                                        ),
-                                      ),
-                                      isCurved: true,
-                                      color: const Color(0xFFFF4D97),
-                                      barWidth: 3,
-                                      isStrokeCapRound: true,
-                                      dotData: const FlDotData(show: true),
-                                      belowBarData: BarAreaData(
-                                        show: true,
-                                        color: const Color(0xFFFF4D97).withOpacity(0.1),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-                    ),
-                ),
-                const SizedBox(width: 24),
-                Expanded(
-                  flex: 1,
-                  child: Column(
-                    children: [
-                      // Quick Stats Panel
-                      Container(
-                        padding: const EdgeInsets.all(16),
+                      return Container(
+                        padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFE6E8F0), width: 1.5),
+                          border: Border.all(
+                            color: const Color(0xFFE6E8F0),
+                            width: 1.5,
+                          ),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withOpacity(0.04),
@@ -634,17 +766,233 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'Quick Stats',
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.black87),
+                              'Monthly Sales Chart',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              height: 260,
+                              child: monthlyData.isEmpty
+                                  ? const Center(
+                                      child: Text(
+                                        'No subscription data available',
+                                        style: TextStyle(
+                                          color: Colors.black54,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    )
+                                  : LineChart(
+                                      LineChartData(
+                                        gridData: FlGridData(
+                                          show: true,
+                                          drawVerticalLine: true,
+                                          horizontalInterval: 500,
+                                          getDrawingHorizontalLine: (value) {
+                                            return FlLine(
+                                              color: Colors.grey[300],
+                                              strokeWidth: 1,
+                                            );
+                                          },
+                                        ),
+                                        titlesData: FlTitlesData(
+                                          show: true,
+                                          rightTitles: const AxisTitles(
+                                            sideTitles: SideTitles(
+                                              showTitles: false,
+                                            ),
+                                          ),
+                                          topTitles: const AxisTitles(
+                                            sideTitles: SideTitles(
+                                              showTitles: false,
+                                            ),
+                                          ),
+                                          bottomTitles: AxisTitles(
+                                            sideTitles: SideTitles(
+                                              showTitles: true,
+                                              reservedSize: 30,
+                                              interval: 1,
+                                              getTitlesWidget: (value, meta) {
+                                                if (value.toInt() >= 0 &&
+                                                    value.toInt() <
+                                                        monthlyData.length) {
+                                                  return Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                          top: 8.0,
+                                                        ),
+                                                    child: Text(
+                                                      monthlyData[value
+                                                          .toInt()]['month'],
+                                                      style: const TextStyle(
+                                                        fontSize: 10,
+                                                        color: Colors.black87,
+                                                      ),
+                                                    ),
+                                                  );
+                                                }
+                                                return const Text('');
+                                              },
+                                            ),
+                                          ),
+                                          leftTitles: AxisTitles(
+                                            sideTitles: SideTitles(
+                                              showTitles: true,
+                                              interval: 500,
+                                              reservedSize: 50,
+                                              getTitlesWidget: (value, meta) {
+                                                return Text(
+                                                  formatPHP(value.toDouble()),
+                                                  style: const TextStyle(
+                                                    fontSize: 10,
+                                                    color: Colors.black87,
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                        ),
+                                        borderData: FlBorderData(
+                                          show: true,
+                                          border: Border.all(
+                                            color: Colors.grey[300]!,
+                                          ),
+                                        ),
+                                        minX: 0,
+                                        maxX: (monthlyData.length - 1)
+                                            .toDouble(),
+                                        minY: 0,
+                                        maxY:
+                                            (monthlyData
+                                                .map(
+                                                  (d) => d['amount'] as double,
+                                                )
+                                                .reduce(
+                                                  (a, b) => a > b ? a : b,
+                                                ) *
+                                            1.2),
+                                        lineBarsData: [
+                                          LineChartBarData(
+                                            spots: List.generate(
+                                              monthlyData.length,
+                                              (index) => FlSpot(
+                                                index.toDouble(),
+                                                monthlyData[index]['amount'],
+                                              ),
+                                            ),
+                                            isCurved: true,
+                                            color: const Color(0xFFFF4D97),
+                                            barWidth: 3,
+                                            isStrokeCapRound: true,
+                                            dotData: const FlDotData(
+                                              show: true,
+                                            ),
+                                            belowBarData: BarAreaData(
+                                              show: true,
+                                              color: const Color(
+                                                0xFFFF4D97,
+                                              ).withOpacity(0.1),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(width: 24),
+                Expanded(
+                  flex: 1,
+                  child: Column(
+                    children: [
+                      // Quick Stats Panel
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: const Color(0xFFE6E8F0),
+                            width: 1.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.04),
+                              blurRadius: 12,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Decision summary',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Descriptive, predictive, and prescriptive signals at a glance.',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey[600],
+                              ),
                             ),
                             const SizedBox(height: 12),
-                            _buildQuickStatRow('Total Revenue', '₱${subscriptions.fold<double>(0, (sum, s) => sum + ((s['price'] as num?)?.toDouble() ?? 0)).toStringAsFixed(0)}', Colors.green),
+                            _buildQuickStatRow(
+                              'Total Revenue',
+                              formatPHP(
+                                subscriptions.fold<double>(
+                                  0,
+                                  (sum, s) =>
+                                      sum +
+                                      ((s['price'] as num?)?.toDouble() ?? 0),
+                                ),
+                              ),
+                              Colors.green,
+                            ),
                             const SizedBox(height: 8),
-                            _buildQuickStatRow('Pending', '${subscriptions.where((s) => s['status'] == 'pending').length}', Colors.orange),
+                            _buildQuickStatRow(
+                              'Pending',
+                              '${subscriptions.where((s) => s['status'] == 'pending').length}',
+                              Colors.orange,
+                            ),
                             const SizedBox(height: 8),
-                            _buildQuickStatRow('Expired', '${subscriptions.where((s) => s['status'] == 'expired').length}', Colors.red),
+                            _buildQuickStatRow(
+                              'Expired',
+                              '${subscriptions.where((s) => s['status'] == 'expired').length}',
+                              Colors.red,
+                            ),
                             const SizedBox(height: 8),
-                            _buildQuickStatRow('Avg Price', '₱${subscriptions.isEmpty ? 0 : (subscriptions.fold<double>(0, (sum, s) => sum + ((s['price'] as num?)?.toDouble() ?? 0)) / subscriptions.length).toStringAsFixed(0)}', Colors.blue),
+                            _buildQuickStatRow(
+                              'Avg Price',
+                              formatPHP(
+                                subscriptions.isEmpty
+                                    ? 0
+                                    : (subscriptions.fold<double>(
+                                            0,
+                                            (sum, s) =>
+                                                sum +
+                                                ((s['price'] as num?)
+                                                        ?.toDouble() ??
+                                                    0),
+                                          ) /
+                                          subscriptions.length),
+                              ),
+                              Colors.blue,
+                            ),
                           ],
                         ),
                       ),
@@ -659,7 +1007,10 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                             colors: [Colors.white, Colors.grey[50]!],
                           ),
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFE6E8F0), width: 1.5),
+                          border: Border.all(
+                            color: const Color(0xFFE6E8F0),
+                            width: 1.5,
+                          ),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withOpacity(0.04),
@@ -673,16 +1024,32 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                           children: [
                             const Text(
                               'System Status',
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.black87),
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.black87,
+                              ),
                             ),
                             const SizedBox(height: 12),
-                            _buildStatusIndicator('Database', true, 'Connected'),
+                            _buildStatusIndicator(
+                              'Database',
+                              true,
+                              'Connected',
+                            ),
                             const SizedBox(height: 8),
                             _buildStatusIndicator('API', true, 'Healthy'),
                             const SizedBox(height: 8),
-                            _buildStatusIndicator('Storage', true, 'Operational'),
+                            _buildStatusIndicator(
+                              'Storage',
+                              true,
+                              'Operational',
+                            ),
                             const SizedBox(height: 8),
-                            _buildStatusIndicator('Auth Service', true, 'Active'),
+                            _buildStatusIndicator(
+                              'Auth Service',
+                              true,
+                              'Active',
+                            ),
                           ],
                         ),
                       ),
@@ -701,16 +1068,49 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: const TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w500)),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 13,
+            color: Colors.black87,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
             color: color.withOpacity(0.1),
             borderRadius: BorderRadius.circular(6),
           ),
-          child: Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
         ),
       ],
+    );
+  }
+
+  Widget _buildAdminBadge(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
+      ),
     );
   }
 
@@ -730,8 +1130,18 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black87)),
-              Text(message, style: const TextStyle(fontSize: 11, color: Colors.black54)),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+              Text(
+                message,
+                style: const TextStyle(fontSize: 11, color: Colors.black54),
+              ),
             ],
           ),
         ),
@@ -752,7 +1162,10 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
 
         if (snapshot.hasError) {
           return Center(
-            child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.red, fontSize: 14)),
+            child: Text(
+              'Error: ${snapshot.error}',
+              style: const TextStyle(color: Colors.red, fontSize: 14),
+            ),
           );
         }
 
@@ -767,7 +1180,8 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
         for (var sub in subscriptions) {
           final userId = sub['user_id'];
           if (userId != null) {
-            if (!userSubscriptionMap.containsKey(userId) || sub['status'] == 'active') {
+            if (!userSubscriptionMap.containsKey(userId) ||
+                sub['status'] == 'active') {
               userSubscriptionMap[userId] = sub;
             }
           }
@@ -776,16 +1190,42 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSectionHeader('Account Management', 'View, search and manage all user accounts', Icons.people_rounded, Colors.blue),
+            _buildSectionHeader(
+              'Account Management',
+              'View, search and manage all user accounts',
+              Icons.people_rounded,
+              Colors.blue,
+            ),
             const SizedBox(height: 20),
             // Summary Cards
             Row(
               children: [
-                Expanded(child: _buildKpiCard('Total Users', '$totalUsers', '+${(totalUsers > 0 ? 5 : 0)}%', Colors.blue)),
+                Expanded(
+                  child: _buildKpiCard(
+                    'Total Users',
+                    '$totalUsers',
+                    '+${(totalUsers > 0 ? 5 : 0)}%',
+                    Colors.blue,
+                  ),
+                ),
                 const SizedBox(width: 16),
-                Expanded(child: _buildKpiCard('Admin Users', '$adminCount', '+0%', Colors.purple)),
+                Expanded(
+                  child: _buildKpiCard(
+                    'Admin Users',
+                    '$adminCount',
+                    '+0%',
+                    Colors.purple,
+                  ),
+                ),
                 const SizedBox(width: 16),
-                Expanded(child: _buildKpiCard('Regular Users', '$regularUsers', '+${(regularUsers > 0 ? 5 : 0)}%', Colors.cyan)),
+                Expanded(
+                  child: _buildKpiCard(
+                    'Regular Users',
+                    '$regularUsers',
+                    '+${(regularUsers > 0 ? 5 : 0)}%',
+                    Colors.cyan,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 24),
@@ -793,15 +1233,31 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Manage Accounts', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1A1D2E))),
+                const Text(
+                  'Manage Accounts',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1A1D2E),
+                  ),
+                ),
                 ElevatedButton.icon(
                   onPressed: () {},
                   icon: const Icon(Icons.add, color: Colors.white, size: 18),
-                  label: const Text('Add Account', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                  label: const Text(
+                    'Add Account',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFF4D97),
                     elevation: 2,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
@@ -827,19 +1283,31 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                     : null,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFE6E8F0), width: 1.5),
+                  borderSide: const BorderSide(
+                    color: Color(0xFFE6E8F0),
+                    width: 1.5,
+                  ),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFE6E8F0), width: 1.5),
+                  borderSide: const BorderSide(
+                    color: Color(0xFFE6E8F0),
+                    width: 1.5,
+                  ),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFFF4D97), width: 2),
+                  borderSide: const BorderSide(
+                    color: Color(0xFFFF4D97),
+                    width: 2,
+                  ),
                 ),
                 filled: true,
                 fillColor: Colors.grey[50],
-                contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                contentPadding: const EdgeInsets.symmetric(
+                  vertical: 14,
+                  horizontal: 16,
+                ),
               ),
               onChanged: (value) {
                 setState(() => _searchQuery = value.toLowerCase());
@@ -871,104 +1339,245 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                       dividerThickness: 1,
                       columnSpacing: 24,
                       columns: const [
-                        DataColumn(label: Text('Name', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
-                    DataColumn(label: Text('Email', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
-                    DataColumn(label: Text('Role', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
-                    DataColumn(label: Text('Subscription', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
-                    DataColumn(label: Text('Created', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
-                    DataColumn(label: Text('Actions', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
-                  ],
-                  rows: List.generate((_searchQuery.isEmpty
-                          ? users
-                          : users
-                              .where((user) =>
-                                  (user['full_name'] ?? '').toString().toLowerCase().contains(_searchQuery) ||
-                                  (user['email'] ?? '').toString().toLowerCase().contains(_searchQuery))
-                              .toList())
-                      .length, (index) {
-                    final filteredUsers = _searchQuery.isEmpty
-                        ? users
-                        : users
-                            .where((user) =>
-                                (user['full_name'] ?? '').toString().toLowerCase().contains(_searchQuery) ||
-                                (user['email'] ?? '').toString().toLowerCase().contains(_searchQuery))
-                            .toList();
-                    final user = filteredUsers[index];
-                    final isEvenRow = index % 2 == 0;
-                    final userSub = userSubscriptionMap[user['id']];
-                    final planName = userSub?['subscription_plans']?['name'] ?? 'Free';
-                    
-                    return DataRow(
-                      color: WidgetStateProperty.all(
-                        isEvenRow ? Colors.white : Colors.grey[50],
-                      ),
-                      cells: [
-                        DataCell(Text(user['full_name'] ?? 'N/A', style: const TextStyle(color: Colors.black87, fontSize: 13))),
-                        DataCell(Text(user['email'] ?? 'N/A', style: const TextStyle(color: Colors.black87, fontSize: 13))),
-                        DataCell(Text(user['role'] ?? 'N/A', style: const TextStyle(color: Colors.black87, fontSize: 13))),
-                        DataCell(
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: _getSubscriptionColor(planName).withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: _getSubscriptionColor(planName).withOpacity(0.3), width: 1),
-                            ),
-                            child: Text(
-                              planName,
-                              style: TextStyle(
-                                color: _getSubscriptionColor(planName),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
+                        DataColumn(
+                          label: Text(
+                            'Name',
+                            style: TextStyle(
+                              color: Colors.black87,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
                             ),
                           ),
                         ),
-                        DataCell(
-                          Text(
-                            DateFormat('MMM dd, yyyy • HH:mm').format(
-                              DateTime.parse(user['created_at'] ?? DateTime.now().toIso8601String()),
+                        DataColumn(
+                          label: Text(
+                            'Email',
+                            style: TextStyle(
+                              color: Colors.black87,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
                             ),
-                            style: const TextStyle(color: Colors.black87, fontSize: 13),
                           ),
                         ),
-                        DataCell(
-                          Row(
-                            children: [
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF2563EB).withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: TextButton.icon(
-                                  onPressed: () => _showEditAccountDialog(user),
-                                  icon: const Icon(Icons.edit, size: 16, color: Color(0xFF2563EB)),
-                                  label: const Text('Edit', style: TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.w600, fontSize: 12)),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFDC2626).withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: TextButton.icon(
-                                  onPressed: () {},
-                                  icon: const Icon(Icons.delete, size: 16, color: Color(0xFFDC2626)),
-                                  label: const Text('Delete', style: TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.w600, fontSize: 12)),
-                                ),
-                              ),
-                            ],
+                        DataColumn(
+                          label: Text(
+                            'Role',
+                            style: TextStyle(
+                              color: Colors.black87,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Text(
+                            'Subscription',
+                            style: TextStyle(
+                              color: Colors.black87,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Text(
+                            'Created',
+                            style: TextStyle(
+                              color: Colors.black87,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Text(
+                            'Actions',
+                            style: TextStyle(
+                              color: Colors.black87,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
                           ),
                         ),
                       ],
-                    );
-                  }),
+                      rows: List.generate(
+                        (_searchQuery.isEmpty
+                                ? users
+                                : users
+                                      .where(
+                                        (user) =>
+                                            (user['full_name'] ?? '')
+                                                .toString()
+                                                .toLowerCase()
+                                                .contains(_searchQuery) ||
+                                            (user['email'] ?? '')
+                                                .toString()
+                                                .toLowerCase()
+                                                .contains(_searchQuery),
+                                      )
+                                      .toList())
+                            .length,
+                        (index) {
+                          final filteredUsers = _searchQuery.isEmpty
+                              ? users
+                              : users
+                                    .where(
+                                      (user) =>
+                                          (user['full_name'] ?? '')
+                                              .toString()
+                                              .toLowerCase()
+                                              .contains(_searchQuery) ||
+                                          (user['email'] ?? '')
+                                              .toString()
+                                              .toLowerCase()
+                                              .contains(_searchQuery),
+                                    )
+                                    .toList();
+                          final user = filteredUsers[index];
+                          final isEvenRow = index % 2 == 0;
+                          final userSub = userSubscriptionMap[user['id']];
+                          final planName =
+                              userSub?['subscription_plans']?['name'] ?? 'Free';
+
+                          return DataRow(
+                            color: WidgetStateProperty.all(
+                              isEvenRow ? Colors.white : Colors.grey[50],
+                            ),
+                            cells: [
+                              DataCell(
+                                Text(
+                                  user['full_name'] ?? 'N/A',
+                                  style: const TextStyle(
+                                    color: Colors.black87,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                Text(
+                                  user['email'] ?? 'N/A',
+                                  style: const TextStyle(
+                                    color: Colors.black87,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                Text(
+                                  user['role'] ?? 'N/A',
+                                  style: const TextStyle(
+                                    color: Colors.black87,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _getSubscriptionColor(
+                                      planName,
+                                    ).withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: _getSubscriptionColor(
+                                        planName,
+                                      ).withOpacity(0.3),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    planName,
+                                    style: TextStyle(
+                                      color: _getSubscriptionColor(planName),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                Text(
+                                  DateFormat('MMM dd, yyyy • HH:mm').format(
+                                    DateTime.parse(
+                                      user['created_at'] ??
+                                          DateTime.now().toIso8601String(),
+                                    ),
+                                  ),
+                                  style: const TextStyle(
+                                    color: Colors.black87,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                Row(
+                                  children: [
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        color: const Color(
+                                          0xFF2563EB,
+                                        ).withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: TextButton.icon(
+                                        onPressed: () =>
+                                            _showEditAccountDialog(user),
+                                        icon: const Icon(
+                                          Icons.edit,
+                                          size: 16,
+                                          color: Color(0xFF2563EB),
+                                        ),
+                                        label: const Text(
+                                          'Edit',
+                                          style: TextStyle(
+                                            color: Color(0xFF2563EB),
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        color: const Color(
+                                          0xFFDC2626,
+                                        ).withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: TextButton.icon(
+                                        onPressed: () {},
+                                        icon: const Icon(
+                                          Icons.delete,
+                                          size: 16,
+                                          color: Color(0xFFDC2626),
+                                        ),
+                                        label: const Text(
+                                          'Delete',
+                                          style: TextStyle(
+                                            color: Color(0xFFDC2626),
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
           ],
         );
       },
@@ -985,27 +1594,61 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
 
         if (snapshot.hasError) {
           return Center(
-            child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.red, fontSize: 14)),
+            child: Text(
+              'Error: ${snapshot.error}',
+              style: const TextStyle(color: Colors.red, fontSize: 14),
+            ),
           );
         }
 
         final subscriptions = snapshot.data ?? [];
-        final activeCount = subscriptions.where((s) => s['status'] == 'active').length;
-        final totalRevenue = subscriptions.fold<double>(0, (sum, s) => sum + ((s['price'] as num?) ?? 0).toDouble());
+        final activeCount = subscriptions
+            .where((s) => s['status'] == 'active')
+            .length;
+        final totalRevenue = subscriptions.fold<double>(
+          0,
+          (sum, s) => sum + ((s['price'] as num?) ?? 0).toDouble(),
+        );
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSectionHeader('Subscription Management', 'Manage plans, pricing and user subscriptions', Icons.card_membership_rounded, Colors.orange),
+            _buildSectionHeader(
+              'Subscription Management',
+              'Manage plans, pricing and user subscriptions',
+              Icons.card_membership_rounded,
+              Colors.orange,
+            ),
             const SizedBox(height: 20),
             // Summary Cards
             Row(
               children: [
-                Expanded(child: _buildKpiCard('Total Subscriptions', '${subscriptions.length}', '+${(subscriptions.isNotEmpty ? 3 : 0)}%', Colors.orange)),
+                Expanded(
+                  child: _buildKpiCard(
+                    'Total Subscriptions',
+                    '${subscriptions.length}',
+                    '+${(subscriptions.isNotEmpty ? 3 : 0)}%',
+                    Colors.orange,
+                  ),
+                ),
                 const SizedBox(width: 16),
-                Expanded(child: _buildKpiCard('Active Subscriptions', '$activeCount', '+${(activeCount > 0 ? 2 : 0)}%', const Color(0xFFFF4D97))),
+                Expanded(
+                  child: _buildKpiCard(
+                    'Active Subscriptions',
+                    '$activeCount',
+                    '+${(activeCount > 0 ? 2 : 0)}%',
+                    const Color(0xFFFF4D97),
+                  ),
+                ),
                 const SizedBox(width: 16),
-                Expanded(child: _buildKpiCard('Revenue', '₱${totalRevenue.toStringAsFixed(0)}', '+${(totalRevenue > 0 ? 5 : 0)}%', Colors.green)),
+                Expanded(
+                  child: _buildKpiCard(
+                    'Revenue',
+                    formatPHP(totalRevenue),
+                    '+${(totalRevenue > 0 ? 5 : 0)}%',
+                    Colors.green,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 24),
@@ -1013,15 +1656,31 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Subscription Plans', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1A1D2E))),
+                const Text(
+                  'Subscription Plans',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1A1D2E),
+                  ),
+                ),
                 ElevatedButton.icon(
                   onPressed: () => _showAddPlanDialog(),
                   icon: const Icon(Icons.add, color: Colors.white),
-                  label: const Text('Add Plan', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                  label: const Text(
+                    'Add Plan',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFF4D97),
                     elevation: 2,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
@@ -1039,7 +1698,10 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
 
                 if (snapshot.hasError) {
                   return Center(
-                    child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.red, fontSize: 14)),
+                    child: Text(
+                      'Error: ${snapshot.error}',
+                      style: const TextStyle(color: Colors.red, fontSize: 14),
+                    ),
                   );
                 }
 
@@ -1047,7 +1709,10 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
 
                 if (plans.isEmpty) {
                   return const Center(
-                    child: Text('No plans found', style: TextStyle(color: Colors.black54, fontSize: 14)),
+                    child: Text(
+                      'No plans found',
+                      style: TextStyle(color: Colors.black54, fontSize: 14),
+                    ),
                   );
                 }
 
@@ -1055,7 +1720,10 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFE6E8F0), width: 1.5),
+                    border: Border.all(
+                      color: const Color(0xFFE6E8F0),
+                      width: 1.5,
+                    ),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withOpacity(0.04),
@@ -1068,67 +1736,174 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                     builder: (context, constraints) => SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: ConstrainedBox(
-                        constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                        constraints: BoxConstraints(
+                          minWidth: constraints.maxWidth,
+                        ),
                         child: DataTable(
-                          headingRowColor: WidgetStateProperty.all(Colors.grey[50]),
+                          headingRowColor: WidgetStateProperty.all(
+                            Colors.grey[50],
+                          ),
                           dataRowHeight: 56,
                           headingRowHeight: 48,
                           dividerThickness: 1,
                           columnSpacing: 24,
                           columns: const [
-                            DataColumn(label: Text('Plan Name', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
-                        DataColumn(label: Text('Price', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
-                        DataColumn(label: Text('Billing Period', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
-                        DataColumn(label: Text('Description', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
-                        DataColumn(label: Text('Actions', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
-                      ],
-                      rows: List.generate(plans.length, (index) {
-                        final plan = plans[index];
-                        final isEvenRow = index % 2 == 0;
-                        return DataRow(
-                          color: WidgetStateProperty.all(
-                            isEvenRow ? Colors.white : Colors.grey[50],
-                          ),
-                          cells: [
-                            DataCell(Text(plan['name'] ?? 'N/A', style: const TextStyle(color: Colors.black87, fontSize: 13))),
-                            DataCell(Text('₱${(plan['price'] ?? 0).toStringAsFixed(0)}', style: const TextStyle(color: Colors.black87, fontSize: 13, fontWeight: FontWeight.w600))),
-                            DataCell(Text(plan['billing_period'] ?? 'N/A', style: const TextStyle(color: Colors.black87, fontSize: 13))),
-                            DataCell(Text(plan['description'] ?? '-', style: const TextStyle(color: Colors.black87, fontSize: 13), maxLines: 2, overflow: TextOverflow.ellipsis)),
-                            DataCell(
-                              Row(
-                                children: [
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFFF4D97).withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: IconButton(
-                                      icon: const Icon(Icons.edit, color: Color(0xFFFF4D97), size: 18),
-                                      onPressed: () => _showEditPlanDialog(plan),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFDC2626).withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: IconButton(
-                                      icon: const Icon(Icons.delete, color: Color(0xFFDC2626), size: 18),
-                                      onPressed: () => _showDeletePlanDialog(plan['id'], plan['name']),
-                                    ),
-                                  ),
-                                ],
+                            DataColumn(
+                              label: Text(
+                                'Plan Name',
+                                style: TextStyle(
+                                  color: Colors.black87,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                            DataColumn(
+                              label: Text(
+                                'Price',
+                                style: TextStyle(
+                                  color: Colors.black87,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                            DataColumn(
+                              label: Text(
+                                'Billing Period',
+                                style: TextStyle(
+                                  color: Colors.black87,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                            DataColumn(
+                              label: Text(
+                                'Description',
+                                style: TextStyle(
+                                  color: Colors.black87,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                            DataColumn(
+                              label: Text(
+                                'Actions',
+                                style: TextStyle(
+                                  color: Colors.black87,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
                               ),
                             ),
                           ],
-                        );
-                      }),
+                          rows: List.generate(plans.length, (index) {
+                            final plan = plans[index];
+                            final isEvenRow = index % 2 == 0;
+                            return DataRow(
+                              color: WidgetStateProperty.all(
+                                isEvenRow ? Colors.white : Colors.grey[50],
+                              ),
+                              cells: [
+                                DataCell(
+                                  Text(
+                                    plan['name'] ?? 'N/A',
+                                    style: const TextStyle(
+                                      color: Colors.black87,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    formatPHP(
+                                      (plan['price'] as num?)?.toDouble() ?? 0,
+                                    ),
+                                    style: const TextStyle(
+                                      color: Colors.black87,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    plan['billing_period'] ?? 'N/A',
+                                    style: const TextStyle(
+                                      color: Colors.black87,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    plan['description'] ?? '-',
+                                    style: const TextStyle(
+                                      color: Colors.black87,
+                                      fontSize: 13,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                DataCell(
+                                  Row(
+                                    children: [
+                                      Container(
+                                        decoration: BoxDecoration(
+                                          color: const Color(
+                                            0xFFFF4D97,
+                                          ).withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            6,
+                                          ),
+                                        ),
+                                        child: IconButton(
+                                          icon: const Icon(
+                                            Icons.edit,
+                                            color: Color(0xFFFF4D97),
+                                            size: 18,
+                                          ),
+                                          onPressed: () =>
+                                              _showEditPlanDialog(plan),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        decoration: BoxDecoration(
+                                          color: const Color(
+                                            0xFFDC2626,
+                                          ).withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            6,
+                                          ),
+                                        ),
+                                        child: IconButton(
+                                          icon: const Icon(
+                                            Icons.delete,
+                                            color: Color(0xFFDC2626),
+                                            size: 18,
+                                          ),
+                                          onPressed: () =>
+                                              _showDeletePlanDialog(
+                                                plan['id'],
+                                                plan['name'],
+                                              ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            );
+                          }),
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-            );
+                );
               },
             ),
             const SizedBox(height: 32),
@@ -1136,15 +1911,31 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Manage User Subscriptions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1A1D2E))),
+                const Text(
+                  'Manage User Subscriptions',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1A1D2E),
+                  ),
+                ),
                 ElevatedButton.icon(
                   onPressed: () => _showAssignSubscriptionDialog(),
                   icon: const Icon(Icons.person_add, color: Colors.white),
-                  label: const Text('Assign Subscription', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                  label: const Text(
+                    'Assign Subscription',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,
                     elevation: 2,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
@@ -1178,75 +1969,180 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                       dividerThickness: 1,
                       columnSpacing: 24,
                       columns: const [
-                        DataColumn(label: Text('User', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
-                    DataColumn(label: Text('Plan', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
-                    DataColumn(label: Text('Price', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
-                    DataColumn(label: Text('Status', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
-                    DataColumn(label: Text('End Date', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
-                    DataColumn(label: Text('Actions', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
-                  ],
-                  rows: List.generate(subscriptions.length, (index) {
-                    final sub = subscriptions[index];
-                    final planName = sub['subscription_plans']?['name'] ?? 'N/A';
-                    final userName = sub['accounts']?['full_name'] ?? 'N/A';
-                    final status = sub['status'] ?? 'N/A';
-                    final price = sub['price'] ?? sub['amount_paid'] ?? 0;
-                    final endDate = sub['current_period_end'] != null
-                        ? DateFormat('MMM dd, yyyy').format(DateTime.parse(sub['current_period_end']))
-                        : 'N/A';
-                    final isEvenRow = index % 2 == 0;
-
-                    return DataRow(
-                      color: WidgetStateProperty.all(isEvenRow ? Colors.white : Colors.grey[50]),
-                      cells: [
-                        DataCell(Text(userName, style: const TextStyle(color: Colors.black87, fontSize: 13))),
-                        DataCell(Text(planName, style: const TextStyle(color: Colors.black87, fontSize: 13))),
-                        DataCell(Text('₱${price.toStringAsFixed(2)}', style: const TextStyle(color: Colors.black87, fontSize: 13))),
-                        DataCell(
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: status == 'active' ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              status,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: status == 'active' ? Colors.green : Colors.orange,
-                              ),
+                        DataColumn(
+                          label: Text(
+                            'User',
+                            style: TextStyle(
+                              color: Colors.black87,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
                             ),
                           ),
                         ),
-                        DataCell(Text(endDate, style: const TextStyle(color: Colors.black87, fontSize: 13))),
-                        DataCell(
-                          Row(
-                            children: [
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.red.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: IconButton(
-                                  icon: const Icon(Icons.delete, color: Colors.red, size: 18),
-                                  onPressed: () => _showDeleteSubscriptionDialog(sub['id'], userName),
-                                ),
-                              ),
-                            ],
+                        DataColumn(
+                          label: Text(
+                            'Plan',
+                            style: TextStyle(
+                              color: Colors.black87,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Text(
+                            'Price',
+                            style: TextStyle(
+                              color: Colors.black87,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Text(
+                            'Status',
+                            style: TextStyle(
+                              color: Colors.black87,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Text(
+                            'End Date',
+                            style: TextStyle(
+                              color: Colors.black87,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Text(
+                            'Actions',
+                            style: TextStyle(
+                              color: Colors.black87,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
                           ),
                         ),
                       ],
-                    );
-                  }),
+                      rows: List.generate(subscriptions.length, (index) {
+                        final sub = subscriptions[index];
+                        final planName =
+                            sub['subscription_plans']?['name'] ?? 'N/A';
+                        final userName = sub['accounts']?['full_name'] ?? 'N/A';
+                        final status = sub['status'] ?? 'N/A';
+                        final price = sub['price'] ?? sub['amount_paid'] ?? 0;
+                        final endDate = sub['current_period_end'] != null
+                            ? DateFormat('MMM dd, yyyy').format(
+                                DateTime.parse(sub['current_period_end']),
+                              )
+                            : 'N/A';
+                        final isEvenRow = index % 2 == 0;
+
+                        return DataRow(
+                          color: WidgetStateProperty.all(
+                            isEvenRow ? Colors.white : Colors.grey[50],
+                          ),
+                          cells: [
+                            DataCell(
+                              Text(
+                                userName,
+                                style: const TextStyle(
+                                  color: Colors.black87,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                planName,
+                                style: const TextStyle(
+                                  color: Colors.black87,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                formatPHP(price),
+                                style: const TextStyle(
+                                  color: Colors.black87,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: status == 'active'
+                                      ? Colors.green.withOpacity(0.1)
+                                      : Colors.orange.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  status,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: status == 'active'
+                                        ? Colors.green
+                                        : Colors.orange,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                endDate,
+                                style: const TextStyle(
+                                  color: Colors.black87,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              Row(
+                                children: [
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: IconButton(
+                                      icon: const Icon(
+                                        Icons.delete,
+                                        color: Colors.red,
+                                        size: 18,
+                                      ),
+                                      onPressed: () =>
+                                          _showDeleteSubscriptionDialog(
+                                            sub['id'],
+                                            userName,
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        );
+                      }),
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
           ],
         );
-
       },
     );
   }
@@ -1255,7 +2151,12 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionHeader('Sales Tracking', 'Revenue analytics and monthly/daily breakdowns', Icons.trending_up_rounded, Colors.green),
+        _buildSectionHeader(
+          'Sales Tracking',
+          'Revenue analytics and monthly/daily breakdowns',
+          Icons.trending_up_rounded,
+          Colors.green,
+        ),
         const SizedBox(height: 20),
         FutureBuilder(
           future: _supabaseService.getAllSubscriptions(),
@@ -1275,19 +2176,43 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
 
             final subscriptions = snapshot.data ?? [];
             final monthlyData = _calculateMonthlyProfits(subscriptions);
-            final totalRevenue = monthlyData.fold<double>(0, (sum, data) => sum + data['amount']);
-            final avgMonthly = monthlyData.isNotEmpty ? totalRevenue / monthlyData.length : 0;
+            final totalRevenue = monthlyData.fold<double>(
+              0.0,
+              (sum, data) =>
+                  sum + ((data['amount'] as num?)?.toDouble() ?? 0.0),
+            );
+            final avgMonthly = monthlyData.isNotEmpty
+                ? totalRevenue / monthlyData.length
+                : 0.0;
 
             return Column(
               children: [
                 // Summary Cards
                 Row(
                   children: [
-                    Expanded(child: _buildProfitCard('Total Sales', '₱${totalRevenue.toStringAsFixed(2)}', Colors.green)),
+                    Expanded(
+                      child: _buildProfitCard(
+                        'Total Sales',
+                        formatPHP(totalRevenue),
+                        Colors.green,
+                      ),
+                    ),
                     const SizedBox(width: 16),
-                    Expanded(child: _buildProfitCard('Avg Monthly', '₱${avgMonthly.toStringAsFixed(2)}', Colors.blue)),
+                    Expanded(
+                      child: _buildProfitCard(
+                        'Avg Monthly',
+                        formatPHP(avgMonthly),
+                        Colors.blue,
+                      ),
+                    ),
                     const SizedBox(width: 16),
-                    Expanded(child: _buildProfitCard('Active Subs', '${subscriptions.where((s) => s['status'] == 'active').length}', const Color(0xFFFF4D97))),
+                    Expanded(
+                      child: _buildProfitCard(
+                        'Active Subs',
+                        '${subscriptions.where((s) => s['status'] == 'active').length}',
+                        const Color(0xFFFF4D97),
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 24),
@@ -1304,7 +2229,11 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                     children: [
                       const Text(
                         'Monthly Sales Chart',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black87),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
                       ),
                       const SizedBox(height: 24),
                       SizedBox(
@@ -1313,7 +2242,10 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                             ? const Center(
                                 child: Text(
                                   'No subscription data available',
-                                  style: TextStyle(color: Colors.black54, fontSize: 14),
+                                  style: TextStyle(
+                                    color: Colors.black54,
+                                    fontSize: 14,
+                                  ),
                                 ),
                               )
                             : LineChart(
@@ -1343,12 +2275,20 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                                         reservedSize: 30,
                                         interval: 1,
                                         getTitlesWidget: (value, meta) {
-                                          if (value.toInt() >= 0 && value.toInt() < monthlyData.length) {
+                                          if (value.toInt() >= 0 &&
+                                              value.toInt() <
+                                                  monthlyData.length) {
                                             return Padding(
-                                              padding: const EdgeInsets.only(top: 8.0),
+                                              padding: const EdgeInsets.only(
+                                                top: 8.0,
+                                              ),
                                               child: Text(
-                                                monthlyData[value.toInt()]['month'],
-                                                style: const TextStyle(fontSize: 10, color: Colors.black87),
+                                                monthlyData[value
+                                                    .toInt()]['month'],
+                                                style: const TextStyle(
+                                                  fontSize: 10,
+                                                  color: Colors.black87,
+                                                ),
                                               ),
                                             );
                                           }
@@ -1363,8 +2303,11 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                                         reservedSize: 50,
                                         getTitlesWidget: (value, meta) {
                                           return Text(
-                                            '₱${value.toInt()}',
-                                            style: const TextStyle(fontSize: 10, color: Colors.black87),
+                                            formatPHP(value.toDouble()),
+                                            style: const TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.black87,
+                                            ),
                                           );
                                         },
                                       ),
@@ -1372,12 +2315,18 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                                   ),
                                   borderData: FlBorderData(
                                     show: true,
-                                    border: Border.all(color: Colors.grey[300]!),
+                                    border: Border.all(
+                                      color: Colors.grey[300]!,
+                                    ),
                                   ),
                                   minX: 0,
                                   maxX: (monthlyData.length - 1).toDouble(),
                                   minY: 0,
-                                  maxY: (monthlyData.map((d) => d['amount'] as double).reduce((a, b) => a > b ? a : b) * 1.2),
+                                  maxY:
+                                      (monthlyData
+                                          .map((d) => d['amount'] as double)
+                                          .reduce((a, b) => a > b ? a : b) *
+                                      1.2),
                                   lineBarsData: [
                                     LineChartBarData(
                                       spots: List.generate(
@@ -1394,7 +2343,9 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                                       dotData: const FlDotData(show: true),
                                       belowBarData: BarAreaData(
                                         show: true,
-                                        color: const Color(0xFFFF4D97).withOpacity(0.1),
+                                        color: const Color(
+                                          0xFFFF4D97,
+                                        ).withOpacity(0.1),
                                       ),
                                     ),
                                   ],
@@ -1418,7 +2369,11 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                     children: [
                       const Text(
                         'Daily Sales (Last 30 Days)',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black87),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
                       ),
                       const SizedBox(height: 16),
                       SizedBox(
@@ -1429,26 +2384,37 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                             return const Center(
                               child: Text(
                                 'No daily sales data available',
-                                style: TextStyle(color: Colors.black54, fontSize: 14),
+                                style: TextStyle(
+                                  color: Colors.black54,
+                                  fontSize: 14,
+                                ),
                               ),
                             );
                           }
                           return BarChart(
                             BarChartData(
                               alignment: BarChartAlignment.spaceAround,
-                              maxY: (dailyData.map((d) => d['amount'] as double).reduce((a, b) => a > b ? a : b) * 1.2),
+                              maxY:
+                                  (dailyData
+                                      .map((d) => d['amount'] as double)
+                                      .reduce((a, b) => a > b ? a : b) *
+                                  1.2),
                               barTouchData: BarTouchData(
                                 enabled: true,
                                 touchTooltipData: BarTouchTooltipData(
                                   getTooltipColor: (group) => Colors.black87,
                                   tooltipPadding: const EdgeInsets.all(8),
                                   tooltipMargin: 8,
-                                  getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                                    return BarTooltipItem(
-                                      '${dailyData[group.x.toInt()]['date']}\n₱${rod.toY.toStringAsFixed(2)}',
-                                      const TextStyle(color: Colors.white, fontSize: 12),
-                                    );
-                                  },
+                                  getTooltipItem:
+                                      (group, groupIndex, rod, rodIndex) {
+                                        return BarTooltipItem(
+                                          '${dailyData[group.x.toInt()]['date']}\n${formatPHP(rod.toY)}',
+                                          const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 12,
+                                          ),
+                                        );
+                                      },
                                 ),
                               ),
                               titlesData: FlTitlesData(
@@ -1465,12 +2431,19 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                                     reservedSize: 30,
                                     interval: 5,
                                     getTitlesWidget: (value, meta) {
-                                      if (value.toInt() >= 0 && value.toInt() < dailyData.length && value.toInt() % 5 == 0) {
+                                      if (value.toInt() >= 0 &&
+                                          value.toInt() < dailyData.length &&
+                                          value.toInt() % 5 == 0) {
                                         return Padding(
-                                          padding: const EdgeInsets.only(top: 8.0),
+                                          padding: const EdgeInsets.only(
+                                            top: 8.0,
+                                          ),
                                           child: Text(
                                             dailyData[value.toInt()]['date'],
-                                            style: const TextStyle(fontSize: 9, color: Colors.black87),
+                                            style: const TextStyle(
+                                              fontSize: 9,
+                                              color: Colors.black87,
+                                            ),
                                           ),
                                         );
                                       }
@@ -1484,8 +2457,11 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                                     reservedSize: 50,
                                     getTitlesWidget: (value, meta) {
                                       return Text(
-                                        '₱${value.toInt()}',
-                                        style: const TextStyle(fontSize: 10, color: Colors.black87),
+                                        formatPHP(value.toDouble()),
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.black87,
+                                        ),
                                       );
                                     },
                                   ),
@@ -1538,13 +2514,19 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
     );
   }
 
-  List<Map<String, dynamic>> _calculateDailySales(List<Map<String, dynamic>> subscriptions) {
+  List<Map<String, dynamic>> _calculateDailySales(
+    List<Map<String, dynamic>> subscriptions,
+  ) {
     final now = DateTime.now();
     final Map<DateTime, double> dailyRevenue = {};
 
     // Initialize last 30 days with 0
     for (int i = 29; i >= 0; i--) {
-      final date = DateTime(now.year, now.month, now.day).subtract(Duration(days: i));
+      final date = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).subtract(Duration(days: i));
       dailyRevenue[date] = 0.0;
     }
 
@@ -1552,21 +2534,23 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
     for (var sub in subscriptions) {
       final createdAtRaw = sub['created_at']?.toString();
       final createdAt = DateTime.tryParse(createdAtRaw ?? '');
-      
+
       if (createdAt != null) {
         final dayKey = DateTime(createdAt.year, createdAt.month, createdAt.day);
-        
+
         // Only include if within last 30 days
-        if (dayKey.isAfter(now.subtract(const Duration(days: 31))) && dayKey.isBefore(now.add(const Duration(days: 1)))) {
+        if (dayKey.isAfter(now.subtract(const Duration(days: 31))) &&
+            dayKey.isBefore(now.add(const Duration(days: 1)))) {
           double price = 0.0;
           if (sub['amount_paid'] != null) {
             price = (sub['amount_paid'] as num).toDouble();
           } else if (sub['price'] != null) {
             price = (sub['price'] as num).toDouble();
-          } else if (sub['subscription_plans'] != null && sub['subscription_plans']['price'] != null) {
+          } else if (sub['subscription_plans'] != null &&
+              sub['subscription_plans']['price'] != null) {
             price = (sub['subscription_plans']['price'] as num).toDouble();
           }
-          
+
           dailyRevenue[dayKey] = (dailyRevenue[dayKey] ?? 0.0) + price;
         }
       }
@@ -1575,20 +2559,26 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
     final sortedEntries = dailyRevenue.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
 
-    return sortedEntries.map((entry) => {
-      'date': DateFormat('M/d').format(entry.key),
-      'amount': entry.value,
-    }).toList();
+    return sortedEntries
+        .map(
+          (entry) => {
+            'date': DateFormat('M/d').format(entry.key),
+            'amount': entry.value,
+          },
+        )
+        .toList();
   }
 
-  List<Map<String, dynamic>> _calculateMonthlyProfits(List<Map<String, dynamic>> subscriptions) {
+  List<Map<String, dynamic>> _calculateMonthlyProfits(
+    List<Map<String, dynamic>> subscriptions,
+  ) {
     // Philippines timezone is UTC+8
     final phTimeZone = Duration(hours: 8);
-    
+
     // Initialize map for last 12 months
     final Map<DateTime, double> monthlyRevenue = {};
     final now = DateTime.now().add(phTimeZone);
-    
+
     // Create entries for last 12 months
     for (int i = 11; i >= 0; i--) {
       final monthDate = DateTime(now.year, now.month - i);
@@ -1599,25 +2589,27 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
     for (var sub in subscriptions) {
       final periodEndRaw = sub['current_period_end']?.toString();
       final createdAtRaw = sub['created_at']?.toString();
-      var revenueDate = DateTime.tryParse(periodEndRaw ?? '') ??
+      var revenueDate =
+          DateTime.tryParse(periodEndRaw ?? '') ??
           DateTime.tryParse(createdAtRaw ?? '') ??
           DateTime.now();
-      
+
       // Convert to Philippines time
       revenueDate = revenueDate.add(phTimeZone);
-      
+
       final monthKey = DateTime(revenueDate.year, revenueDate.month);
-      
+
       // Get price from amount_paid first, then from subscription_plans, then from price field
       double price = 0.0;
       if (sub['amount_paid'] != null) {
         price = (sub['amount_paid'] as num).toDouble();
       } else if (sub['price'] != null) {
         price = (sub['price'] as num).toDouble();
-      } else if (sub['subscription_plans'] != null && sub['subscription_plans']['price'] != null) {
+      } else if (sub['subscription_plans'] != null &&
+          sub['subscription_plans']['price'] != null) {
         price = (sub['subscription_plans']['price'] as num).toDouble();
       }
-      
+
       if (monthlyRevenue.containsKey(monthKey)) {
         monthlyRevenue[monthKey] = (monthlyRevenue[monthKey] ?? 0.0) + price;
       }
@@ -1628,10 +2620,14 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
         return a.key.compareTo(b.key);
       });
 
-    return sortedEntries.map((entry) => {
-      'month': DateFormat('MMM').format(entry.key),
-      'amount': entry.value,
-    }).toList();
+    return sortedEntries
+        .map(
+          (entry) => {
+            'month': DateFormat('MMM').format(entry.key),
+            'amount': entry.value,
+          },
+        )
+        .toList();
   }
 
   Widget _buildProfitCard(String title, String value, Color color) {
@@ -1647,12 +2643,20 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
         children: [
           Text(
             title,
-            style: TextStyle(fontSize: 12, color: Colors.grey[700], fontWeight: FontWeight.w500),
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[700],
+              fontWeight: FontWeight.w500,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
             value,
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: color),
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
           ),
         ],
       ),
@@ -1671,7 +2675,9 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
       final action = (log['action'] ?? '').toString().replaceAll('"', '""');
       final target = (log['target'] ?? '').toString().replaceAll('"', '""');
       final metadata = (log['metadata'] ?? '').toString().replaceAll('"', '""');
-      buffer.writeln('"$createdAt","$actorEmail","$action","$target","$metadata"');
+      buffer.writeln(
+        '"$createdAt","$actorEmail","$action","$target","$metadata"',
+      );
     }
     return buffer.toString();
   }
@@ -1685,13 +2691,13 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
         }
 
         final logs = snapshot.data ?? [];
-        final last24HourLogsCount = logs
-            .where((log) {
-              final logDate = DateTime.parse(log['created_at'] ?? DateTime.now().toIso8601String());
-              final yesterday = DateTime.now().subtract(const Duration(hours: 24));
-              return logDate.isAfter(yesterday);
-            })
-            .length;
+        final last24HourLogsCount = logs.where((log) {
+          final logDate = DateTime.parse(
+            log['created_at'] ?? DateTime.now().toIso8601String(),
+          );
+          final yesterday = DateTime.now().subtract(const Duration(hours: 24));
+          return logDate.isAfter(yesterday);
+        }).length;
 
         final actionMap = <String, int>{};
         for (var log in logs) {
@@ -1705,16 +2711,42 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSectionHeader('Audit Logs', 'Track all system events and admin activity', Icons.receipt_long_rounded, Colors.indigo),
+            _buildSectionHeader(
+              'Audit Logs',
+              'Track all system events and admin activity',
+              Icons.receipt_long_rounded,
+              Colors.indigo,
+            ),
             const SizedBox(height: 20),
             // Summary Cards
             Row(
               children: [
-                Expanded(child: _buildKpiCard('Total Events', '${logs.length}', '+${logs.isNotEmpty ? 8 : 0}%', const Color(0xFF7C3AED))),
+                Expanded(
+                  child: _buildKpiCard(
+                    'Total Events',
+                    '${logs.length}',
+                    '+${logs.isNotEmpty ? 8 : 0}%',
+                    const Color(0xFF7C3AED),
+                  ),
+                ),
                 const SizedBox(width: 16),
-                Expanded(child: _buildKpiCard('Last 24 Hours', '$last24HourLogsCount', '+${last24HourLogsCount > 0 ? 15 : 0}%', Colors.blue)),
+                Expanded(
+                  child: _buildKpiCard(
+                    'Last 24 Hours',
+                    '$last24HourLogsCount',
+                    '+${last24HourLogsCount > 0 ? 15 : 0}%',
+                    Colors.blue,
+                  ),
+                ),
                 const SizedBox(width: 16),
-                Expanded(child: _buildKpiCard('Top Action', topAction, '+12%', Colors.indigo)),
+                Expanded(
+                  child: _buildKpiCard(
+                    'Top Action',
+                    topAction,
+                    '+12%',
+                    Colors.indigo,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 24),
@@ -1722,19 +2754,39 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Audit Log Details', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1A1D2E))),
+                const Text(
+                  'Audit Log Details',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1A1D2E),
+                  ),
+                ),
                 Row(
                   children: [
                     ElevatedButton.icon(
                       onPressed: () {
                         setState(() {});
                       },
-                      icon: const Icon(Icons.refresh, color: Colors.white, size: 18),
-                      label: const Text('Refresh', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                      icon: const Icon(
+                        Icons.refresh,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                      label: const Text(
+                        'Refresh',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF10B981),
                         elevation: 2,
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -1746,35 +2798,57 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                         if (logs.isEmpty) {
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('No audit logs to export')),
+                              const SnackBar(
+                                content: Text('No audit logs to export'),
+                              ),
                             );
                           }
                           return;
                         }
 
                         final csv = _buildAuditLogsCsv(logs);
-                        final timestamp = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+                        final timestamp = DateFormat(
+                          'yyyyMMdd_HHmm',
+                        ).format(DateTime.now());
                         try {
                           saveCsvFile('audit_logs_$timestamp.csv', csv);
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Audit logs exported')),
+                              const SnackBar(
+                                content: Text('Audit logs exported'),
+                              ),
                             );
                           }
                         } catch (e) {
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Export failed: $e'), backgroundColor: Colors.red),
+                              SnackBar(
+                                content: Text('Export failed: $e'),
+                                backgroundColor: Colors.red,
+                              ),
                             );
                           }
                         }
                       },
-                      icon: const Icon(Icons.download, color: Colors.white, size: 18),
-                      label: const Text('Export CSV', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                      icon: const Icon(
+                        Icons.download,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                      label: const Text(
+                        'Export CSV',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF2563EB),
                         elevation: 2,
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -1804,7 +2878,10 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFE6E8F0), width: 1.5),
+                  border: Border.all(
+                    color: const Color(0xFFE6E8F0),
+                    width: 1.5,
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withOpacity(0.04),
@@ -1817,49 +2894,120 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                   builder: (context, constraints) => SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: ConstrainedBox(
-                      constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                      constraints: BoxConstraints(
+                        minWidth: constraints.maxWidth,
+                      ),
                       child: DataTable(
-                        headingRowColor: WidgetStateProperty.all(Colors.grey[50]),
+                        headingRowColor: WidgetStateProperty.all(
+                          Colors.grey[50],
+                        ),
                         dataRowHeight: 56,
                         headingRowHeight: 48,
                         dividerThickness: 1,
                         columnSpacing: 24,
                         columns: const [
-                          DataColumn(label: Text('Time', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
-                      DataColumn(label: Text('Actor', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
-                      DataColumn(label: Text('Action', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
-                      DataColumn(label: Text('Target', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 13))),
-                    ],
-                    rows: List.generate(logs.length, (index) {
-                      final log = logs[index];
-                      final actorData = log['accounts'] as Map<String, dynamic>?;
-                      final actorEmail = actorData?['email'] ?? 'System';
-                      final isEvenRow = index % 2 == 0;
-
-                      return DataRow(
-                        color: WidgetStateProperty.all(
-                          isEvenRow ? Colors.white : Colors.grey[50],
-                        ),
-                        cells: [
-                          DataCell(
-                            Text(
-                              DateFormat('MMM dd, yyyy - HH:mm').format(
-                                DateTime.parse(log['created_at'] ?? DateTime.now().toIso8601String()),
+                          DataColumn(
+                            label: Text(
+                              'Time',
+                              style: TextStyle(
+                                color: Colors.black87,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
                               ),
-                              style: const TextStyle(color: Colors.black87, fontSize: 13),
                             ),
                           ),
-                          DataCell(Text(actorEmail, style: const TextStyle(color: Colors.black87, fontSize: 13))),
-                          DataCell(Text(log['action'] ?? 'N/A', style: const TextStyle(color: Colors.black87, fontSize: 13))),
-                          DataCell(Text(log['target'] ?? 'N/A', style: const TextStyle(color: Colors.black87, fontSize: 13))),
+                          DataColumn(
+                            label: Text(
+                              'Actor',
+                              style: TextStyle(
+                                color: Colors.black87,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                          DataColumn(
+                            label: Text(
+                              'Action',
+                              style: TextStyle(
+                                color: Colors.black87,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                          DataColumn(
+                            label: Text(
+                              'Target',
+                              style: TextStyle(
+                                color: Colors.black87,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
                         ],
-                      );
-                    }),
+                        rows: List.generate(logs.length, (index) {
+                          final log = logs[index];
+                          final actorData =
+                              log['accounts'] as Map<String, dynamic>?;
+                          final actorEmail = actorData?['email'] ?? 'System';
+                          final isEvenRow = index % 2 == 0;
+
+                          return DataRow(
+                            color: WidgetStateProperty.all(
+                              isEvenRow ? Colors.white : Colors.grey[50],
+                            ),
+                            cells: [
+                              DataCell(
+                                Text(
+                                  DateFormat('MMM dd, yyyy - HH:mm').format(
+                                    DateTime.parse(
+                                      log['created_at'] ??
+                                          DateTime.now().toIso8601String(),
+                                    ),
+                                  ),
+                                  style: const TextStyle(
+                                    color: Colors.black87,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                Text(
+                                  actorEmail,
+                                  style: const TextStyle(
+                                    color: Colors.black87,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                Text(
+                                  log['action'] ?? 'N/A',
+                                  style: const TextStyle(
+                                    color: Colors.black87,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                Text(
+                                  log['target'] ?? 'N/A',
+                                  style: const TextStyle(
+                                    color: Colors.black87,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        }),
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
           ],
         );
       },
@@ -1873,10 +3021,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Colors.white,
-            Colors.white.withOpacity(0.95),
-          ],
+          colors: [Colors.white, Colors.white.withOpacity(0.95)],
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE6E8F0), width: 1.5),
@@ -1897,23 +3042,43 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
               color: color.withOpacity(0.1),
               borderRadius: BorderRadius.circular(6),
             ),
-            child: Text(title, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+            child: Text(
+              title,
+              style: TextStyle(
+                fontSize: 11,
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
           const SizedBox(height: 12),
-          Text(value, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.black87)),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w800,
+              color: Colors.black87,
+            ),
+          ),
           const SizedBox(height: 12),
           Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
-                  color: delta.startsWith('+') ? const Color(0xFF16A34A).withOpacity(0.1) : Colors.red.withOpacity(0.1),
+                  color: delta.startsWith('+')
+                      ? const Color(0xFF16A34A).withOpacity(0.1)
+                      : Colors.red.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Icon(
-                  delta.startsWith('+') ? Icons.trending_up : Icons.trending_down,
+                  delta.startsWith('+')
+                      ? Icons.trending_up
+                      : Icons.trending_down,
                   size: 14,
-                  color: delta.startsWith('+') ? const Color(0xFF16A34A) : Colors.red,
+                  color: delta.startsWith('+')
+                      ? const Color(0xFF16A34A)
+                      : Colors.red,
                 ),
               ),
               const SizedBox(width: 6),
@@ -1922,7 +3087,9 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: delta.startsWith('+') ? const Color(0xFF16A34A) : Colors.red,
+                  color: delta.startsWith('+')
+                      ? const Color(0xFF16A34A)
+                      : Colors.red,
                 ),
               ),
             ],
@@ -1963,16 +3130,16 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: Colors.black54)),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.black54),
+            ),
           ),
           ElevatedButton(
             onPressed: () async {
               await _supabaseService.updateUserProfile(
                 userId: account['id'],
-                updates: {
-                  'full_name': fullName,
-                  'role': role,
-                },
+                updates: {'full_name': fullName, 'role': role},
               );
 
               await _supabaseService.logAdminAction(
@@ -1986,7 +3153,9 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                 Navigator.pop(context);
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF4D97)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF4D97),
+            ),
             child: const Text('Save', style: TextStyle(color: Colors.white)),
           ),
         ],
@@ -2013,12 +3182,14 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
               children: [
                 TextField(
                   controller: nameController,
-                  decoration: const InputDecoration(labelText: 'Plan Name (e.g., Pro, Premium)'),
+                  decoration: const InputDecoration(
+                    labelText: 'Plan Name (e.g., Pro, Premium)',
+                  ),
                 ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: priceController,
-                  decoration: const InputDecoration(labelText: 'Price (₱)'),
+                  decoration: const InputDecoration(labelText: 'Price (PHP)'),
                   keyboardType: TextInputType.number,
                 ),
                 const SizedBox(height: 16),
@@ -2027,15 +3198,23 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                   items: const [
                     DropdownMenuItem(value: 'month', child: Text('Monthly')),
                     DropdownMenuItem(value: 'year', child: Text('Yearly')),
-                    DropdownMenuItem(value: 'lifetime', child: Text('Lifetime')),
+                    DropdownMenuItem(
+                      value: 'lifetime',
+                      child: Text('Lifetime'),
+                    ),
                   ],
-                  onChanged: (value) => setDialogState(() => billingPeriod = value ?? 'month'),
-                  decoration: const InputDecoration(labelText: 'Billing Period'),
+                  onChanged: (value) =>
+                      setDialogState(() => billingPeriod = value ?? 'month'),
+                  decoration: const InputDecoration(
+                    labelText: 'Billing Period',
+                  ),
                 ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: descriptionController,
-                  decoration: const InputDecoration(labelText: 'Description (optional)'),
+                  decoration: const InputDecoration(
+                    labelText: 'Description (optional)',
+                  ),
                   maxLines: 2,
                 ),
               ],
@@ -2048,9 +3227,12 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
             ),
             ElevatedButton(
               onPressed: () async {
-                if (nameController.text.isEmpty || priceController.text.isEmpty) {
+                if (nameController.text.isEmpty ||
+                    priceController.text.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please fill in all required fields')),
+                    const SnackBar(
+                      content: Text('Please fill in all required fields'),
+                    ),
                   );
                   return;
                 }
@@ -2059,7 +3241,9 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                   await _supabaseService.createPlan(
                     name: nameController.text,
                     price: double.parse(priceController.text),
-                    description: descriptionController.text.isEmpty ? null : descriptionController.text,
+                    description: descriptionController.text.isEmpty
+                        ? null
+                        : descriptionController.text,
                     billingPeriod: billingPeriod,
                   );
 
@@ -2067,19 +3251,26 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                     setState(() {});
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Plan created successfully')),
+                      const SnackBar(
+                        content: Text('Plan created successfully'),
+                      ),
                     );
                   }
                 } catch (e) {
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error: $e')),
-                    );
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('Error: $e')));
                   }
                 }
               },
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF4D97)),
-              child: const Text('Create', style: TextStyle(color: Colors.white)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF4D97),
+              ),
+              child: const Text(
+                'Create',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
           ],
         ),
@@ -2089,8 +3280,12 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
 
   void _showEditPlanDialog(Map<String, dynamic> plan) {
     final nameController = TextEditingController(text: plan['name']);
-    final priceController = TextEditingController(text: plan['price'].toString());
-    final descriptionController = TextEditingController(text: plan['description'] ?? '');
+    final priceController = TextEditingController(
+      text: plan['price'].toString(),
+    );
+    final descriptionController = TextEditingController(
+      text: plan['description'] ?? '',
+    );
     String billingPeriod = plan['billing_period'] ?? 'month';
 
     showDialog(
@@ -2109,7 +3304,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                 const SizedBox(height: 16),
                 TextField(
                   controller: priceController,
-                  decoration: const InputDecoration(labelText: 'Price (₱)'),
+                  decoration: const InputDecoration(labelText: 'Price (PHP)'),
                   keyboardType: TextInputType.number,
                 ),
                 const SizedBox(height: 16),
@@ -2118,10 +3313,16 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                   items: const [
                     DropdownMenuItem(value: 'month', child: Text('Monthly')),
                     DropdownMenuItem(value: 'year', child: Text('Yearly')),
-                    DropdownMenuItem(value: 'lifetime', child: Text('Lifetime')),
+                    DropdownMenuItem(
+                      value: 'lifetime',
+                      child: Text('Lifetime'),
+                    ),
                   ],
-                  onChanged: (value) => setDialogState(() => billingPeriod = value ?? 'month'),
-                  decoration: const InputDecoration(labelText: 'Billing Period'),
+                  onChanged: (value) =>
+                      setDialogState(() => billingPeriod = value ?? 'month'),
+                  decoration: const InputDecoration(
+                    labelText: 'Billing Period',
+                  ),
                 ),
                 const SizedBox(height: 16),
                 TextField(
@@ -2145,7 +3346,9 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                     updates: {
                       'name': nameController.text,
                       'price': double.parse(priceController.text),
-                      'description': descriptionController.text.isEmpty ? null : descriptionController.text,
+                      'description': descriptionController.text.isEmpty
+                          ? null
+                          : descriptionController.text,
                       'billing_period': billingPeriod,
                     },
                   );
@@ -2154,19 +3357,26 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                     setState(() {});
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Plan updated successfully')),
+                      const SnackBar(
+                        content: Text('Plan updated successfully'),
+                      ),
                     );
                   }
                 } catch (e) {
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error: $e')),
-                    );
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('Error: $e')));
                   }
                 }
               },
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF4D97)),
-              child: const Text('Update', style: TextStyle(color: Colors.white)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF4D97),
+              ),
+              child: const Text(
+                'Update',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
           ],
         ),
@@ -2179,7 +3389,9 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Plan'),
-        content: Text('Are you sure you want to delete the "$planName" plan? This action cannot be undone.'),
+        content: Text(
+          'Are you sure you want to delete the "$planName" plan? This action cannot be undone.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -2199,9 +3411,9 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                 }
               } catch (e) {
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error: $e')),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Error: $e')));
                 }
               }
             },
@@ -2240,14 +3452,22 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
           }
 
           return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: const Text('Assign Subscription to User', style: TextStyle(fontWeight: FontWeight.w600)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: const Text(
+              'Assign Subscription to User',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Select User:', style: TextStyle(fontWeight: FontWeight.w500)),
+                  const Text(
+                    'Select User:',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
                   const SizedBox(height: 8),
                   DropdownButton<String>(
                     isExpanded: true,
@@ -2264,7 +3484,10 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                     },
                   ),
                   const SizedBox(height: 16),
-                  const Text('Select Plan:', style: TextStyle(fontWeight: FontWeight.w500)),
+                  const Text(
+                    'Select Plan:',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
                   const SizedBox(height: 8),
                   DropdownButton<String>(
                     isExpanded: true,
@@ -2281,27 +3504,51 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                     },
                   ),
                   const SizedBox(height: 16),
-                  const Text('Price (₱):', style: TextStyle(fontWeight: FontWeight.w500)),
+                  const Text(
+                    'Price (PHP):',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: priceController,
                     decoration: InputDecoration(
                       hintText: 'Enter price',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                       filled: true,
                       fillColor: Colors.grey[50],
                     ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                   ),
                   const SizedBox(height: 16),
-                  const Text('Duration:', style: TextStyle(fontWeight: FontWeight.w500)),
+                  const Text(
+                    'Duration:',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
                   const SizedBox(height: 8),
                   DropdownButton<String>(
                     isExpanded: true,
                     value: selectedDuration,
-                    items: ['1 Day', '1 Week', '1 Month', '3 Months', '6 Months', '1 Year', 'Lifetime']
-                        .map((duration) => DropdownMenuItem(value: duration, child: Text(duration)))
-                        .toList(),
+                    items:
+                        [
+                              '1 Day',
+                              '1 Week',
+                              '1 Month',
+                              '3 Months',
+                              '6 Months',
+                              '1 Year',
+                              'Lifetime',
+                            ]
+                            .map(
+                              (duration) => DropdownMenuItem(
+                                value: duration,
+                                child: Text(duration),
+                              ),
+                            )
+                            .toList(),
                     onChanged: (value) {
                       setState(() => selectedDuration = value);
                     },
@@ -2312,13 +3559,22 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: Colors.grey),
+                ),
               ),
               ElevatedButton(
                 onPressed: () async {
-                  if (selectedUserId == null || selectedPlanId == null || priceController.text.isEmpty || selectedDuration == null) {
+                  if (selectedUserId == null ||
+                      selectedPlanId == null ||
+                      priceController.text.isEmpty ||
+                      selectedDuration == null) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Please fill all fields'), backgroundColor: Colors.red),
+                      const SnackBar(
+                        content: Text('Please fill all fields'),
+                        backgroundColor: Colors.red,
+                      ),
                     );
                     return;
                   }
@@ -2346,7 +3602,9 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                         endDate = DateTime.now().add(const Duration(days: 365));
                         break;
                       case 'Lifetime':
-                        endDate = DateTime.now().add(const Duration(days: 36500));
+                        endDate = DateTime.now().add(
+                          const Duration(days: 36500),
+                        );
                         break;
                       default:
                         endDate = DateTime.now().add(const Duration(days: 30));
@@ -2380,17 +3638,26 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                       Navigator.pop(context);
                       setState(() {});
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Subscription assigned successfully!'), backgroundColor: Colors.green),
+                        const SnackBar(
+                          content: Text('Subscription assigned successfully!'),
+                          backgroundColor: Colors.green,
+                        ),
                       );
                     }
                   } catch (e) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                      SnackBar(
+                        content: Text('Error: $e'),
+                        backgroundColor: Colors.red,
+                      ),
                     );
                   }
                 },
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
-                child: const Text('Assign', style: TextStyle(color: Colors.white)),
+                child: const Text(
+                  'Assign',
+                  style: TextStyle(color: Colors.white),
+                ),
               ),
             ],
           );
@@ -2405,7 +3672,9 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Delete Subscription'),
-        content: Text('Are you sure you want to delete the subscription for $userName?'),
+        content: Text(
+          'Are you sure you want to delete the subscription for $userName?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -2420,12 +3689,17 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                   Navigator.pop(context);
                   setState(() {});
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Subscription deleted successfully')),
+                    const SnackBar(
+                      content: Text('Subscription deleted successfully'),
+                    ),
                   );
                 }
               } catch (e) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                  SnackBar(
+                    content: Text('Error: $e'),
+                    backgroundColor: Colors.red,
+                  ),
                 );
               }
             },
@@ -2443,11 +3717,17 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
     final lowerPlan = planName.toLowerCase();
     if (lowerPlan.contains('premium')) return const Color(0xFFFFD700); // Gold
     if (lowerPlan.contains('pro')) return const Color(0xFFFF4D97); // Pink
-    if (lowerPlan.contains('lifetime')) return const Color(0xFF7C3AED); // Purple
+    if (lowerPlan.contains('lifetime'))
+      return const Color(0xFF7C3AED); // Purple
     return Colors.grey; // Free
   }
 
-  Widget _buildSectionHeader(String title, String subtitle, IconData icon, Color color) {
+  Widget _buildSectionHeader(
+    String title,
+    String subtitle,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -2475,9 +3755,19 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Color(0xFF1A1D2E))),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1A1D2E),
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                Text(
+                  subtitle,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
               ],
             ),
           ),
@@ -2489,5 +3779,4 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
   void _showLogoutDialog() {
     showLogoutConfirmationDialog(context, role: 'admin');
   }
-
 }

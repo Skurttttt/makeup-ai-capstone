@@ -3,7 +3,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../auth/login_supabase_page.dart';
 import '../services/supabase_service.dart';
 
-Future<void> showLogoutConfirmationDialog(BuildContext context, {String role = 'user'}) async {
+Future<void> showLogoutConfirmationDialog(
+  BuildContext context, {
+  String role = 'user',
+}) async {
   return showDialog(
     context: context,
     builder: (BuildContext dialogContext) => AlertDialog(
@@ -13,6 +16,9 @@ Future<void> showLogoutConfirmationDialog(BuildContext context, {String role = '
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(dialogContext),
+          style: TextButton.styleFrom(
+            foregroundColor: Colors.grey,
+          ),
           child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
         ),
         ElevatedButton(
@@ -46,11 +52,12 @@ Future<void> showLogoutConfirmationDialog(BuildContext context, {String role = '
           },
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.red,
+            foregroundColor: Colors.white,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
           ),
-          child: const Text('Logout'),
+          child: const Text('Logout', style: TextStyle(color: Colors.white)),
         ),
       ],
     ),

@@ -1,10 +1,205 @@
 // lib/screens/client_screen.dart
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image/image.dart' as img;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:convert';
+import 'dart:typed_data';
+import 'package:http/http.dart' as http;
+import 'package:html/parser.dart' as html_parser;
+import 'package:intl/intl.dart';
+import 'client_analytics_screen.dart';
+import 'client_dashboard_screen.dart';
+import 'client_product_screen.dart';
+import 'product_form_page.dart';
+import 'client_settings_screen.dart';
+import 'client_shop_screen.dart';
 import '../utils/logout_util.dart';
 
+// Minimal app theme fallback used by this screen when the shared theme
+// import is missing — keeps the file self-contained for analyzer.
+class AppTheme {
+  static const primaryColor = Color(0xFFFF4D97);
+  static const primaryDark = Color(0xFFCC3A7A);
+  static const successColor = Colors.green;
+  static const errorColor = Colors.red;
+  static const warningColor = Colors.orange;
+  static const secondaryColor = Colors.blueGrey;
+  static const cardColor = Color(0xFFF8F8F8);
+  static const surfaceColor = Colors.white;
+  static const textPrimary = Colors.black87;
+  static const textSecondary = Colors.black54;
+  static const dividerColor = Colors.grey;
+  static const primaryGradient = LinearGradient(
+    colors: [Color(0xFFFF4D97), Color(0xFFFF8FB3)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+  static const boxShadow = [
+    BoxShadow(color: Color(0x11000000), blurRadius: 8, offset: Offset(0, 2)),
+  ];
+  static List<BoxShadow> get cardShadow => boxShadow;
+}
+
+Color contrastTextForBackground(Color bg) {
+  return ThemeData.estimateBrightnessForColor(bg) == Brightness.dark
+      ? Colors.white
+      : Colors.black;
+}
+
+class NumericSpinnerField extends StatefulWidget {
+  final TextEditingController controller;
+  final String label;
+  final bool isDecimal;
+  final num step;
+  final String? suffix;
+  final bool enabled;
+  final ValueChanged<num>? onChanged;
+
+  const NumericSpinnerField({
+    Key? key,
+    required this.controller,
+    required this.label,
+    this.isDecimal = false,
+    this.step = 1,
+    this.suffix,
+    this.enabled = true,
+    this.onChanged,
+  }) : super(key: key);
+
+  @override
+  State<NumericSpinnerField> createState() => _NumericSpinnerFieldState();
+}
+
+class _NumericSpinnerFieldState extends State<NumericSpinnerField> {
+  num _parseValue() {
+    final text = widget.controller.text;
+    if (text.isEmpty) return 0;
+    return num.tryParse(text) ?? 0;
+  }
+
+  void _updateValue(num value) {
+    final isDecimal = widget.isDecimal;
+    final asDouble = value.toDouble();
+    final out = isDecimal
+        ? (asDouble % 1 == 0
+              ? asDouble.toStringAsFixed(0)
+              : asDouble.toString())
+        : value.round().toString();
+    widget.controller.text = out;
+    widget.controller.selection = TextSelection.collapsed(offset: out.length);
+    setState(() {});
+    try {
+      widget.onChanged?.call(value);
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        IconButton(
+          onPressed: widget.enabled
+              ? () => _updateValue(_parseValue() - widget.step)
+              : null,
+          icon: const Icon(Icons.remove_circle_outline),
+          color: AppTheme.primaryColor,
+          splashRadius: 20,
+        ),
+        Expanded(
+          child: TextFormField(
+            controller: widget.controller,
+            enabled: widget.enabled,
+            keyboardType: widget.isDecimal
+                ? const TextInputType.numberWithOptions(decimal: true)
+                : TextInputType.number,
+            decoration: InputDecoration(
+              labelText: widget.label,
+              suffixText: widget.suffix,
+            ),
+            onChanged: (s) {
+              final parsed = num.tryParse(s) ?? 0;
+              widget.onChanged?.call(parsed);
+            },
+          ),
+        ),
+        IconButton(
+          onPressed: widget.enabled
+              ? () => _updateValue(_parseValue() + widget.step)
+              : null,
+          icon: const Icon(Icons.add_circle_outline),
+          color: AppTheme.primaryColor,
+          splashRadius: 20,
+        ),
+      ],
+    );
+  }
+}
+
+// Format currency to Philippine Peso (PHP)
+String formatPHP(double amount) {
+  final formatter = NumberFormat.currency(
+    locale: 'fil_PH',
+    symbol: '₱',
+    decimalDigits: amount == amount.toInt() ? 0 : 2,
+  );
+  return formatter.format(amount);
+}
+
+String _extractNameFromEcommerceUrl(Uri uri) {
+  try {
+    if (uri.host.contains('shopee')) {
+      if (uri.pathSegments.isNotEmpty) {
+        String slug = uri.pathSegments.first;
+        final parts = slug.split('-i.');
+        if (parts.isNotEmpty) {
+          String name = parts.first.replaceAll(RegExp(r'-+'), ' ');
+          return Uri.decodeComponent(name);
+        }
+      }
+    } else if (uri.host.contains('lazada')) {
+      if (uri.pathSegments.length > 1 && uri.pathSegments.first == 'products') {
+        String slug = uri.pathSegments[1];
+        final parts = slug.split(RegExp(r'-i\d+'));
+        if (parts.isNotEmpty) {
+          String name = parts.first.replaceAll(RegExp(r'-+'), ' ');
+          return Uri.decodeComponent(name);
+        }
+      }
+    }
+  } catch (_) {}
+  return '';
+}
+
+String? _guessCategory(String text) {
+  final lowerText = text.toLowerCase();
+  if (lowerText.contains('lipstick') || lowerText.contains('lip gloss')) {
+    return 'Lipstick';
+  }
+  if (lowerText.contains('blush')) return 'Blush';
+  if (lowerText.contains('foundation')) return 'Foundation';
+  if (lowerText.contains('concealer')) return 'Concealer';
+  if (lowerText.contains('eyeshadow')) return 'Eyeshadow';
+  if (lowerText.contains('eyeliner')) return 'Eyeliner';
+  if (lowerText.contains('mascara')) return 'Mascara';
+  if (lowerText.contains('brow')) return 'Eyebrow';
+  if (lowerText.contains('brush')) return 'Tools & Brushes';
+  return null;
+}
+
+bool _isPlaceholderShopeeDescription(String? description) {
+  final text = description?.trim().toLowerCase();
+  if (text == null || text.isEmpty) return true;
+  return text.contains('shopee blocked structured scraping') ||
+      text.contains('only the title could be recovered') ||
+      text.contains('fill remaining details manually') ||
+      text.contains('title-only') ||
+      text.contains('could not load structured product data') ||
+      text.contains('could not recover structured product data');
+}
+
+// ==================== MAIN SCREEN ====================
 class ClientScreen extends StatefulWidget {
   const ClientScreen({super.key});
 
@@ -13,7 +208,7 @@ class ClientScreen extends StatefulWidget {
 }
 
 class _ClientScreenState extends State<ClientScreen> {
-  int _currentSection = 0; // 0: Dashboard, 1: Business Profile, 2: Analytics, 3: Settings
+  int _currentSection = 0;
   late Future<Map<String, dynamic>> _clientDataFuture;
 
   @override
@@ -40,8 +235,49 @@ class _ClientScreenState extends State<ClientScreen> {
     }
   }
 
+  void _setSection(int index) {
+    if (_currentSection == index) return;
+    HapticFeedback.selectionClick();
+    setState(() => _currentSection = index);
+  }
+
   void _logout() {
     showLogoutConfirmationDialog(context, role: 'client');
+  }
+
+  Future<void> _refreshClientData() async {
+    final refreshed = _fetchClientData();
+    setState(() => _clientDataFuture = refreshed);
+    await refreshed;
+  }
+
+  void _showNotifications() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Notifications', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.shopping_bag),
+              title: const Text('New order received!'),
+              subtitle: Text('Order #ORD-001 - ${formatPHP(1299)}', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.inventory),
+              title: const Text('Low stock alert'),
+              subtitle: const Text('3 products need restock'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+        ],
+      ),
+    );
   }
 
   @override
@@ -52,7 +288,7 @@ class _ClientScreenState extends State<ClientScreen> {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(
-              child: CircularProgressIndicator(color: Color(0xFFFF4D97)),
+              child: CircularProgressIndicator(color: AppTheme.primaryColor),
             ),
           );
         }
@@ -63,18 +299,24 @@ class _ClientScreenState extends State<ClientScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                  Icon(
+                    Icons.error_outline,
+                    size: 64,
+                    color: AppTheme.errorColor,
+                  ),
                   const SizedBox(height: 16),
                   Text('Error: ${snapshot.error}'),
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: () {
-                      setState(() {
-                        _clientDataFuture = _fetchClientData();
-                      });
-                    },
-                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF4D97)),
-                    child: const Text('Retry'),
+                    onPressed: () =>
+                        setState(() => _clientDataFuture = _fetchClientData()),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryColor,
+                    ),
+                    child: const Text(
+                      'Retry',
+                      style: TextStyle(color: Colors.white),
+                    ),
                   ),
                 ],
               ),
@@ -82,140 +324,215 @@ class _ClientScreenState extends State<ClientScreen> {
           );
         }
 
-        final clientData = snapshot.data ?? {};
-
+        final clientData = snapshot.data!;
         return LayoutBuilder(
           builder: (context, constraints) {
-            final isWeb = constraints.maxWidth > 800;
-
-            if (isWeb) {
-              return _buildWebLayout(clientData);
-            }
-
-            return _buildMobileLayout(clientData);
+            final isDesktop = constraints.maxWidth > 900;
+            return isDesktop
+                ? _buildDesktopLayout(clientData)
+                : _buildMobileLayout(clientData);
           },
         );
       },
     );
   }
 
-  Widget _buildWebLayout(Map<String, dynamic> clientData) {
+  // ==================== DESKTOP LAYOUT ====================
+  Widget _buildDesktopLayout(Map<String, dynamic> clientData) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F8),
       body: Row(
         children: [
-          // Seller Centre Sidebar
           Container(
-            width: 250,
-            color: Colors.white,
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFF4D97),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(Icons.storefront, color: Colors.white, size: 20),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text(
-                          'Seller Centre',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFFFF4D97),
+            width: 280,
+            decoration: BoxDecoration(
+              color: AppTheme.cardColor,
+              boxShadow: AppTheme.boxShadow,
+            ),
+            child: DefaultTextStyle(
+              style: TextStyle(
+                color: contrastTextForBackground(AppTheme.cardColor),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            gradient: AppTheme.primaryGradient,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.storefront_rounded,
+                            color: Colors.white,
+                            size: 24,
                           ),
                         ),
+                        const SizedBox(width: 12),
+                        const Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Seller Centre',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                            Text(
+                              'Manage your store',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1, color: AppTheme.dividerColor),
+                  Expanded(
+                    child: ListView(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 16,
+                        horizontal: 12,
                       ),
-                    ],
+                      children: [
+                        _buildNavItem(Icons.dashboard_outlined, 'Dashboard', 0),
+                        _buildNavItem(Icons.storefront_outlined, 'My Shop', 1),
+                        _buildNavItem(
+                          Icons.inventory_2_outlined,
+                          'Products',
+                          2,
+                        ),
+                        _buildNavItem(Icons.analytics_outlined, 'Analytics', 3),
+                        _buildNavItem(Icons.settings_outlined, 'Settings', 4),
+                      ],
+                    ),
                   ),
-                ),
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    children: [
-                      _buildSidebarItem('Dashboard', Icons.dashboard_outlined, 0),
-                      _buildSidebarItem('My Shop', Icons.storefront_outlined, 1),
-                      _buildSidebarItem('My Products', Icons.inventory_2_outlined, 2),
-                      _buildSidebarItem('Business Insights', Icons.analytics_outlined, 3),
-                      _buildSidebarItem('Settings', Icons.settings_outlined, 4),
-                    ],
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: OutlinedButton.icon(
+                      onPressed: _logout,
+                      icon: const Icon(
+                        Icons.logout,
+                        color: AppTheme.errorColor,
+                      ),
+                      label: const Text(
+                        'Log Out',
+                        style: TextStyle(color: AppTheme.errorColor),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: AppTheme.errorColor),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        minimumSize: const Size(double.infinity, 48),
+                      ),
+                    ),
                   ),
-                ),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    border: Border(top: BorderSide(color: Colors.grey.shade200)),
-                  ),
-                  child: ListTile(
-                    leading: const Icon(Icons.logout, color: Colors.red),
-                    title: const Text('Log Out', style: TextStyle(color: Colors.red)),
-                    onTap: _logout,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    hoverColor: Colors.red.shade50,
-                  ),
-                ),
-              ],
+                  const SizedBox(height: 16),
+                ],
+              ),
             ),
           ),
-          // Main Content Area
           Expanded(
-            child: Column(
-              children: [
-                // Top Bar
-                Container(
-                  height: 64,
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      const Icon(Icons.notifications_none, color: Colors.grey),
-                      const SizedBox(width: 24),
-                      Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 16,
-                            backgroundColor: const Color(0xFFFF4D97).withOpacity(0.2),
-                            child: Text(
-                              (clientData['business_name'] ?? 'B').toString().substring(0, 1).toUpperCase(),
-                              style: const TextStyle(color: Color(0xFFFF4D97), fontWeight: FontWeight.bold),
+            child: DefaultTextStyle(
+              style: TextStyle(
+                color: contrastTextForBackground(AppTheme.cardColor),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    height: 70,
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    decoration: BoxDecoration(
+                      color: AppTheme.cardColor,
+                      boxShadow: AppTheme.boxShadow,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 250),
+                          transitionBuilder: (child, animation) {
+                            return FadeTransition(
+                              opacity: animation,
+                              child: SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: const Offset(0.06, 0),
+                                  end: Offset.zero,
+                                ).animate(animation),
+                                child: child,
+                              ),
+                            );
+                          },
+                          child: Text(
+                            _getSectionTitle(),
+                            key: ValueKey(_currentSection),
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textPrimary,
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Text(
-                            clientData['business_name'] ?? 'Business Account',
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                        ],
-                      ),
-                    ],
+                        ),
+                        Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.notifications_none),
+                              onPressed: _showNotifications,
+                              color: AppTheme.textSecondary,
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primaryColor.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.store,
+                                    size: 16,
+                                    color: AppTheme.primaryColor,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    clientData['business_name'] ?? 'My Store',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                // Content
-                Expanded(
-                  child: _buildSectionContent(clientData),
-                ),
-              ],
+                  Expanded(
+                    child: RefreshIndicator(
+                      onRefresh: _refreshClientData,
+                      color: AppTheme.primaryColor,
+                      child: SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(24),
+                        child: _buildAnimatedSectionContent(clientData),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -223,105 +540,116 @@ class _ClientScreenState extends State<ClientScreen> {
     );
   }
 
-  Widget _buildSidebarItem(String title, IconData icon, int index) {
+  Widget _buildNavItem(IconData icon, String label, int index) {
     final isSelected = _currentSection == index;
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: isSelected ? const Color(0xFFFF4D97).withOpacity(0.1) : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
+        gradient: isSelected ? AppTheme.primaryGradient : null,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: isSelected
+            ? [
+                BoxShadow(
+                  color: AppTheme.primaryColor.withOpacity(0.25),
+                  blurRadius: 18,
+                  offset: const Offset(0, 6),
+                ),
+              ]
+            : null,
       ),
       child: ListTile(
-        leading: Icon(
-          icon,
-          color: isSelected ? const Color(0xFFFF4D97) : Colors.grey.shade600,
-        ),
-        title: Text(
-          title,
-          style: TextStyle(
-            color: isSelected ? const Color(0xFFFF4D97) : Colors.grey.shade700,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+        leading: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 180),
+          child: Icon(
+            icon,
+            key: ValueKey('nav-$label-$isSelected'),
+            color: isSelected ? Colors.white : AppTheme.textSecondary,
           ),
         ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        onTap: () {
-          setState(() {
-            _currentSection = index;
-          });
-        },
+        title: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : AppTheme.textPrimary,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        onTap: () => _setSection(index),
       ),
     );
   }
 
+  // ==================== MOBILE LAYOUT ====================
   Widget _buildMobileLayout(Map<String, dynamic> clientData) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: AppTheme.surfaceColor,
       appBar: AppBar(
-        title: const Text(
-          'Seller Centre',
-          style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
-        ),
-        backgroundColor: const Color(0xFFFF4D97),
+        title: const Text('Seller Centre'),
+        backgroundColor: AppTheme.primaryColor,
         foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout_rounded),
             onPressed: _logout,
-            tooltip: 'Logout',
+            icon: const Icon(Icons.logout_rounded),
           ),
         ],
       ),
-      body: _buildSectionContent(clientData),
+      body: DefaultTextStyle(
+        style: TextStyle(
+          color: contrastTextForBackground(AppTheme.surfaceColor),
+        ),
+        child: RefreshIndicator(
+          onRefresh: _refreshClientData,
+          color: AppTheme.primaryColor,
+          child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: MediaQuery.of(context).size.height -
+                      kToolbarHeight -
+                      kBottomNavigationBarHeight -
+                      MediaQuery.of(context).padding.vertical,
+                ),
+                child: _buildAnimatedSectionContent(clientData),
+              ),
+            ),
+        ),
+      ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, -5),
-            ),
-          ],
+          color: Colors.white,
+          boxShadow: AppTheme.boxShadow,
         ),
         child: BottomNavigationBar(
           currentIndex: _currentSection,
-          onTap: (index) {
-            setState(() {
-              _currentSection = index;
-            });
-          },
+          onTap: _setSection,
           type: BottomNavigationBarType.fixed,
-          backgroundColor: Colors.white,
-          selectedItemColor: const Color(0xFFFF4D97),
-          unselectedItemColor: Colors.grey[400],
-          selectedFontSize: 12,
-          unselectedFontSize: 12,
-          elevation: 0,
+          selectedItemColor: AppTheme.primaryColor,
+          unselectedItemColor: AppTheme.textSecondary,
           items: const [
             BottomNavigationBarItem(
               icon: Icon(Icons.dashboard_outlined),
-              activeIcon: Icon(Icons.dashboard_rounded),
-              label: 'Dashboard',
+              label: 'Home',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.storefront_outlined),
-              activeIcon: Icon(Icons.storefront_rounded),
-              label: 'My Shop',
+              label: 'Shop',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.inventory_2_outlined),
-              activeIcon: Icon(Icons.inventory_2_rounded),
               label: 'Products',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.analytics_outlined),
-              activeIcon: Icon(Icons.analytics_rounded),
-              label: 'Insights',
+              label: 'Analytics',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.settings_outlined),
-              activeIcon: Icon(Icons.settings_rounded),
               label: 'Settings',
             ),
           ],
@@ -330,697 +658,141 @@ class _ClientScreenState extends State<ClientScreen> {
     );
   }
 
-  Widget _buildSectionContent(Map<String, dynamic> clientData) {
-    Widget content;
-    switch (_currentSection) {
-      case 0:
-        content = _buildDashboard(clientData);
-        break;
-      case 1:
-        content = _buildMyShopSettings(clientData); // Replaced BusinessProfile with MyShopSettings
-        break;
-      case 2:
-        content = _buildProducts(clientData);
-        break;
-      case 3:
-        content = _buildAnalytics(clientData);
-        break;
-      case 4:
-        content = _buildSettings(clientData);
-        break;
-      default:
-        content = const SizedBox();
-    }
-    
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 24.0),
-        child: content,
-      ),
-    );
-  }
-
-  Widget _buildDashboard(Map<String, dynamic> clientData) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'To Do List',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: -0.5),
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'Things you need to deal with to keep your shop running smoothly',
-          style: TextStyle(fontSize: 14, color: Colors.grey),
-        ),
-        const SizedBox(height: 16),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            int crossAxisCount = constraints.maxWidth > 600 ? 4 : 2;
-            return GridView.count(
-              crossAxisCount: crossAxisCount,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              childAspectRatio: 1.5,
-              children: [
-                _buildTodoItem('0', 'Pending Bookings'),
-                _buildTodoItem('2', 'Unread Messages'),
-                _buildTodoItem('1', 'Cancellation Requests'),
-                _buildTodoItem('5', 'New Reviews'),
-              ],
-            );
-          }
-        ),
-        const SizedBox(height: 32),
-        const Text(
-          'Business Performance',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: -0.5),
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(child: _buildMiniStat('Revenue\n(Today)', '?6,600', Icons.attach_money, Colors.green)),
-            const SizedBox(width: 16),
-            Expanded(child: _buildMiniStat('Visitors\n(Today)', '45', Icons.people_alt_outlined, Colors.blue)),
-          ],
-        ),
-        const SizedBox(height: 24),
-      ],
-    );
-  }
-
-  Widget _buildTodoItem(String count, String label) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(count, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFFFF4D97))),
-          const SizedBox(height: 8),
-          Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMiniStat(String title, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8, offset: const Offset(0, 2)),
-        ],
-        border: Border.all(color: Colors.grey.withOpacity(0.1)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 12),
-          Text(value, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color)),
-          const SizedBox(height: 4),
-          Text(title, style: TextStyle(fontSize: 13, color: Colors.grey[600], height: 1.2)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMyShopSettings(Map<String, dynamic> clientData) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'My Shop Settings',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: -0.5),
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'View and update your shop profile',
-          style: TextStyle(fontSize: 14, color: Colors.grey),
-        ),
-        const SizedBox(height: 24),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade200),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(24),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    if (constraints.maxWidth > 500) {
-                      return Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildShopAvatar(),
-                          const SizedBox(width: 32),
-                          Expanded(child: _buildShopForm(clientData, true)),
-                        ],
-                      );
-                    } else {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          _buildShopAvatar(),
-                          const SizedBox(height: 32),
-                          _buildShopForm(clientData, false),
-                        ],
-                      );
-                    }
-                  }
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildShopAvatar() {
-    return Column(
-      children: [
-        CircleAvatar(
-          radius: 40,
-          backgroundColor: Colors.grey.shade100,
-          child: const Icon(Icons.store, size: 40, color: Colors.grey),
-        ),
-        const SizedBox(height: 12),
-        ElevatedButton.icon(
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Avatar upload coming soon!')),
-            );
-          },
-          icon: const Icon(Icons.upload_file, size: 16),
-          label: const Text('Upload Avatar'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.white,
-            foregroundColor: Colors.black87,
-            side: BorderSide(color: Colors.grey.shade300),
-            elevation: 0,
-          ),
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'File size: Max 5MB',
-          style: TextStyle(fontSize: 12, color: Colors.grey),
-        )
-      ],
-    );
-  }
-
-  Widget _buildShopForm(Map<String, dynamic> clientData, bool isDesktop) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildProfileRow('Shop Name', clientData['business_name'] ?? 'Enter shop name', isDesktop),
-        _buildProfileRow('Category', clientData['business_type'] ?? 'e.g. Beauty Salon', isDesktop),
-        _buildProfileRow('Phone', clientData['phone'] ?? '+1 (555) 000-0000', isDesktop),
-        _buildProfileRow('Address', clientData['address'] ?? 'e.g. 123 Main St', isDesktop),
-        const SizedBox(height: 24),
-        Row(
-          mainAxisAlignment: isDesktop ? MainAxisAlignment.end : MainAxisAlignment.center,
-          children: [
-            ElevatedButton(
-              onPressed: () {
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFF4D97),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                elevation: 0,
-              ),
-              child: const Text('Save Form', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ],
-        )
-      ],
-    );
-  }
-
-  Widget _buildProfileRow(String label, String hint, bool isDesktop) {
-    if (isDesktop) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 20),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: 140,
-              child: Text(label, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w500)),
-            ),
-            Expanded(
-              child: _buildTextFieldRaw(hint),
-            ),
-          ],
-        ),
-      );
-    } else {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w500)),
-            const SizedBox(height: 8),
-            _buildTextFieldRaw(hint),
-          ],
-        ),
-      );
-    }
-  }
-
-  Widget _buildTextFieldRaw(String hint) {
-    return TextField(
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        isDense: true,
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(
-          borderSide: BorderSide(color: Colors.grey.shade300),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderSide: BorderSide(color: Colors.grey.shade300),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderSide: const BorderSide(color: Color(0xFFFF4D97)),
-          borderRadius: BorderRadius.circular(4),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAnalytics(Map<String, dynamic> clientData) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Analytics Overview',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: -0.5),
-        ),
-        const SizedBox(height: 8),
-        const Text('Track your business performance in real-time', style: TextStyle(fontSize: 14, color: Colors.grey)),
-        const SizedBox(height: 24),
-        GridView.count(
-          crossAxisCount: 2,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          childAspectRatio: 1.2,
-          children: [
-            _buildStatCard('Total Customers', '1,284', Icons.people_alt, const Color(0xFF4F46E5)),
-            _buildStatCard('Active Bookings', '32', Icons.calendar_month, const Color(0xFF10B981)),
-            _buildStatCard('Services', '15', Icons.spa, const Color(0xFFF59E0B)),
-            _buildStatCard('Revenue (MTD)', '?233,750', Icons.attach_money, const Color(0xFFFF4D97)),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.withOpacity(0.15)),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
-        ],
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
-            child: Icon(icon, color: color, size: 24),
-          ),
-          const SizedBox(height: 12),
-          Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)),
-          const SizedBox(height: 4),
-          Text(title, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.grey[600])),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSettings(Map<String, dynamic> clientData) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Settings',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: -0.5),
-        ),
-        const SizedBox(height: 24),
-        _buildSettingsGroup(
-          'Account',
-          [
-            _buildSettingsTile('Change Password', Icons.lock_outline, onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Password reset functionality coming soon!')),
-              );
-            }),
-          ],
-        ),
-        const SizedBox(height: 24),
-        _buildSettingsGroup(
-          'Preferences',
-          [
-            _buildSettingsTile('Push Notifications', Icons.notifications_none_outlined, trailing: Switch(
-              value: true,
-              activeThumbColor: const Color(0xFFFF4D97),
-              onChanged: (val) {},
-            )),
-            _buildSettingsTile('Dark Mode', Icons.dark_mode_outlined, trailing: Switch(
-              value: false,
-              activeThumbColor: const Color(0xFFFF4D97),
-              onChanged: (val) {},
-            )),
-          ],
-        ),
-const SizedBox(height: 24),
-      ],
-    );
-  }
-
-  Widget _buildSettingsGroup(String title, List<Widget> children) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 12),
-          child: Text(
-            title.toUpperCase(),
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.grey[500], letterSpacing: 1.2),
-          ),
-        ),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.grey.withOpacity(0.2)),
-          ),
-          child: Column(children: children),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSettingsTile(String title, IconData icon, {Widget? trailing, VoidCallback? onTap}) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-      leading: Icon(icon, color: Colors.black87),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 15)),
-      trailing: trailing ?? const Icon(Icons.chevron_right, color: Colors.grey),
-      onTap: onTap,
-    );
-  }
-
-  Widget _buildProducts(Map<String, dynamic> clientData) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'My Products',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: -0.5),
-            ),
-            ElevatedButton.icon(
-              onPressed: () => _showAddProductDialog(clientData['id'] as String),
-              icon: const Icon(Icons.add),
-              label: const Text('Add Product'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFF4D97),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        const Text('Manage the products you offer in the market.', style: TextStyle(fontSize: 14, color: Colors.grey)),
-        const SizedBox(height: 24),
-        StreamBuilder<List<Map<String, dynamic>>>(
-          stream: Supabase.instance.client
-              .from('products')
-              .stream(primaryKey: ['id'])
-              .eq('business_id', clientData['id'])
-              .order('created_at'),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator(color: Color(0xFFFF4D97)));
-            }
-
-            if (snapshot.hasError) {
-              return Center(child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.red)));
-            }
-
-            final products = snapshot.data ?? [];
-
-            if (products.isEmpty) {
-              return Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(32),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                child: Column(
-                  children: [
-                    Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey.shade300),
-                    const SizedBox(height: 16),
-                    const Text('No products yet', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    const Text('Start adding products to sell to your clients.', style: TextStyle(color: Colors.grey)),
-                    const SizedBox(height: 24),
-                    ElevatedButton(
-                      onPressed: () => _showAddProductDialog(clientData['id'] as String),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFFF4D97),
-                        foregroundColor: Colors.white,
-                      ),
-                      child: const Text('Add Your First Product'),
-                    )
-                  ],
-                ),
-              );
-            }
-
-            final lowStockCount = products.where((p) => (p['stock_quantity'] as int? ?? 0) <= 5).length;
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (lowStockCount > 0)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.orange.shade200),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.warning_amber_rounded, color: Colors.orange.shade800),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Inventory Alert: $lowStockCount product(s) have low stock (5 or less left).',
-                            style: TextStyle(color: Colors.orange.shade900, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 250,
-                    childAspectRatio: 0.75,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                  ),
-              itemCount: products.length,
-              itemBuilder: (context, index) {
-                final product = products[index];
-                return Card(
-                  clipBehavior: Clip.antiAlias,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  elevation: 2,
-                  shadowColor: Colors.black.withOpacity(0.1),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Product Image Placeholder or Network Image
-                      Expanded(
-                        child: Stack(
-                          children: [
-                            Container(
-                              width: double.infinity,
-                              height: double.infinity,
-                              color: Colors.grey.shade100,
-                              child: product['image_url'] != null
-                                  ? Image.network(product['image_url'], fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => const Icon(Icons.image_not_supported, color: Colors.grey))
-                                  : const Icon(Icons.inventory_2, size: 48, color: Colors.grey),
-                            ),
-                            Positioned(
-                              top: 4,
-                              right: 4,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.8),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: PopupMenuButton<String>(
-                                  icon: const Icon(Icons.more_vert, size: 20),
-                                  onSelected: (action) {
-                                    if (action == 'edit') {
-                                      _showEditProductDialog(product);
-                                    } else if (action == 'delete') {
-                                      _confirmDeleteProduct(product['id'], product['name']);
-                                    }
-                                  },
-                                  itemBuilder: (context) => [
-                                    const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                                    const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              product['name'] ?? 'Unnamed Product',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '₱${product['price']}',
-                              style: const TextStyle(color: Color(0xFFFF4D97), fontWeight: FontWeight.bold, fontSize: 16),
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Builder(
-                                  builder: (context) {
-                                    final stock = product['stock_quantity'] as int? ?? 0;
-                                    final isLow = stock <= 5;
-                                    return Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        if (isLow) const Icon(Icons.warning_amber_rounded, size: 14, color: Colors.orange),
-                                        if (isLow) const SizedBox(width: 4),
-                                        Text(
-                                          isLow ? 'Low Stock: $stock' : 'Stock: $stock',
-                                          style: TextStyle(
-                                            color: isLow ? Colors.orange.shade800 : Colors.grey.shade600, 
-                                            fontSize: 12,
-                                            fontWeight: isLow ? FontWeight.bold : FontWeight.normal,
-                                          ),
-                                        ),
-                                      ],
-                                    );
-                                  },
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: product['is_active'] == true ? Colors.green.shade50 : Colors.red.shade50,
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    product['is_active'] == true ? 'Active' : 'Inactive',
-                                    style: TextStyle(
-                                      color: product['is_active'] == true ? Colors.green : Colors.red,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold
-                                    ),
-                                  ),
-                                )
-                              ],
-                            )
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ],
+  Widget _buildAnimatedSectionContent(Map<String, dynamic> clientData) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 320),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) {
+        final slide = Tween<Offset>(
+          begin: const Offset(0.04, 0),
+          end: Offset.zero,
+        ).animate(animation);
+        return FadeTransition(
+          opacity: animation,
+          child: SlideTransition(position: slide, child: child),
         );
       },
-    ),
-      ],
+      child: KeyedSubtree(
+        key: ValueKey<int>(_currentSection),
+        child: _buildSectionContent(clientData),
+      ),
     );
   }
 
-  void _showAddProductDialog(String businessId) {
-    showDialog(
+  String _getSectionTitle() {
+    const titles = [
+      'Dashboard',
+      'My Shop',
+      'Products',
+      'Analytics',
+      'Settings',
+    ];
+    return titles[_currentSection];
+  }
+
+  Widget _buildSectionContent(Map<String, dynamic> clientData) {
+    switch (_currentSection) {
+      case 0:
+        return ClientDashboardScreen(clientData: clientData);
+      case 1:
+        return ClientShopScreen(clientData: clientData);
+      case 2:
+        return ClientProductsSection(
+          clientData: clientData,
+          onAddProduct: _showAddProductDialog,
+          onEditProduct: _showEditProductDialog,
+          onDeleteProduct: _confirmDeleteProduct,
+          onToggleProductStatus: _toggleProductStatus,
+        );
+      case 3:
+        return ClientAnalyticsScreen(clientData: clientData);
+      case 4:
+        return ClientSettingsScreen(clientData: clientData);
+      default:
+        return const SizedBox();
+    }
+  }
+
+
+  Future<void> _toggleProductStatus(Map<String, dynamic> product) async {
+    try {
+      await Supabase.instance.client
+          .from('products')
+          .update({'is_active': product['is_active'] != true})
+          .eq('id', product['id']);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Product ${product['is_active'] == true ? 'deactivated' : 'activated'}',
+            ),
+            backgroundColor: AppTheme.successColor,
+          ),
+        );
+        setState(() => _clientDataFuture = _fetchClientData());
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    }
+  }
+
+
+  void _showAddProductDialog(String businessId) async {
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (context) => ProductFormPage(businessId: businessId),
+      ),
+    );
+    if (saved == true && mounted) {
+      setState(() {
+        _currentSection = 2;
+        _clientDataFuture = _fetchClientData();
+      });
+    }
+  }
+
+  void _showEditProductDialog(Map<String, dynamic> product) async {
+    final saved = await showDialog<bool>(
       context: context,
-      builder: (context) {
-        return _AddProductDialog(businessId: businessId);
-      },
+      builder: (context) => _EditProductDialog(product: product),
     );
+    if (saved == true && mounted) {
+      setState(() => _clientDataFuture = _fetchClientData());
+    }
   }
 
-  void _showEditProductDialog(Map<String, dynamic> product) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return _EditProductDialog(product: product);
-      },
-    );
-  }
+  void _confirmDeleteProduct(dynamic productId, dynamic productName) async {
+    final id = productId?.toString();
+    final name = (productName ?? 'this product').toString();
+    if (id == null || id.isEmpty) return;
 
-  Future<void> _confirmDeleteProduct(String productId, String productName) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Product?'),
-        content: Text('Are you sure you want to delete "$productName"?'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Delete Product'),
+        content: Text(
+          'Are you sure you want to delete "$name"? This action cannot be undone.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.errorColor,
+            ),
             child: const Text('Delete'),
           ),
         ],
@@ -1029,16 +801,23 @@ const SizedBox(height: 24),
 
     if (confirm == true) {
       try {
-        await Supabase.instance.client.from('products').delete().eq('id', productId);
+        await Supabase.instance.client.from('products').delete().eq('id', id);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Product deleted successfully'), backgroundColor: Colors.green),
+            const SnackBar(
+              content: Text('Product deleted'),
+              backgroundColor: AppTheme.successColor,
+            ),
           );
+          setState(() => _clientDataFuture = _fetchClientData());
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to delete: $e'), backgroundColor: Colors.red),
+            SnackBar(
+              content: Text('Error: $e'),
+              backgroundColor: AppTheme.errorColor,
+            ),
           );
         }
       }
@@ -1046,9 +825,9 @@ const SizedBox(height: 24),
   }
 }
 
+// ==================== ADD PRODUCT DIALOG ====================
 class _AddProductDialog extends StatefulWidget {
   final String businessId;
-
   const _AddProductDialog({required this.businessId});
 
   @override
@@ -1061,124 +840,2207 @@ class _AddProductDialogState extends State<_AddProductDialog> {
   final _priceController = TextEditingController();
   final _stockController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final _linkController = TextEditingController();
   final _imageUrlController = TextEditingController();
 
   String? _imagePreviewUrl;
   Uint8List? _selectedImageBytes;
   String? _selectedImageName;
   final _imagePicker = ImagePicker();
-
   String? _selectedCategory;
-  final List<String> _categories = [
-    'Lipstick',
-    'Foundation',
-    'Eyeshadow',
-    'Mascara',
-    'Eyeliner',
-    'Blush',
-    'Highlighter',
-    'Concealer',
-    'Primer',
-    'Skincare',
-    'Tools & Brushes',
-    'Other'
-  ];
-
   bool _isLoading = false;
+  bool _isFetchingMetadata = false;
 
-  void _handleImageUrlChanged(String value) {
-    final trimmed = value.trim();
-    final uri = Uri.tryParse(trimmed);
-    setState(() {
-      _imagePreviewUrl = (trimmed.isNotEmpty && uri != null && (uri.hasScheme && uri.hasAuthority))
-          ? trimmed
-          : null;
-    });
+  final _categories = [
+    'Lipstick',
+    'Blush',
+    'Contour',
+    'Setting Spray',
+    'Eyebrow',
+    'Eyeliner',
+    'Concealer',
+    'Eyeshadow',
+    'Tools & Brushes',
+  ];
+  final List<Map<String, dynamic>> _variations = [];
+
+  static const List<Map<String, String>> _defaultColorPalette = [
+    {'name': 'Black', 'hex': '#000000'},
+    {'name': 'White', 'hex': '#FFFFFF'},
+    {'name': 'Red', 'hex': '#E53935'},
+    {'name': 'Pink', 'hex': '#EC4899'},
+    {'name': 'Rose', 'hex': '#F43F5E'},
+    {'name': 'Coral', 'hex': '#FF6F61'},
+    {'name': 'Peach', 'hex': '#FFB085'},
+    {'name': 'Nude', 'hex': '#D2A48C'},
+    {'name': 'Beige', 'hex': '#E8DCCB'},
+    {'name': 'Sand', 'hex': '#D8C3A5'},
+    {'name': 'Almond', 'hex': '#C8A27A'},
+    {'name': 'Caramel', 'hex': '#B87333'},
+    {'name': 'Taupe', 'hex': '#8B7D6B'},
+    {'name': 'Brown', 'hex': '#8D6E63'},
+    {'name': 'Cocoa', 'hex': '#7B4B2A'},
+    {'name': 'Chestnut', 'hex': '#6B3F2A'},
+    {'name': 'Mocha', 'hex': '#6D4C41'},
+    {'name': 'Burgundy', 'hex': '#7B1E3A'},
+    {'name': 'Wine', 'hex': '#722F37'},
+    {'name': 'Plum', 'hex': '#7C3AED'},
+    {'name': 'Mauve', 'hex': '#C08497'},
+    {'name': 'Lavender', 'hex': '#B57EDC'},
+    {'name': 'Lilac', 'hex': '#C8A2C8'},
+    {'name': 'Purple', 'hex': '#8E24AA'},
+    {'name': 'Blue', 'hex': '#1E88E5'},
+    {'name': 'Matcha', 'hex': '#9FCB7C'},
+    {'name': 'Green', 'hex': '#10B981'},
+    {'name': 'Yellow', 'hex': '#F59E0B'},
+    {'name': 'Orange', 'hex': '#F97316'},
+    {'name': 'Terracotta', 'hex': '#E2725B'},
+    {'name': 'Bronze', 'hex': '#CD7F32'},
+    {'name': 'Copper', 'hex': '#B87333'},
+    {'name': 'Gold', 'hex': '#D4AF37'},
+    {'name': 'Silver', 'hex': '#C0C0C0'},
+    {'name': 'Gray', 'hex': '#94A3B8'},
+  ];
+  List<Map<String, String>> _colorPalette = [];
+
+  String _normalizeHexColor(dynamic value) {
+    final raw = value?.toString().trim() ?? '';
+    if (raw.isEmpty) return '#FFFFFF';
+    var hex = raw.startsWith('#') ? raw.substring(1) : raw;
+    if (!RegExp(r'^[0-9A-Fa-f]{3}$|^[0-9A-Fa-f]{6}$').hasMatch(hex)) {
+      return '#FFFFFF';
+    }
+    if (hex.length == 3) {
+      hex = '${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}';
+    }
+    return '#${hex.toUpperCase()}';
   }
 
-  Future<void> _pickImage() async {
+  String _hexFromColor(Color color) {
+    final r = color.red.toRadixString(16).padLeft(2, '0');
+    final g = color.green.toRadixString(16).padLeft(2, '0');
+    final b = color.blue.toRadixString(16).padLeft(2, '0');
+    return '#${(r + g + b).toUpperCase()}';
+  }
+
+  Color _colorFromHex(String hex) {
+    final normalized = _normalizeHexColor(hex).substring(1);
+    final value = int.parse(normalized, radix: 16);
+    return Color(0xFF000000 | value);
+  }
+
+  int _colorDistance(Color a, Color b) {
+    final dr = a.red - b.red;
+    final dg = a.green - b.green;
+    final db = a.blue - b.blue;
+    return dr * dr + dg * dg + db * db;
+  }
+
+  String _normalizeColorName(String name) {
+    return name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+  }
+
+  String? _hexForColorName(String name) {
+    final normalized = _normalizeColorName(name);
+    if (normalized.isEmpty) return null;
+    for (final entry in _colorPalette) {
+      final paletteName = _normalizeColorName(entry['name'] ?? '');
+      if (normalized == paletteName || normalized.contains(paletteName)) {
+        return entry['hex'];
+      }
+    }
+    return null;
+  }
+
+  String? _closestColorName(Color color) {
+    String? bestName;
+    var bestDistance = 1 << 30;
+    for (final entry in _colorPalette) {
+      final hex = entry['hex'];
+      final name = entry['name'];
+      if (hex == null || name == null) continue;
+      final candidate = _colorFromHex(hex);
+      final distance = _colorDistance(color, candidate);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestName = name;
+      }
+    }
+    return bestName;
+  }
+
+  Future<void> _persistColorPaletteEntry(String name, String hex) async {
+    final normalizedName = name.trim();
+    final normalizedHex = _normalizeHexColor(hex);
+    if (normalizedName.isEmpty ||
+        normalizedHex == '#FFFFFF' && hex.trim().isEmpty) {
+      return;
+    }
+
     try {
-      final XFile? image = await _imagePicker.pickImage(source: ImageSource.gallery);
-      if (image != null) {
-        final bytes = await image.readAsBytes();
-        setState(() {
-          _selectedImageBytes = bytes;
-          _selectedImageName = image.name;
-          _imagePreviewUrl = null; // Clear URL preview if local image selected
-          _imageUrlController.clear();
-        });
-      }
+      await Supabase.instance.client.from('product_colors').insert({
+        'name': normalizedName,
+        'hex': normalizedHex,
+        'is_active': true,
+      });
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error picking image: $e'), backgroundColor: Colors.red),
-        );
-      }
+      debugPrint('Failed to persist product color "$normalizedName": $e');
     }
   }
 
-  Future<void> _submitForm() async {
-    if (!_formKey.currentState!.validate()) return;
-    
-    if (_imagePreviewUrl == null && _selectedImageBytes == null) {
+  String _variationHex(Map<String, dynamic> variation) {
+    return _normalizeHexColor(variation['hex'] ?? variation['hex_code']);
+  }
+
+  int _variationStockValue(Map<String, dynamic> variation) {
+    final raw = variation['stock'];
+    if (raw is int) return raw;
+    return int.tryParse(raw?.toString() ?? '') ?? 0;
+  }
+
+  int _totalVariationStock() {
+    return _variations.fold<int>(
+      0,
+      (sum, variation) => sum + _variationStockValue(variation),
+    );
+  }
+
+  void _syncProductStockFromVariations() {
+    if (_variations.isEmpty) return;
+    _stockController.text = _totalVariationStock().toString();
+    _stockController.selection = TextSelection.collapsed(
+      offset: _stockController.text.length,
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _colorPalette = List<Map<String, String>>.from(_defaultColorPalette);
+    _loadColorPalette();
+  }
+
+  Future<void> _loadColorPalette() async {
+    try {
+      final response = await Supabase.instance.client
+          .from('product_colors')
+          .select('name, hex')
+          .eq('is_active', true)
+          .order('name');
+      final rows = List<Map<String, dynamic>>.from(response);
+      if (rows.isNotEmpty && mounted) {
+        setState(() {
+          _colorPalette = rows
+              .map(
+                (row) => {
+                  'name': row['name']?.toString() ?? '',
+                  'hex': _normalizeHexColor(row['hex']),
+                },
+              )
+              .where((entry) => entry['name']!.isNotEmpty)
+              .toList();
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to load product colors: $e');
+    }
+  }
+
+  Future<img.Image?> _loadVariationImage(Map<String, dynamic> variation) async {
+    final cached = variation['decodedImage'];
+    if (cached is img.Image) return cached;
+
+    Uint8List? bytes = variation['imageBytes'];
+    if (bytes == null) {
+      final url = variation['imageUrl']?.toString().trim();
+      if (url != null && url.isNotEmpty) {
+        try {
+          final response = await http.get(Uri.parse(url));
+          if (response.statusCode == 200) {
+            bytes = response.bodyBytes;
+            variation['imageBytes'] = bytes;
+          }
+        } catch (_) {}
+      }
+    }
+
+    if (bytes == null) return null;
+    final decoded = img.decodeImage(bytes);
+    if (decoded != null) {
+      variation['decodedImage'] = decoded;
+    }
+    return decoded;
+  }
+
+  Future<void> _pickColorFromVariationImage(
+    int index,
+    TapDownDetails details,
+    BuildContext imageContext,
+  ) async {
+    if (!mounted) return;
+    final variation = _variations[index];
+    final decoded = await _loadVariationImage(variation);
+    if (decoded == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please upload an image or provide a valid image URL.'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('No image available to pick a color from.'),
+          backgroundColor: AppTheme.warningColor,
+        ),
       );
       return;
     }
 
+    final box = imageContext.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final size = box.size;
+    if (size.width <= 0 || size.height <= 0) return;
+
+    final dx = details.localPosition.dx.clamp(0.0, size.width - 1);
+    final dy = details.localPosition.dy.clamp(0.0, size.height - 1);
+    final x = (dx / size.width * decoded.width).floor().clamp(
+      0,
+      decoded.width - 1,
+    );
+    final y = (dy / size.height * decoded.height).floor().clamp(
+      0,
+      decoded.height - 1,
+    );
+
+    final pixel = decoded.getPixel(x, y);
+    final color = Color.fromARGB(
+      255,
+      pixel.r.toInt(),
+      pixel.g.toInt(),
+      pixel.b.toInt(),
+    );
+    final hex = _hexFromColor(color);
+    final name = _closestColorName(color);
+
     setState(() {
-      _isLoading = true;
+      variation['hex'] = hex;
+      variation['hex_code'] = hex;
+      if (name != null) variation['name'] = name;
     });
 
-    try {
-      String finalImageUrl = _imagePreviewUrl ?? '';
+    final persistedName = (name ?? variation['name'] ?? '').toString();
+    await _persistColorPaletteEntry(persistedName, hex);
+  }
 
-      // Upload local image to Supabase Storage if one is picked
-      if (_selectedImageBytes != null) {
-        final fileName = '${DateTime.now().millisecondsSinceEpoch}_${_selectedImageName ?? 'image.jpg'}';
-        final filePath = '${widget.businessId}/$fileName';
-        
-        // Attempt to upload. (Assumes a 'products' bucket exists and is public)
-        try {
-          await Supabase.instance.client.storage
-              .from('products')
-              .uploadBinary(filePath, _selectedImageBytes!);
-          finalImageUrl = Supabase.instance.client.storage.from('products').getPublicUrl(filePath);
-        } catch (storageError) {
-           debugPrint('Storage Error: $storageError');
-           throw 'Image upload failed. Ensure storage bucket "products" exists with correct permissions. ($storageError)';
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text(
+        'Add Product',
+        style: TextStyle(fontWeight: FontWeight.bold),
+      ),
+      content: SizedBox(
+        width: 500,
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // QUICK IMPORT SECTION (Top Priority)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF4D97).withOpacity(0.1),
+                    border: Border.all(color: AppTheme.primaryColor, width: 2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.bolt,
+                            color: AppTheme.primaryColor,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Quick Import',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: AppTheme.primaryColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      _buildLinkField(),
+                      const SizedBox(height: 8),
+                      _buildLinkImportActions(),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // MANUAL ENTRY SECTION
+                _buildTextField(
+                  _nameController,
+                  'Product Name',
+                  validator: true,
+                ),
+                const SizedBox(height: 16),
+                NumericSpinnerField(
+                  controller: _priceController,
+                  label: 'Price (PHP)',
+                  isDecimal: true,
+                  step: 1,
+                  suffix: 'PHP',
+                ),
+                const SizedBox(height: 16),
+                NumericSpinnerField(
+                  controller: _stockController,
+                  label: 'Stock',
+                  step: 1,
+                  enabled: _variations.isEmpty,
+                ),
+                const SizedBox(height: 16),
+                _buildCategoryDropdown(),
+                const SizedBox(height: 16),
+                _buildTextField(
+                  _descriptionController,
+                  'Description',
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 16),
+                _buildImageSection(),
+                const SizedBox(height: 16),
+                _buildVariationsSection(),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isLoading ? null : _submitForm,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.primaryColor,
+          ),
+          child: _isLoading
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Text(
+                  'Save Product',
+                  style: TextStyle(color: Colors.white),
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTextField(
+    TextEditingController controller,
+    String label, {
+    int maxLines = 1,
+    TextInputType? keyboard,
+    bool validator = false,
+  }) {
+    return TextFormField(
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: label,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      maxLines: maxLines,
+      keyboardType: keyboard,
+      validator: validator
+          ? (v) => v == null || v.isEmpty ? 'Required' : null
+          : null,
+    );
+  }
+
+  Widget _buildCategoryDropdown() {
+    return DropdownButtonFormField<String?>(
+      value: _selectedCategory,
+      decoration: const InputDecoration(
+        labelText: 'Category',
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(12)),
+        ),
+      ),
+      items: _categories
+          .map((c) => DropdownMenuItem<String?>(value: c, child: Text(c)))
+          .toList(),
+      onChanged: (v) => setState(() => _selectedCategory = v),
+      validator: (v) => v == null ? 'Select category' : null,
+    );
+  }
+
+  Widget _buildLinkField() {
+    return TextFormField(
+      controller: _linkController,
+      onChanged: (val) => setState(() {}), // Trigger rebuild to show button
+      decoration: InputDecoration(
+        labelText: 'Product Link',
+        labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+        hintText: 'Paste Shopee or product URL',
+        prefixIcon: const Icon(Icons.link, color: AppTheme.primaryColor),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(
+            color: AppTheme.primaryColor,
+            width: 1.5,
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppTheme.primaryColor, width: 2),
+        ),
+        suffixIcon: _isFetchingMetadata
+            ? const Padding(
+                padding: EdgeInsets.all(12),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      AppTheme.primaryColor,
+                    ),
+                  ),
+                ),
+              )
+            : null,
+        filled: true,
+        fillColor: Colors.white,
+      ),
+    );
+  }
+
+  Widget _buildLinkImportActions() {
+    final hasLink = _linkController.text.trim().isNotEmpty;
+    final parsedUri = Uri.tryParse(_linkController.text.trim());
+    final canBulkImport = parsedUri != null && _isShopeeSearchLink(parsedUri);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            canBulkImport
+                ? '🔍 Shopee search detected - Click below to import matching products'
+                : hasLink
+                ? '✓ Link ready - Click below to extract product details'
+                : '💡 Paste a Shopee product link or search URL to auto-fill details',
+            style: TextStyle(
+              fontSize: 12,
+              color: hasLink ? AppTheme.primaryColor : AppTheme.textSecondary,
+              fontWeight: hasLink ? FontWeight.w600 : FontWeight.normal,
+            ),
+          ),
+          if (hasLink) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _isFetchingMetadata ? null : _handleLinkAction,
+                icon: _isFetchingMetadata
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
+                        ),
+                      )
+                    : Icon(
+                        canBulkImport
+                            ? Icons.file_download_outlined
+                            : Icons.auto_awesome,
+                      ),
+                label: Text(
+                  canBulkImport ? 'Import Shopee Search' : 'Extract Details',
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImageSection() {
+    return Column(
+      children: [
+        Container(
+          height: 160,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppTheme.dividerColor),
+          ),
+          child: _selectedImageBytes != null
+              ? ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.memory(_selectedImageBytes!, fit: BoxFit.cover),
+                )
+              : _imagePreviewUrl != null
+              ? ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(_imagePreviewUrl!, fit: BoxFit.cover),
+                )
+              : const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.image, size: 40),
+                      SizedBox(height: 8),
+                      Text('No image selected'),
+                    ],
+                  ),
+                ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _pickImage,
+                icon: const Icon(Icons.upload),
+                label: const Text('Upload Image'),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppTheme.primaryColor),
+                  foregroundColor: AppTheme.primaryColor,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextFormField(
+                controller: _imageUrlController,
+                onChanged: (v) => setState(() => _imagePreviewUrl = v),
+                decoration: InputDecoration(
+                  hintText: 'Image URL',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVariationsSection() {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Variations (Colors/Shades)',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            TextButton.icon(
+              onPressed: () => setState(() {
+                final initialStock = _variations.isEmpty
+                    ? (_stockController.text.isNotEmpty
+                          ? _stockController.text
+                          : '0')
+                    : '0';
+                _variations.add({
+                  'name': '',
+                  'hex': '#FFFFFF',
+                  'hex_code': '#FFFFFF',
+                  'price': _priceController.text.isNotEmpty
+                      ? _priceController.text
+                      : '0',
+                  'stock': initialStock,
+                  'imageUrl': null,
+                  'imageBytes': null,
+                  'imageName': null,
+                });
+                _syncProductStockFromVariations();
+              }),
+              icon: const Icon(Icons.add),
+              label: const Text('Add Variation'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_variations.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              'No variations added. Product will have only one base version.',
+              style: TextStyle(
+                color: Colors.grey,
+                fontStyle: FontStyle.italic,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ..._variations.asMap().entries.map(
+          (entry) => _buildVariationCard(entry.key, entry.value),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVariationCard(int index, Map<String, dynamic> variation) {
+    final nameController = TextEditingController(
+      text: variation['name']?.toString() ?? '',
+    );
+    final hexController = TextEditingController(text: _variationHex(variation));
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.dividerColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Variation ${index + 1}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(
+                  Icons.delete_outline,
+                  size: 18,
+                  color: Colors.red,
+                ),
+                onPressed: () => setState(() {
+                  _variations.removeAt(index);
+                  _syncProductStockFromVariations();
+                }),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: TextFormField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Color/Shade Name',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.all(10),
+                  ),
+                  onChanged: (val) {
+                    variation['name'] = val;
+                    final mappedHex = _hexForColorName(val);
+                    if (mappedHex != null) {
+                      setState(() {
+                        variation['hex'] = mappedHex;
+                        variation['hex_code'] = mappedHex;
+                      });
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 1,
+                child: TextFormField(
+                  controller: hexController,
+                  decoration: const InputDecoration(
+                    labelText: 'Hex Code',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.all(10),
+                  ),
+                  onChanged: (val) {
+                    final normalized = _normalizeHexColor(val);
+                    variation['hex'] = normalized;
+                    variation['hex_code'] = normalized;
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: NumericSpinnerField(
+                  controller: TextEditingController(
+                    text: variation['price']?.toString() ?? '0',
+                  ),
+                  label: 'Price (PHP)',
+                  isDecimal: true,
+                  step: 1,
+                  suffix: 'PHP',
+                  onChanged: (val) => variation['price'] = val,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: NumericSpinnerField(
+                  controller: TextEditingController(
+                    text: variation['stock']?.toString() ?? '0',
+                  ),
+                  label: 'Stock',
+                  step: 1,
+                  onChanged: (val) {
+                    setState(() {
+                      variation['stock'] = val;
+                      _syncProductStockFromVariations();
+                    });
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  initialValue: variation['imageUrl'],
+                  decoration: const InputDecoration(
+                    labelText: 'Image URL',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.all(10),
+                  ),
+                  onChanged: (val) {
+                    setState(() {
+                      variation['imageUrl'] = val;
+                      variation['imageBytes'] = null;
+                      variation['decodedImage'] = null;
+                    });
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: () => _pickVariationImage(index),
+                icon: const Icon(Icons.upload, size: 16),
+                label: Text(
+                  variation['imageBytes'] != null ? 'Change' : 'Upload',
+                ),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  side: const BorderSide(color: AppTheme.primaryColor),
+                ),
+              ),
+            ],
+          ),
+          if (variation['imageBytes'] == null &&
+              (variation['imageUrl']?.toString().trim().isNotEmpty ?? false))
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Builder(
+                builder: (imageContext) {
+                  return GestureDetector(
+                    onTapDown: (details) => _pickColorFromVariationImage(
+                      index,
+                      details,
+                      imageContext,
+                    ),
+                    child: Stack(
+                      children: [
+                        Container(
+                          height: 80,
+                          width: 80,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            image: DecorationImage(
+                              image: NetworkImage(
+                                variation['imageUrl'].toString(),
+                              ),
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          bottom: 4,
+                          left: 4,
+                          right: 4,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.5),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              'Tap to pick',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          if (variation['imageBytes'] != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Builder(
+                builder: (imageContext) {
+                  return GestureDetector(
+                    onTapDown: (details) => _pickColorFromVariationImage(
+                      index,
+                      details,
+                      imageContext,
+                    ),
+                    child: Stack(
+                      children: [
+                        Container(
+                          height: 80,
+                          width: 80,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            image: DecorationImage(
+                              image: MemoryImage(variation['imageBytes']),
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          bottom: 4,
+                          left: 4,
+                          right: 4,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.5),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              'Tap to pick',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickVariationImage(int index) async {
+    final picked = await _imagePicker.pickImage(source: ImageSource.gallery);
+    if (picked != null) {
+      final bytes = await picked.readAsBytes();
+      setState(() {
+        _variations[index]['imageBytes'] = bytes;
+        _variations[index]['imageName'] = picked.name;
+        _variations[index]['decodedImage'] = null;
+      });
+    }
+  }
+
+  bool _isShopeeSearchLink(Uri uri) {
+    if (!uri.host.contains('shopee')) return false;
+    return uri.path.contains('/search') ||
+        uri.queryParameters.containsKey('keyword');
+  }
+
+  String _normalizeShopeeKeyword(String keyword) {
+    return Uri.decodeComponent(keyword.replaceAll('+', ' ')).trim();
+  }
+
+  double? _parseShopeePrice(dynamic rawPrice) {
+    if (rawPrice == null) return null;
+    final numVal = rawPrice is num
+        ? rawPrice
+        : num.tryParse(rawPrice.toString());
+    if (numVal == null) return null;
+    final value = numVal.toDouble();
+    if (value > 1000000) return value / 100000;
+    if (value > 10000) return value / 100;
+    return value;
+  }
+
+  String? _buildShopeeImageUrl(Map<String, dynamic> item) {
+    final candidates = [
+      item['image'],
+      item['images'],
+      item['image_url'],
+      item['thumbnail'],
+      item['shop_item']?['image'],
+      item['shop_item']?['images'],
+      item['item_basic']?['image'],
+      item['item_basic']?['images'],
+      item['item_basic']?['thumbnail'],
+    ];
+    for (final raw in candidates) {
+      if (raw == null) continue;
+      if (raw is List && raw.isNotEmpty) {
+        final first = raw.first.toString();
+        if (first.isNotEmpty) {
+          if (first.startsWith('http')) return first;
+          return 'https://cf.shopee.ph/file/$first';
+        }
+      } else if (raw is String && raw.isNotEmpty) {
+        if (raw.startsWith('http')) return raw;
+        return 'https://cf.shopee.ph/file/$raw';
+      }
+    }
+    return null;
+  }
+
+  String? _extractShopeeDescription(Map<String, dynamic> item) {
+    final candidates = [
+      item['description'],
+      item['item_basic']?['description'],
+      item['shop_item']?['description'],
+      item['desc'],
+      item['item_basic']?['desc'],
+    ];
+    for (final raw in candidates) {
+      final str = raw?.toString().trim();
+      if (str != null &&
+          str.isNotEmpty &&
+          !_isPlaceholderShopeeDescription(str)) {
+        return str;
+      }
+    }
+    return null;
+  }
+
+  Map<String, String?> _extractShopeeMetadataFromHtml(String html) {
+    final document = html_parser.parse(html);
+
+    String? cleanMeta(String? value) {
+      final text = value?.trim();
+      if (text == null || text.isEmpty) return null;
+      return text.contains('|') ? text.split('|').first.trim() : text;
+    }
+
+    return {
+      'description': cleanMeta(
+        document
+            .querySelector('meta[name="description"]')
+            ?.attributes['content'],
+      ),
+      'image': cleanMeta(
+        document
+            .querySelector('meta[property="og:image"]')
+            ?.attributes['content'],
+      ),
+    };
+  }
+
+  List<Map<String, dynamic>> _extractShopeeVariations(
+    Map<String, dynamic> item,
+  ) {
+    final variations = <Map<String, dynamic>>[];
+    final models = item['models'];
+    if (models is! List || models.isEmpty) return variations;
+
+    final tierVariations = item['tier_variations'];
+    final optionNames = <String, List<String>>{};
+    if (tierVariations is List) {
+      for (final tier in tierVariations) {
+        if (tier is Map && tier['name'] != null && tier['options'] is List) {
+          optionNames[tier['name'].toString()] = (tier['options'] as List)
+              .map((option) => option.toString())
+              .toList();
+        }
+      }
+    }
+
+    String? imageUrlForModel(Map<String, dynamic> model) {
+      final imageKey = model['image'] ?? model['image_url'] ?? model['images'];
+      if (imageKey is String && imageKey.isNotEmpty) {
+        return imageKey.startsWith('http')
+            ? imageKey
+            : 'https://cf.shopee.ph/file/$imageKey';
+      }
+      if (imageKey is List && imageKey.isNotEmpty) {
+        final first = imageKey.first.toString();
+        return first.startsWith('http')
+            ? first
+            : 'https://cf.shopee.ph/file/$first';
+      }
+      return null;
+    }
+
+    for (final model in models) {
+      if (model is! Map) continue;
+      final map = Map<String, dynamic>.from(model);
+      final rawName = (map['name'] ?? map['tier_index'] ?? map['model_name'])
+          ?.toString()
+          .trim();
+      final options = map['options'];
+      String? displayName = rawName;
+
+      if ((displayName == null || displayName.isEmpty) && options is List) {
+        final values = <String>[];
+        for (var i = 0; i < options.length; i++) {
+          final optionValue = options[i]?.toString();
+          if (optionValue == null || optionValue.isEmpty) continue;
+          final tierName = optionNames.keys.elementAt(
+            i < optionNames.length ? i : 0,
+          );
+          if (tierName.isNotEmpty) {
+            values.add('$tierName: $optionValue');
+          } else {
+            values.add(optionValue);
+          }
+        }
+        if (values.isNotEmpty) displayName = values.join(' / ');
+      }
+
+      if (displayName == null || displayName.isEmpty) {
+        displayName = 'Variant';
+      }
+
+      final price =
+          _parseShopeePrice(
+            map['price'] ?? map['price_value'] ?? map['price_min'],
+          ) ??
+          0.0;
+      final stockRaw =
+          map['stock'] ?? map['normal_stock'] ?? map['stock_quantity'];
+      final stock = stockRaw is int
+          ? stockRaw
+          : int.tryParse(stockRaw?.toString() ?? '') ?? 0;
+
+      variations.add({
+        'color_name': displayName,
+        'hex_code': '#FFFFFF',
+        'price': price,
+        'stock': stock,
+        'image_url': imageUrlForModel(map),
+      });
+    }
+
+    return variations;
+  }
+
+  String _buildShopeeProductLink(Map<String, dynamic> item, Uri sourceUri) {
+    final shopId = item['shopid']?.toString() ?? item['shop_id']?.toString();
+    final itemId = item['itemid']?.toString() ?? item['item_id']?.toString();
+    final name = (item['name'] ?? item['item_basic']?['name'] ?? 'product')
+        .toString()
+        .trim();
+    if (shopId != null &&
+        shopId.isNotEmpty &&
+        itemId != null &&
+        itemId.isNotEmpty) {
+      final slug = name
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9\s-]'), '')
+          .trim()
+          .replaceAll(RegExp(r'\s+'), '-');
+      return '${sourceUri.scheme}://${sourceUri.host}/$slug-i.$shopId.$itemId';
+    }
+    return sourceUri.toString();
+  }
+
+  List<Map<String, dynamic>> _extractShopeeSearchItems(dynamic payload) {
+    final items = <Map<String, dynamic>>[];
+    final seenKeys = <String>{};
+
+    void visit(dynamic node) {
+      if (node is Map) {
+        final map = Map<String, dynamic>.from(node);
+
+        if (map['item_basic'] is Map) {
+          final base = Map<String, dynamic>.from(map['item_basic'] as Map);
+          final combined = <String, dynamic>{...map, ...base};
+          final key =
+              '${combined['shopid'] ?? combined['shop_id'] ?? ''}-${combined['itemid'] ?? combined['item_id'] ?? ''}-${combined['name'] ?? ''}';
+          if (seenKeys.add(key)) items.add(combined);
+        } else if (map.containsKey('itemid') ||
+            map.containsKey('shopid') ||
+            map.containsKey('name')) {
+          final key =
+              '${map['shopid'] ?? map['shop_id'] ?? ''}-${map['itemid'] ?? map['item_id'] ?? ''}-${map['name'] ?? ''}';
+          if (seenKeys.add(key)) items.add(map);
+        }
+
+        for (final key in [
+          'items',
+          'item',
+          'data',
+          'results',
+          'search_items',
+        ]) {
+          final child = map[key];
+          if (child != null) visit(child);
+        }
+      } else if (node is List) {
+        for (final child in node) {
+          visit(child);
+        }
+      }
+    }
+
+    visit(payload);
+    return items;
+  }
+
+  Future<void> _handleLinkAction() async {
+    final url = _linkController.text.trim();
+    if (url.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a product or Shopee search link'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Invalid link'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    if (_isShopeeSearchLink(uri)) {
+      await _importShopeeSearchProducts(uri);
+    } else {
+      await _fetchMetadata();
+    }
+  }
+
+  Future<void> _importShopeeSearchProducts(Uri uri) async {
+    final keyword = _normalizeShopeeKeyword(
+      uri.queryParameters['keyword'] ?? '',
+    );
+    if (keyword.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Shopee search link is missing a keyword'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final ownerId = widget.businessId.isNotEmpty
+        ? widget.businessId
+        : Supabase.instance.client.auth.currentUser?.id;
+    if (ownerId == null || ownerId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No business account found for import'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isFetchingMetadata = true);
+
+    try {
+      final apiUri = Uri.https(uri.host, '/api/v4/search/search_items', {
+        'by': 'relevancy',
+        'keyword': keyword,
+        'limit': '20',
+        'newest': '0',
+        'order': 'desc',
+        'page_type': 'search',
+        'scenario': 'PAGE_GLOBAL_SEARCH',
+        'version': '2',
+      });
+
+      final apiRes = await http.get(
+        apiUri,
+        headers: const {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+          'Accept': 'application/json',
+          'Referer': 'https://shopee.ph/',
+        },
+      );
+
+      if (apiRes.statusCode != 200) {
+        throw 'Shopee search request failed (${apiRes.statusCode})';
+      }
+
+      final decoded = jsonDecode(apiRes.body);
+      final foundItems = _extractShopeeSearchItems(decoded).take(12).toList();
+      if (foundItems.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No products found in that Shopee search link'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      final existing = await Supabase.instance.client
+          .from('products')
+          .select('name,product_link')
+          .eq('business_id', ownerId);
+
+      final existingLinks = <String>{};
+      final existingNames = <String>{};
+      for (final row in existing as List) {
+        if (row is Map<String, dynamic>) {
+          final link = row['product_link']?.toString().trim();
+          final name = row['name']?.toString().trim().toLowerCase();
+          if (link != null && link.isNotEmpty) existingLinks.add(link);
+          if (name != null && name.isNotEmpty) existingNames.add(name);
         }
       }
 
-      await Supabase.instance.client.from('products').insert({
-        'business_id': widget.businessId,
+      int inserted = 0;
+      int skipped = 0;
+      final bulkCategory = keyword;
+
+      for (final rawItem in foundItems) {
+        final item = rawItem;
+        final name = (item['name'] ?? item['title'] ?? '').toString().trim();
+        if (name.isEmpty) {
+          skipped++;
+          continue;
+        }
+
+        final productLink = _buildShopeeProductLink(item, uri);
+        final normalizedName = name.toLowerCase();
+        if (existingLinks.contains(productLink) ||
+            existingNames.contains(normalizedName)) {
+          skipped++;
+          continue;
+        }
+
+        final imageUrl = _buildShopeeImageUrl(item);
+        final price =
+            _parseShopeePrice(
+              item['price_min'] ?? item['price'] ?? item['price_max'],
+            ) ??
+            0.0;
+        final description = _extractShopeeDescription(item) ?? '';
+        final stock =
+            (item['stock'] ?? item['item_basic']?['stock'] ?? 0) is int
+            ? (item['stock'] ?? item['item_basic']?['stock'] ?? 0) as int
+            : int.tryParse(
+                    (item['stock'] ?? item['item_basic']?['stock'] ?? 0)
+                        .toString(),
+                  ) ??
+                  0;
+        final variations = _extractShopeeVariations(item);
+
+        final productData = <String, dynamic>{
+          'business_id': ownerId,
+          'name': name,
+          'description': description.isEmpty ? null : description,
+          'price': price,
+          'currency': 'PHP',
+          'image_url': imageUrl,
+          'product_link': productLink,
+          'stock_quantity': stock,
+          'variations': variations,
+          'category': _guessCategory(name) ?? bulkCategory,
+          'is_active': true,
+        };
+
+        try {
+          await Supabase.instance.client.from('products').insert(productData);
+          existingLinks.add(productLink);
+          existingNames.add(normalizedName);
+          inserted++;
+        } catch (_) {
+          skipped++;
+        }
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Imported $inserted product(s) from Shopee search${skipped > 0 ? ' ($skipped skipped)' : ''}',
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not import Shopee products: $e'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isFetchingMetadata = false);
+    }
+  }
+
+  Future<void> _fetchMetadata() async {
+    final url = _linkController.text.trim();
+    if (url.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a product link'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isFetchingMetadata = true);
+
+    try {
+      final uri = Uri.tryParse(url);
+      if (uri == null) throw 'Invalid URL';
+
+      // Special handling for Shopee product pages
+      if (uri.host.contains('shopee')) {
+        try {
+          final full = uri.toString();
+          final candidateIds = <Map<String, String>>[];
+
+          void addCandidate(String? shopId, String? itemId) {
+            final normalizedShopId = shopId?.trim();
+            final normalizedItemId = itemId?.trim();
+            if (normalizedShopId == null || normalizedShopId.isEmpty) return;
+            if (normalizedItemId == null || normalizedItemId.isEmpty) return;
+            final key = '$normalizedShopId:$normalizedItemId';
+            if (candidateIds.any((candidate) => candidate['key'] == key))
+              return;
+            candidateIds.add({
+              'shopId': normalizedShopId,
+              'itemId': normalizedItemId,
+              'key': key,
+            });
+          }
+
+          final pathMatch =
+              RegExp(r'/product/(\d+)/(\d+)').firstMatch(full) ??
+              RegExp(r'/item/(\d+)/(\d+)').firstMatch(full) ??
+              RegExp(r'-i\.(\d+)\.(\d+)').firstMatch(full);
+          if (pathMatch != null) {
+            addCandidate(pathMatch.group(1), pathMatch.group(2));
+          }
+
+          addCandidate(
+            uri.queryParameters['vShopId'],
+            uri.queryParameters['vItemId'],
+          );
+          addCandidate(
+            uri.queryParameters['shopid'],
+            uri.queryParameters['itemid'],
+          );
+          addCandidate(
+            uri.queryParameters['shopId'],
+            uri.queryParameters['itemId'],
+          );
+
+          Map<String, dynamic>? extractShopeeItem(dynamic payload) {
+            if (payload is Map) {
+              final map = Map<String, dynamic>.from(payload);
+              final item = map['item'];
+              if (item is Map) {
+                return Map<String, dynamic>.from(item);
+              }
+
+              final data = map['data'];
+              if (data is Map) {
+                final nestedItem = data['item'];
+                if (nestedItem is Map) {
+                  return Map<String, dynamic>.from(nestedItem);
+                }
+                final nestedMap = Map<String, dynamic>.from(data);
+                if (nestedMap.containsKey('name') ||
+                    nestedMap.containsKey('price') ||
+                    nestedMap.containsKey('images')) {
+                  return nestedMap;
+                }
+              }
+
+              if (map.containsKey('name') ||
+                  map.containsKey('price') ||
+                  map.containsKey('images')) {
+                return map;
+              }
+
+              for (final value in map.values) {
+                final found = extractShopeeItem(value);
+                if (found != null) return found;
+              }
+            } else if (payload is List) {
+              for (final value in payload) {
+                final found = extractShopeeItem(value);
+                if (found != null) return found;
+              }
+            }
+            return null;
+          }
+
+          Map<String, dynamic>? item;
+          String? matchedSource;
+
+          final proxyResult = await _fetchShopeeItemViaProxy(uri, candidateIds);
+          if (proxyResult != null && proxyResult['item'] is Map) {
+            item = Map<String, dynamic>.from(proxyResult['item'] as Map);
+            matchedSource = 'proxy:${proxyResult['source'] ?? 'supabase'}';
+          }
+
+          if (item == null) {
+            for (final candidate in candidateIds) {
+              final shopId = candidate['shopId']!;
+              final itemId = candidate['itemId']!;
+              final apiUri = Uri.parse(
+                '${uri.scheme}://${uri.host}/api/v4/item/get?itemid=$itemId&shopid=$shopId',
+              );
+              final apiRes = await http.get(
+                apiUri,
+                headers: {
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+                  'Accept': 'application/json',
+                  'Referer': 'https://shopee.ph/',
+                },
+              );
+
+              if (apiRes.statusCode != 200) {
+                continue;
+              }
+
+              final decoded = jsonDecode(apiRes.body);
+              final foundItem = extractShopeeItem(decoded);
+              if (foundItem != null) {
+                item = foundItem;
+                matchedSource = '$shopId/$itemId';
+                break;
+              }
+            }
+          }
+
+          if (item != null) {
+            final productName = (item['name'] ?? item['item_basic']?['name'])
+                ?.toString()
+                .trim();
+            final description = _extractShopeeDescription(item);
+            final stockRaw =
+                item['stock'] ??
+                item['item_basic']?['stock'] ??
+                item['models']?['stock'];
+            final imageUrl = _buildShopeeImageUrl(item);
+
+            String? enrichedDescription = description;
+            String? enrichedImageUrl = imageUrl;
+            if ((enrichedDescription == null || enrichedDescription.isEmpty) ||
+                (enrichedImageUrl == null || enrichedImageUrl.isEmpty)) {
+              try {
+                final pageResponse = await http
+                    .get(
+                      uri,
+                      headers: {
+                        'User-Agent':
+                            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                      },
+                    )
+                    .timeout(const Duration(seconds: 8));
+
+                if (pageResponse.statusCode == 200) {
+                  final htmlMeta = _extractShopeeMetadataFromHtml(
+                    pageResponse.body,
+                  );
+                  enrichedDescription ??= htmlMeta['description'];
+                  enrichedImageUrl ??= htmlMeta['image'];
+                }
+              } catch (_) {
+                // Keep the already extracted values if the page fetch fails.
+              }
+            }
+
+            double? price;
+            final priceCandidates = [
+              item['price_min'],
+              item['price'],
+              item['price_max'],
+              item['item_basic']?['price_min'],
+              item['item_basic']?['price'],
+              item['item_basic']?['price_max'],
+            ];
+            for (final rawPrice in priceCandidates) {
+              final parsed = _parseShopeePrice(rawPrice);
+              if (parsed != null && parsed > 0) {
+                price = parsed;
+                break;
+              }
+            }
+
+            final guessedCategory = productName != null
+                ? _guessCategory(productName)
+                : null;
+            final stock = stockRaw is int
+                ? stockRaw
+                : int.tryParse(stockRaw?.toString() ?? '') ?? 0;
+            final variations = _extractShopeeVariations(item);
+
+            setState(() {
+              if (productName != null && productName.isNotEmpty) {
+                _nameController.text = productName;
+              }
+              if (price != null && price > 0) {
+                _priceController.text = price.toStringAsFixed(2);
+              }
+              if (enrichedDescription != null &&
+                  enrichedDescription.isNotEmpty) {
+                _descriptionController.text = enrichedDescription;
+              }
+              if (enrichedImageUrl != null && enrichedImageUrl.isNotEmpty) {
+                _imagePreviewUrl = enrichedImageUrl;
+                _imageUrlController.text = enrichedImageUrl;
+              }
+              if (guessedCategory != null) {
+                _selectedCategory = guessedCategory;
+              }
+              if (_stockController.text.isEmpty && stock > 0) {
+                _stockController.text = stock.toString();
+              }
+              if (variations.isNotEmpty) {
+                _variations
+                  ..clear()
+                  ..addAll(variations);
+              }
+            });
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  '✓ Shopee product loaded from ${matchedSource ?? 'link'}!',
+                ),
+                backgroundColor: Colors.green,
+              ),
+            );
+            return;
+          }
+
+          // Local URL-based fallback: extract title from the URL slug when
+          // both proxy and API attempts failed. This prevents a hard failure
+          // and prefills at least the product name for manual completion.
+          final localTitle = _extractNameFromEcommerceUrl(uri);
+          if ((item == null || item.isEmpty) && localTitle.isNotEmpty) {
+            setState(() {
+              _nameController.text = localTitle;
+              _selectedCategory =
+                  _guessCategory(localTitle) ?? _selectedCategory;
+            });
+            if (mounted)
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    '✓ Title extracted from link — fill remaining details manually.',
+                  ),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            return;
+          }
+
+          // Inform the user and allow the generic HTML extractor to run as a fallback.
+          final idList = candidateIds
+              .map((c) => '${c['shopId']}:${c['itemId']}')
+              .join(', ');
+          if (mounted) {
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Shopee import failed'),
+                content: Text(
+                  'Could not load structured product data from Shopee API.\n\nDetected candidate IDs: $idList\n\nThe app will attempt a generic page extraction next. If this keeps failing, you can copy the IDs or try the API again.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      Clipboard.setData(ClipboardData(text: idList));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Candidate IDs copied to clipboard'),
+                        ),
+                      );
+                    },
+                    child: const Text('Copy IDs'),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _attemptShopeeApiByCandidates(candidateIds);
+                    },
+                    child: const Text('Try API'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              ),
+            );
+          }
+        } catch (e) {
+          print('Shopee API extraction failed: $e');
+        }
+      }
+
+      // Generic HTML metadata extraction fallback
+      final response = await http
+          .get(
+            uri,
+            headers: {
+              'User-Agent':
+                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            },
+          )
+          .timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200) {
+        final document = html_parser.parse(response.body);
+
+        String? productName =
+            document
+                .querySelector('meta[property="og:title"]')
+                ?.attributes['content'] ??
+            document.querySelector('title')?.text;
+
+        if (productName != null && productName.contains('|')) {
+          productName = productName.split('|')[0].trim();
+        }
+
+        String? priceStr = document
+            .querySelector('meta[property="product:price:amount"]')
+            ?.attributes['content'];
+        double? price;
+        if (priceStr != null) {
+          final priceMatch = RegExp(r'(\d+(?:\.\d+)?)').firstMatch(priceStr);
+          if (priceMatch != null) {
+            price = double.tryParse(priceMatch.group(1)!);
+          }
+        }
+
+        String? description = document
+            .querySelector('meta[name="description"]')
+            ?.attributes['content'];
+        String? imageUrl = document
+            .querySelector('meta[property="og:image"]')
+            ?.attributes['content'];
+
+        String? guessedCategory;
+        if (productName != null) {
+          guessedCategory = _guessCategory(productName);
+        }
+
+        // If meta tags didn't provide enough, try extracting JSON blobs from scripts
+        Map<String, dynamic>? scriptFoundItem;
+
+        String? extractFirstJson(String text) {
+          final start = text.indexOf('{');
+          if (start == -1) return null;
+          int depth = 0;
+          for (int i = start; i < text.length; i++) {
+            if (text[i] == '{') depth++;
+            if (text[i] == '}') depth--;
+            if (depth == 0) {
+              return text.substring(start, i + 1);
+            }
+          }
+          return null;
+        }
+
+        dynamic findItemInJson(dynamic payload) {
+          if (payload is Map) {
+            final map = Map<String, dynamic>.from(payload);
+            if (map.containsKey('item') && map['item'] is Map)
+              return Map<String, dynamic>.from(map['item']);
+            if (map.containsKey('item_basic') && map['item_basic'] is Map)
+              return Map<String, dynamic>.from(map['item_basic']);
+            if (map.containsKey('name') ||
+                map.containsKey('price') ||
+                map.containsKey('images'))
+              return map;
+            for (final v in map.values) {
+              final found = findItemInJson(v);
+              if (found != null) return found;
+            }
+          } else if (payload is List) {
+            for (final v in payload) {
+              final found = findItemInJson(v);
+              if (found != null) return found;
+            }
+          }
+          return null;
+        }
+
+        if (productName == null ||
+            (price == null && description == null && imageUrl == null)) {
+          final scripts = document.getElementsByTagName('script');
+          for (final script in scripts) {
+            final text = script.text;
+            if (text.isEmpty) continue;
+            if (!(text.contains('window.__INITIAL_STATE__') ||
+                text.contains('g_page_config') ||
+                text.contains('item_basic') ||
+                text.contains('itemid') ||
+                text.contains('itemid'))) {
+              continue;
+            }
+
+            final jsonStr = extractFirstJson(text);
+            if (jsonStr == null) continue;
+
+            try {
+              final decoded = jsonDecode(jsonStr);
+              final found = findItemInJson(decoded);
+              if (found is Map<String, dynamic>) {
+                scriptFoundItem = found;
+                break;
+              }
+            } catch (_) {
+              // ignore parse errors and continue
+            }
+          }
+
+          if (scriptFoundItem != null) {
+            // prefer script-found values when meta tags were missing
+            final sf = scriptFoundItem;
+            if (productName == null || productName.isEmpty) {
+              productName = (sf['name'] ?? sf['item_basic']?['name'])
+                  ?.toString();
+            }
+            if ((price == null || price == 0) && sf.isNotEmpty) {
+              final cand =
+                  sf['price_min'] ??
+                  sf['price'] ??
+                  sf['price_max'] ??
+                  sf['item_basic']?['price_min'];
+              final parsed = _parseShopeePrice(cand);
+              if (parsed != null && parsed > 0) price = parsed;
+            }
+            String? description = _extractShopeeDescription(sf);
+            if (description == null || description.isEmpty) {
+              final extracted = _extractShopeeDescription(sf);
+              if (extracted != null && extracted.isNotEmpty) {
+                description = extracted;
+              }
+            }
+            if (_isPlaceholderShopeeDescription(description)) {
+              description = null;
+            }
+            if (imageUrl == null || imageUrl.isEmpty) {
+              imageUrl = _buildShopeeImageUrl(sf);
+            }
+
+            final guessed = productName != null
+                ? _guessCategory(productName)
+                : null;
+            final variationsFromScript = <Map<String, dynamic>>[];
+            try {
+              final extractedVar = _extractShopeeVariations(scriptFoundItem);
+              if (extractedVar.isNotEmpty)
+                variationsFromScript.addAll(extractedVar);
+            } catch (_) {}
+
+            setState(() {
+              if (productName != null && productName.isNotEmpty)
+                _nameController.text = productName.trim();
+              if (price != null && price > 0)
+                _priceController.text = price.toStringAsFixed(2);
+              if (description != null && description.isNotEmpty)
+                _descriptionController.text = description;
+              if (imageUrl != null && imageUrl.isNotEmpty) {
+                _imagePreviewUrl = imageUrl;
+                _imageUrlController.text = imageUrl;
+              }
+              if (guessed != null) _selectedCategory = guessed;
+              if (variationsFromScript.isNotEmpty) {
+                _variations
+                  ..clear()
+                  ..addAll(variationsFromScript);
+              }
+            });
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('✓ Product details extracted from page script!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+            return;
+          }
+        }
+
+        // Check if we actually extracted anything
+        final extracted =
+            productName != null ||
+            price != null ||
+            description != null ||
+            imageUrl != null;
+
+        setState(() {
+          if (productName != null && productName.isNotEmpty) {
+            _nameController.text = productName;
+          }
+          if (price != null && price > 0) {
+            _priceController.text = price.toStringAsFixed(2);
+          }
+          if (description != null && description.isNotEmpty) {
+            _descriptionController.text = description;
+          }
+          if (imageUrl != null && imageUrl.isNotEmpty) {
+            _imagePreviewUrl = imageUrl;
+            _imageUrlController.text = imageUrl;
+          }
+          if (guessedCategory != null) {
+            _selectedCategory = guessedCategory;
+          }
+        });
+
+        if (extracted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✓ Product details extracted!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                '⚠ No product data found on this page. Enter details manually.',
+              ),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not access this URL'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Metadata fetch error: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Error fetching details: ${e.toString().replaceAll('Exception: ', '')}',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    } finally {
+      setState(() => _isFetchingMetadata = false);
+    }
+  }
+
+  Future<void> _attemptShopeeApiByCandidates(
+    List<Map<String, String>> candidateIds,
+  ) async {
+    if (candidateIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No Shopee candidate IDs available')),
+      );
+      return;
+    }
+    try {
+      final firstCandidate = candidateIds.first;
+      final proxyResult = await _fetchShopeeItemViaProxy(
+        Uri.parse(_linkController.text.trim()),
+        candidateIds,
+      );
+
+      if (proxyResult != null && proxyResult['item'] is Map) {
+        final item = Map<String, dynamic>.from(proxyResult['item'] as Map);
+        final pretty = const JsonEncoder.withIndent('  ').convert(item);
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(
+              'Shopee proxy response (${proxyResult['source'] ?? 'proxy'})',
+            ),
+            content: SingleChildScrollView(child: SelectableText(pretty)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+
+      final shopId = firstCandidate['shopId'] ?? '';
+      final itemId = firstCandidate['itemId'] ?? '';
+      final apiUri = Uri.parse(
+        'https://shopee.ph/api/v4/item/get?itemid=$itemId&shopid=$shopId',
+      );
+      final apiRes = await http.get(
+        apiUri,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+          'Accept': 'application/json',
+          'Referer': 'https://shopee.ph/',
+        },
+      );
+
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Shopee API Error'),
+          content: Text(
+            'Status ${apiRes.statusCode}: ${apiRes.reasonPhrase ?? ''}',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error calling Shopee API: $e')));
+    }
+  }
+
+  Future<Map<String, dynamic>?> _fetchShopeeItemViaProxy(
+    Uri sourceUri,
+    List<Map<String, String>> candidateIds,
+  ) async {
+    try {
+      final response = await Supabase.instance.client.functions.invoke(
+        'shopee-import',
+        body: {
+          'url': sourceUri.toString(),
+          'shopId': candidateIds.isNotEmpty
+              ? candidateIds.first['shopId']
+              : null,
+          'itemId': candidateIds.isNotEmpty
+              ? candidateIds.first['itemId']
+              : null,
+          'displayModelId': sourceUri.queryParameters['display_model_id'],
+        },
+      );
+
+      final data = response.data;
+      if (data is Map<String, dynamic>) {
+        if (data['ok'] == true && data['item'] is Map<String, dynamic>) {
+          return Map<String, dynamic>.from(data);
+        }
+        if (data['item'] is Map<String, dynamic>) {
+          return Map<String, dynamic>.from(data);
+        }
+      } else if (data is Map) {
+        final map = Map<String, dynamic>.from(data);
+        if (map['ok'] == true && map['item'] is Map) {
+          return map;
+        }
+        if (map['item'] is Map) {
+          return map;
+        }
+      }
+    } catch (e) {
+      debugPrint('Shopee proxy fetch failed: $e');
+    }
+
+    return null;
+  }
+
+  Future<void> _pickImage() async {
+    final picked = await _imagePicker.pickImage(source: ImageSource.gallery);
+    if (picked != null) {
+      final bytes = await picked.readAsBytes();
+      setState(() {
+        _selectedImageBytes = bytes;
+        _selectedImageName = picked.name;
+        _imagePreviewUrl = null;
+        _imageUrlController.clear();
+      });
+    }
+  }
+
+  Future<void> _submitForm() async {
+    if (!_formKey.currentState!.validate()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please fill in all required fields'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    if (_selectedImageBytes == null && _imagePreviewUrl == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please add an image (upload or URL)'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final ownerId = widget.businessId.isNotEmpty
+          ? widget.businessId
+          : Supabase.instance.client.auth.currentUser?.id;
+      if (ownerId == null || ownerId.isEmpty) {
+        throw 'No business account available';
+      }
+
+      String? imageUrl = _imagePreviewUrl;
+
+      if (_selectedImageBytes != null) {
+        final fileName =
+            '${DateTime.now().millisecondsSinceEpoch}_${_selectedImageName ?? 'product.jpg'}';
+        await Supabase.instance.client.storage
+            .from('products')
+            .uploadBinary(fileName, _selectedImageBytes!);
+        imageUrl = Supabase.instance.client.storage
+            .from('products')
+            .getPublicUrl(fileName);
+      }
+
+      final processedVariations = <Map<String, dynamic>>[];
+      for (final variation in _variations) {
+        String? varImageUrl = variation['imageUrl'];
+
+        if (variation['imageBytes'] != null) {
+          final varFileName =
+              '${DateTime.now().millisecondsSinceEpoch}_var_${variation['imageName'] ?? 'variant.jpg'}';
+          await Supabase.instance.client.storage
+              .from('products')
+              .uploadBinary(varFileName, variation['imageBytes']);
+          varImageUrl = Supabase.instance.client.storage
+              .from('products')
+              .getPublicUrl(varFileName);
+        }
+
+        processedVariations.add({
+          'color_name': variation['name'] ?? '',
+          'hex_code': _variationHex(variation),
+          'price':
+              double.tryParse(variation['price']?.toString() ?? '0') ??
+              double.parse(_priceController.text),
+          'stock':
+              int.tryParse(variation['stock']?.toString() ?? '0') ??
+              int.parse(_stockController.text),
+          'image_url': varImageUrl,
+        });
+      }
+
+      final productData = {
+        'business_id': ownerId,
         'name': _nameController.text.trim(),
         'price': double.parse(_priceController.text.trim()),
         'stock_quantity': int.parse(_stockController.text.trim()),
         'description': _descriptionController.text.trim(),
         'category': _selectedCategory,
-        'image_url': finalImageUrl,
-      });
+        'image_url': imageUrl,
+        'product_link': _linkController.text.trim().isEmpty
+            ? null
+            : _linkController.text.trim(),
+        'variations': processedVariations,
+        'is_active': true,
+      };
+
+      for (final variation in _variations) {
+        final variationName =
+            (variation['name'] ?? variation['color_name'] ?? '')
+                .toString()
+                .trim();
+        final variationHex = _variationHex(variation);
+        await _persistColorPaletteEntry(variationName, variationHex);
+      }
+
+      await Supabase.instance.client.from('products').insert(productData);
 
       if (mounted) {
-        Navigator.pop(context, true); // Return true to indicate success
+        Navigator.pop(context, true);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Product added successfully!'), backgroundColor: Colors.green),
+          const SnackBar(
+            content: Text('Product added successfully!'),
+            backgroundColor: AppTheme.successColor,
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error adding product: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Error adding product: $e'),
+            backgroundColor: AppTheme.errorColor,
+          ),
         );
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -1188,191 +3050,15 @@ class _AddProductDialogState extends State<_AddProductDialog> {
     _priceController.dispose();
     _stockController.dispose();
     _descriptionController.dispose();
+    _linkController.dispose();
     _imageUrlController.dispose();
     super.dispose();
   }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Add New Product'),
-      content: SizedBox(
-        width: 400,
-        child: SingleChildScrollView(
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(labelText: 'Product Name', border: OutlineInputBorder()),
-                  validator: (value) => value == null || value.isEmpty ? 'Please enter a name' : null,
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _priceController,
-                        decoration: const InputDecoration(labelText: 'Price (₱)', border: OutlineInputBorder()),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) return 'Required';
-                          if (double.tryParse(value) == null) return 'Invalid number';
-                          return null;
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: TextFormField(
-                        controller: _stockController,
-                        decoration: const InputDecoration(labelText: 'Stock', border: OutlineInputBorder()),
-                        keyboardType: TextInputType.number,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) return 'Required';
-                          if (int.tryParse(value) == null) return 'Invalid integer';
-                          return null;
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  initialValue: _selectedCategory,
-                  decoration: const InputDecoration(labelText: 'Category', border: OutlineInputBorder()),
-                  items: _categories.map((category) {
-                    return DropdownMenuItem(
-                      value: category,
-                      child: Text(category),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedCategory = value;
-                    });
-                  },
-                  validator: (value) => value == null ? 'Please select a category' : null,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _descriptionController,
-                  decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder()),
-                  maxLines: 3,
-                ),
-                const SizedBox(height: 16),
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  child: _selectedImageBytes != null 
-                      ? ClipRRect(
-                          key: const ValueKey('memory_image'),
-                          borderRadius: BorderRadius.circular(12),
-                          child: SizedBox(
-                            height: 160,
-                            width: double.infinity,
-                            child: Image.memory(
-                              _selectedImageBytes!,
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                        )
-                      : _imagePreviewUrl != null
-                          ? ClipRRect(
-                              key: const ValueKey('network_image'),
-                              borderRadius: BorderRadius.circular(12),
-                              child: SizedBox(
-                                height: 160,
-                                width: double.infinity,
-                                child: Image.network(
-                                  _imagePreviewUrl!,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) => Container(
-                                    color: Colors.grey.shade200,
-                                    alignment: Alignment.center,
-                                    child: const Icon(Icons.broken_image, color: Colors.grey, size: 40),
-                                  ),
-                                ),
-                              ),
-                            )
-                          : Container(
-                              key: const ValueKey('placeholder'),
-                              height: 140,
-                              width: double.infinity,
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade100,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.grey.shade300),
-                              ),
-                              alignment: Alignment.center,
-                              child: const Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.image_outlined, color: Colors.grey, size: 40),
-                                  SizedBox(height: 8),
-                                  Text(
-                                    'No image selected (required)',
-                                    style: TextStyle(color: Colors.grey),
-                                  ),
-                                ],
-                              ),
-                            ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _pickImage,
-                        icon: const Icon(Icons.upload_file),
-                        label: const Text('Choose File / Photo'),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          side: const BorderSide(color: Color(0xFFFF4D97)),
-                          foregroundColor: const Color(0xFFFF4D97),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _imageUrlController,
-                  onChanged: _handleImageUrlChanged,
-                  decoration: const InputDecoration(
-                    labelText: 'Or use Image URL',
-                    helperText: 'Provide a valid image link if not uploading a file',
-                    border: OutlineInputBorder(),
-                    hintText: 'https://example.com/image.png',
-                    suffixIcon: Icon(Icons.link),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _isLoading ? null : () => Navigator.pop(context),
-          child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-        ),
-        ElevatedButton(
-          onPressed: _isLoading ? null : _submitForm,
-          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF4D97), foregroundColor: Colors.white),
-          child: _isLoading 
-            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-            : const Text('Save Product'),
-        ),
-      ],
-    );
-  }
 }
 
+// ==================== EDIT PRODUCT DIALOG ====================
 class _EditProductDialog extends StatefulWidget {
   final Map<String, dynamic> product;
-
   const _EditProductDialog({required this.product});
 
   @override
@@ -1385,53 +3071,225 @@ class _EditProductDialogState extends State<_EditProductDialog> {
   late TextEditingController _priceController;
   late TextEditingController _stockController;
   late TextEditingController _descriptionController;
-
+  late TextEditingController _linkController;
+  late TextEditingController _imageUrlController;
+  String? _selectedCategory;
+  bool _isActive = true;
   bool _isLoading = false;
-  late bool _isActive;
+
+  final _categories = [
+    'Lipstick',
+    'Blush',
+    'Contour',
+    'Setting Spray',
+    'Eyebrow',
+    'Eyeliner',
+    'Concealer',
+    'Eyeshadow',
+    'Tools & Brushes',
+  ];
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.product['name']);
-    _priceController = TextEditingController(text: widget.product['price'].toString());
-    _stockController = TextEditingController(text: widget.product['stock_quantity'].toString());
-    _descriptionController = TextEditingController(text: widget.product['description']);
+    _priceController = TextEditingController(
+      text: widget.product['price'].toString(),
+    );
+    _stockController = TextEditingController(
+      text: widget.product['stock_quantity'].toString(),
+    );
+    _descriptionController = TextEditingController(
+      text: widget.product['description'] ?? '',
+    );
+    _linkController = TextEditingController(
+      text: widget.product['product_link'] ?? '',
+    );
+    _imageUrlController = TextEditingController(
+      text: widget.product['image_url'] ?? '',
+    );
+    _selectedCategory = widget.product['category'];
     _isActive = widget.product['is_active'] ?? true;
   }
-  
+
   @override
-  void dispose() {
-    _nameController.dispose();
-    _priceController.dispose();
-    _stockController.dispose();
-    _descriptionController.dispose();
-    super.dispose();
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text(
+        'Edit Product',
+        style: TextStyle(fontWeight: FontWeight.bold),
+      ),
+      content: SizedBox(
+        width: 450,
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildTextField(
+                  _nameController,
+                  'Product Name',
+                  validator: true,
+                ),
+                const SizedBox(height: 16),
+                NumericSpinnerField(
+                  controller: _priceController,
+                  label: 'Price',
+                  isDecimal: true,
+                  step: 1,
+                  suffix: 'PHP',
+                ),
+                const SizedBox(height: 16),
+                NumericSpinnerField(
+                  controller: _stockController,
+                  label: 'Stock',
+                  step: 1,
+                ),
+                const SizedBox(height: 16),
+                _buildCategoryDropdown(),
+                const SizedBox(height: 16),
+                _buildTextField(
+                  _descriptionController,
+                  'Description',
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 16),
+                _buildTextField(_linkController, 'Product Link'),
+                const SizedBox(height: 16),
+                _buildImageField(),
+                const SizedBox(height: 16),
+                SwitchListTile(
+                  title: const Text('Active'),
+                  value: _isActive,
+                  onChanged: (v) => setState(() => _isActive = v),
+                  contentPadding: EdgeInsets.zero,
+                  activeColor: AppTheme.primaryColor,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isLoading ? null : _submitForm,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.primaryColor,
+          ),
+          child: _isLoading
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Text('Save Changes'),
+        ),
+      ],
+    );
   }
 
-  Future<void> _submitEdit() async {
+  Widget _buildTextField(
+    TextEditingController controller,
+    String label, {
+    int maxLines = 1,
+    TextInputType? keyboard,
+    bool validator = false,
+  }) {
+    return TextFormField(
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: label,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      maxLines: maxLines,
+      keyboardType: keyboard,
+      validator: validator
+          ? (v) => v == null || v.isEmpty ? 'Required' : null
+          : null,
+    );
+  }
+
+  Widget _buildCategoryDropdown() {
+    final categories = [..._categories];
+    if (_selectedCategory != null && !categories.contains(_selectedCategory)) {
+      categories.add(_selectedCategory!);
+    }
+    categories.sort();
+
+    return DropdownButtonFormField<String?>(
+      value: _selectedCategory,
+      decoration: const InputDecoration(
+        labelText: 'Category',
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(12)),
+        ),
+      ),
+      items: categories
+          .map((c) => DropdownMenuItem<String?>(value: c, child: Text(c)))
+          .toList(),
+      onChanged: (v) => setState(() => _selectedCategory = v),
+    );
+  }
+
+  Widget _buildImageField() {
+    return TextFormField(
+      controller: _imageUrlController,
+      decoration: InputDecoration(
+        labelText: 'Image URL',
+        hintText: 'https://example.com/image.jpg',
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
+  Future<void> _submitForm() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
     try {
-      await Supabase.instance.client.from('products').update({
-        'name': _nameController.text.trim(),
-        'price': double.parse(_priceController.text.trim()),
-        'stock_quantity': int.parse(_stockController.text.trim()),
-        'description': _descriptionController.text.trim(),
-        'is_active': _isActive,
-      }).eq('id', widget.product['id']);
+      await Supabase.instance.client
+          .from('products')
+          .update({
+            'name': _nameController.text.trim(),
+            'price': double.parse(_priceController.text.trim()),
+            'stock_quantity': int.parse(_stockController.text.trim()),
+            'description': _descriptionController.text.trim(),
+            'category': _selectedCategory,
+            'product_link': _linkController.text.trim().isEmpty
+                ? null
+                : _linkController.text.trim(),
+            'image_url': _imageUrlController.text.trim().isEmpty
+                ? null
+                : _imageUrlController.text.trim(),
+            'is_active': _isActive,
+          })
+          .eq('id', widget.product['id']);
 
       if (mounted) {
-        Navigator.pop(context);
+        Navigator.pop(context, true);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Product updated successfully!'), backgroundColor: Colors.green),
+          const SnackBar(
+            content: Text('Product updated successfully!'),
+            backgroundColor: AppTheme.successColor,
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error updating: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Error updating: $e'),
+            backgroundColor: AppTheme.errorColor,
+          ),
         );
       }
     } finally {
@@ -1440,73 +3298,13 @@ class _EditProductDialogState extends State<_EditProductDialog> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Edit Product'),
-      content: SizedBox(
-        width: 400,
-        child: SingleChildScrollView(
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(labelText: 'Product Name'),
-                  validator: (value) => value == null || value.isEmpty ? 'Required' : null,
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _priceController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Price'),
-                        validator: (value) => value == null || value.isEmpty ? 'Required' : null,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: TextFormField(
-                        controller: _stockController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Stock'),
-                        validator: (value) => value == null || value.isEmpty ? 'Required' : null,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _descriptionController,
-                  decoration: const InputDecoration(labelText: 'Description'),
-                  maxLines: 3,
-                ),
-                const SizedBox(height: 16),
-                SwitchListTile(
-                  title: const Text('Is Active'),
-                  value: _isActive,
-                  onChanged: (val) => setState(() => _isActive = val),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        ElevatedButton(
-          onPressed: _isLoading ? null : _submitEdit,
-          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF4D97), foregroundColor: Colors.white),
-          child: _isLoading 
-            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-            : const Text('Save Changes'),
-        ),
-      ],
-    );
+  void dispose() {
+    _nameController.dispose();
+    _priceController.dispose();
+    _stockController.dispose();
+    _descriptionController.dispose();
+    _linkController.dispose();
+    _imageUrlController.dispose();
+    super.dispose();
   }
 }
-

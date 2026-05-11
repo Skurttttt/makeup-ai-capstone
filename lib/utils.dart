@@ -11,7 +11,10 @@ class DrawingUtils {
     return copy;
   }
 
-  static ui.Path catmullRomToBezierPath(List<ui.Offset> pts, {double tension = 0.7}) {
+  static ui.Path catmullRomToBezierPath(
+    List<ui.Offset> pts, {
+    double tension = 0.7,
+  }) {
     if (pts.length < 2) return ui.Path();
     final t = tension.clamp(0.0, 1.0);
 

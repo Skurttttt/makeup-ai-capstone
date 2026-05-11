@@ -52,7 +52,9 @@ class EyeshadowPainter {
     final pts = face.contours[eyeType]?.points;
     if (pts == null || pts.length < 6) return;
 
-    final eyeOffsets = pts.map((p) => Offset(p.x.toDouble(), p.y.toDouble())).toList();
+    final eyeOffsets = pts
+        .map((p) => Offset(p.x.toDouble(), p.y.toDouble()))
+        .toList();
     final eyeBounds = DrawingUtils.boundsOf(eyeOffsets);
 
     final eyeW = eyeBounds.width;

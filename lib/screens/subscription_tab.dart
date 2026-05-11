@@ -13,6 +13,7 @@ class SubscriptionTab extends StatefulWidget {
 class _SubscriptionTabState extends State<SubscriptionTab> {
   final _supabaseService = SupabaseService();
   Map<String, dynamic>? _selectedPlan;
+  String _selectedPaymentMethod = 'paymongo';
 
   @override
   Widget build(BuildContext context) {
@@ -23,7 +24,11 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
         elevation: 0,
         title: const Text(
           'Premium Plans',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+          ),
         ),
         centerTitle: true,
         leading: _selectedPlan != null
@@ -46,27 +51,38 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
       future: _supabaseService.getAllPlans(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(color: Color(0xFFFF4D97)));
+          return const Center(
+            child: CircularProgressIndicator(color: Color(0xFFFF4D97)),
+          );
         }
 
         if (snapshot.hasError) {
           return Center(
-            child: Text('Error loading plans: ${snapshot.error}', style: const TextStyle(color: Colors.red)),
+            child: Text(
+              'Error loading plans: ${snapshot.error}',
+              style: const TextStyle(color: Colors.red),
+            ),
           );
         }
 
         final plans = snapshot.data ?? [];
         if (plans.isEmpty) {
           return const Center(
-            child: Text('No subscription plans available', style: TextStyle(color: Colors.black54)),
+            child: Text(
+              'No subscription plans available',
+              style: TextStyle(color: Colors.black54),
+            ),
           );
         }
 
         // Filter out inactive plans and free plan
-        final activePlans = plans.where((plan) => 
-          (plan['is_active'] == true) && 
-          (plan['name']?.toString().toLowerCase() != 'free')
-        ).toList();
+        final activePlans = plans
+            .where(
+              (plan) =>
+                  (plan['is_active'] == true) &&
+                  (plan['name']?.toString().toLowerCase() != 'free'),
+            )
+            .toList();
 
         return SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -86,7 +102,11 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
                 ),
                 child: Column(
                   children: [
-                    const Icon(Icons.workspace_premium, size: 50, color: Colors.white),
+                    const Icon(
+                      Icons.workspace_premium,
+                      size: 50,
+                      color: Colors.white,
+                    ),
                     const SizedBox(height: 10),
                     const Text(
                       'Choose Your Plan',
@@ -126,8 +146,11 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
     final billingPeriod = plan['billing_period'] ?? '';
     final description = plan['description'] ?? '';
     final lowerPlanName = planName.toLowerCase();
-    final isPremium = lowerPlanName.contains('premium') || lowerPlanName.contains('lifetime');
-    final isPopular = lowerPlanName.contains('premium') && !lowerPlanName.contains('lifetime');
+    final isPremium =
+        lowerPlanName.contains('premium') || lowerPlanName.contains('lifetime');
+    final isPopular =
+        lowerPlanName.contains('premium') &&
+        !lowerPlanName.contains('lifetime');
 
     return Stack(
       clipBehavior: Clip.none,
@@ -144,13 +167,16 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
                 : null,
             color: isPremium ? null : Colors.white,
             borderRadius: BorderRadius.circular(18),
-            border: isPremium ? null : Border.all(
-              color: const Color(0xFFFF4D97).withOpacity(0.3),
-              width: 1.5,
-            ),
+            border: isPremium
+                ? null
+                : Border.all(
+                    color: const Color(0xFFFF4D97).withOpacity(0.3),
+                    width: 1.5,
+                  ),
             boxShadow: [
               BoxShadow(
-                color: (isPremium ? const Color(0xFFFF4D97) : Colors.black).withOpacity(0.15),
+                color: (isPremium ? const Color(0xFFFF4D97) : Colors.black)
+                    .withOpacity(0.15),
                 blurRadius: 14,
                 offset: const Offset(0, 5),
               ),
@@ -172,13 +198,17 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: isPremium ? Colors.white.withOpacity(0.2) : const Color(0xFFFF4D97).withOpacity(0.1),
+                        color: isPremium
+                            ? Colors.white.withOpacity(0.2)
+                            : const Color(0xFFFF4D97).withOpacity(0.1),
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: Icon(
                         isPremium ? Icons.workspace_premium : Icons.star_border,
                         size: 28,
-                        color: isPremium ? Colors.white : const Color(0xFFFF4D97),
+                        color: isPremium
+                            ? Colors.white
+                            : const Color(0xFFFF4D97),
                       ),
                     ),
                     const SizedBox(width: 14),
@@ -191,7 +221,9 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
                             style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.bold,
-                              color: isPremium ? Colors.white : const Color(0xFF1A1D2E),
+                              color: isPremium
+                                  ? Colors.white
+                                  : const Color(0xFF1A1D2E),
                             ),
                           ),
                           const SizedBox(height: 2),
@@ -199,7 +231,9 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
                             description,
                             style: TextStyle(
                               fontSize: 12,
-                              color: isPremium ? Colors.white.withOpacity(0.85) : Colors.black54,
+                              color: isPremium
+                                  ? Colors.white.withOpacity(0.85)
+                                  : Colors.black54,
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -211,16 +245,23 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
                                 style: TextStyle(
                                   fontSize: 22,
                                   fontWeight: FontWeight.bold,
-                                  color: isPremium ? Colors.white : const Color(0xFFFF4D97),
+                                  color: isPremium
+                                      ? Colors.white
+                                      : const Color(0xFFFF4D97),
                                 ),
                               ),
                               Padding(
-                                padding: const EdgeInsets.only(bottom: 2, left: 3),
+                                padding: const EdgeInsets.only(
+                                  bottom: 2,
+                                  left: 3,
+                                ),
                                 child: Text(
                                   '/$billingPeriod',
                                   style: TextStyle(
                                     fontSize: 11,
-                                    color: isPremium ? Colors.white.withOpacity(0.8) : Colors.black45,
+                                    color: isPremium
+                                        ? Colors.white.withOpacity(0.8)
+                                        : Colors.black45,
                                   ),
                                 ),
                               ),
@@ -232,12 +273,16 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: isPremium ? Colors.white.withOpacity(0.2) : const Color(0xFFFF4D97).withOpacity(0.1),
+                        color: isPremium
+                            ? Colors.white.withOpacity(0.2)
+                            : const Color(0xFFFF4D97).withOpacity(0.1),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Icon(
                         Icons.arrow_forward_ios,
-                        color: isPremium ? Colors.white : const Color(0xFFFF4D97),
+                        color: isPremium
+                            ? Colors.white
+                            : const Color(0xFFFF4D97),
                         size: 14,
                       ),
                     ),
@@ -284,7 +329,8 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
   Widget _buildPlanDetails() {
     if (_selectedPlan == null) return const SizedBox();
 
-    final planName = _selectedPlan!['display_name'] ?? _selectedPlan!['name'] ?? 'N/A';
+    final planName =
+        _selectedPlan!['display_name'] ?? _selectedPlan!['name'] ?? 'N/A';
     final price = _selectedPlan!['price'] ?? 0;
     final billingPeriod = _selectedPlan!['billing_period'] ?? '';
     final description = _selectedPlan!['description'] ?? '';
@@ -294,7 +340,8 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
     final canExportHd = _selectedPlan!['can_export_hd'] ?? false;
     final removeWatermark = _selectedPlan!['remove_watermark'] ?? false;
     final lowerPlanName = planName.toLowerCase();
-    final isPremium = lowerPlanName.contains('premium') || lowerPlanName.contains('lifetime');
+    final isPremium =
+        lowerPlanName.contains('premium') || lowerPlanName.contains('lifetime');
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -422,7 +469,9 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
           ElevatedButton(
             onPressed: () => _showSubscribeConfirmation(),
             style: ElevatedButton.styleFrom(
-              backgroundColor: isPremium ? Colors.orange : const Color(0xFFFF4D97),
+              backgroundColor: isPremium
+                  ? Colors.orange
+                  : const Color(0xFFFF4D97),
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -462,7 +511,9 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: included ? const Color(0xFFFF4D97).withOpacity(0.1) : Colors.grey.withOpacity(0.1),
+              color: included
+                  ? const Color(0xFFFF4D97).withOpacity(0.1)
+                  : Colors.grey.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
@@ -509,100 +560,156 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
   void _showSubscribeConfirmation() {
     if (_selectedPlan == null) return;
 
-    final planName = _selectedPlan!['display_name'] ?? _selectedPlan!['name'] ?? 'N/A';
+    final planName =
+        _selectedPlan!['display_name'] ?? _selectedPlan!['name'] ?? 'N/A';
     final price = _selectedPlan!['price'] ?? 0;
     final billingPeriod = _selectedPlan!['billing_period'] ?? '';
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+
+    // Reset payment method to paymongo when showing confirmation
+    _selectedPaymentMethod = 'paymongo';
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          'Subscribe to $planName',
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Plan: $planName',
-              style: const TextStyle(fontWeight: FontWeight.w500),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(
+            'Subscribe to $planName',
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Plan: $planName',
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Price: ₱${price.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFFF4D97),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Billing: $billingPeriod',
+                  style: const TextStyle(fontSize: 13, color: Colors.black54),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Payment Method',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                RadioListTile<String>(
+                  value: 'paymongo',
+                  groupValue: _selectedPaymentMethod,
+                  onChanged: (value) =>
+                      setDialogState(() => _selectedPaymentMethod = value!),
+                  title: Row(
+                    children: [
+                      Image.network(
+                        'https://paymongo.com/favicon.ico',
+                        height: 24,
+                        width: 24,
+                        errorBuilder: (_, __, ___) =>
+                            const Icon(Icons.credit_card),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Credit / Debit Card',
+                        style: TextStyle(color: Colors.black87, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                  activeColor: const Color(0xFFFF4D97),
+                  dense: true,
+                ),
+                RadioListTile<String>(
+                  value: 'gcash',
+                  groupValue: _selectedPaymentMethod,
+                  onChanged: (value) =>
+                      setDialogState(() => _selectedPaymentMethod = value!),
+                  title: const Row(
+                    children: [
+                      Icon(Icons.mobile_screen_share, color: Color(0xFF00A4EF)),
+                      SizedBox(width: 12),
+                      Text(
+                        'GCash',
+                        style: TextStyle(color: Colors.black87, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                  activeColor: const Color(0xFFFF4D97),
+                  dense: true,
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Price: ₱${price.toStringAsFixed(2)}',
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFFFF4D97),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => navigator.pop(),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                navigator.pop();
+
+                try {
+                  final response = await _supabaseService
+                      .createPaymongoCheckoutForPlan(
+                        planId: _selectedPlan!['id'],
+                        paymentMethod: _selectedPaymentMethod,
+                      );
+
+                  final checkoutUrl = response['checkout_url']?.toString();
+                  if (checkoutUrl == null || checkoutUrl.isEmpty) {
+                    throw 'Missing checkout URL';
+                  }
+
+                  await _openCheckoutUrl(checkoutUrl);
+                } catch (e) {
+                  if (mounted) {
+                    scaffoldMessenger.showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to start checkout: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF4D97),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Billing: $billingPeriod',
-              style: const TextStyle(fontSize: 13, color: Colors.black54),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'You will be redirected to PayMongo to complete payment.',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+              child: const Text(
+                'Subscribe',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.grey),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-
-              try {
-                final response = await _supabaseService.createPaymongoCheckoutForPlan(
-                  planId: _selectedPlan!['id'],
-                );
-
-                final checkoutUrl = response['checkout_url']?.toString();
-                if (checkoutUrl == null || checkoutUrl.isEmpty) {
-                  throw 'Missing checkout URL';
-                }
-
-                await _openCheckoutUrl(checkoutUrl);
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Failed to start checkout: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF4D97),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text('Subscribe', style: TextStyle(color: Colors.white)),
-          ),
-        ],
       ),
     );
   }
 
   Future<void> _openCheckoutUrl(String url) async {
     final uri = Uri.parse(url);
-    final launched = await launchUrl(
-      uri,
-      mode: LaunchMode.externalApplication,
-    );
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!launched && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

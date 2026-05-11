@@ -108,7 +108,11 @@ class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
                   const SizedBox(height: 16),
                   const Text(
                     'Regular Plan (Free)',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Color(0xFFFF4D97)),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFFFF4D97),
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -138,16 +142,21 @@ class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
             itemCount: subscriptions.length,
             itemBuilder: (context, index) {
               final subscription = subscriptions[index];
-              final plan = subscription['subscription_plans'] as Map<String, dynamic>?;
+              final plan =
+                  subscription['subscription_plans'] as Map<String, dynamic>?;
               final planName = (plan?['name'] ?? 'N/A').toString();
-              final displayName = (plan?['display_name'] ?? planName).toString();
+              final displayName = (plan?['display_name'] ?? planName)
+                  .toString();
               final isFree = planName.toLowerCase() == 'free';
               final isActive = subscription['status'] == 'active';
-                final canManage = isActive && subscription['_source'] != 'subscriptions';
-                final periodEnd = subscription['current_period_end'] != null
-                  ? DateTime.tryParse(subscription['current_period_end'].toString())
+              final canManage =
+                  isActive && subscription['_source'] != 'subscriptions';
+              final periodEnd = subscription['current_period_end'] != null
+                  ? DateTime.tryParse(
+                      subscription['current_period_end'].toString(),
+                    )
                   : null;
-                final createdAt = subscription['created_at'] != null
+              final createdAt = subscription['created_at'] != null
                   ? DateTime.tryParse(subscription['created_at'].toString())
                   : null;
 
@@ -158,7 +167,9 @@ class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: isActive ? const Color(0xFFFF4D97) : Colors.grey[300]!,
+                      color: isActive
+                          ? const Color(0xFFFF4D97)
+                          : Colors.grey[300]!,
                       width: isActive ? 2 : 1,
                     ),
                   ),
@@ -185,7 +196,10 @@ class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
                                   const SizedBox(width: 8),
                                   if (isFree)
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
                                       decoration: BoxDecoration(
                                         color: Colors.blue[100],
                                         borderRadius: BorderRadius.circular(4),
@@ -211,20 +225,21 @@ class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
                                   color: isActive
                                       ? Colors.green[100]
                                       : subscription['status'] == 'expired'
-                                          ? Colors.red[100]
-                                          : Colors.orange[100],
+                                      ? Colors.red[100]
+                                      : Colors.orange[100],
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
-                                  subscription['status']?.toUpperCase() ?? 'UNKNOWN',
+                                  subscription['status']?.toUpperCase() ??
+                                      'UNKNOWN',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
                                     color: isActive
                                         ? Colors.green[700]
                                         : subscription['status'] == 'expired'
-                                            ? Colors.red[700]
-                                            : Colors.orange[700],
+                                        ? Colors.red[700]
+                                        : Colors.orange[700],
                                   ),
                                 ),
                               ),
@@ -250,7 +265,9 @@ class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
                           children: [
                             _buildSubscriptionDetail(
                               'Created',
-                              createdAt != null ? DateFormat('MMM dd, yyyy').format(createdAt) : 'N/A',
+                              createdAt != null
+                                  ? DateFormat('MMM dd, yyyy').format(createdAt)
+                                  : 'N/A',
                             ),
                             const SizedBox(height: 8),
                             if (periodEnd != null)
@@ -303,10 +320,7 @@ class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          label,
-          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-        ),
+        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
         Text(
           value,
           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
@@ -392,7 +406,10 @@ class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Cancel Subscription', style: TextStyle(color: Colors.white)),
+            child: const Text(
+              'Cancel Subscription',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),

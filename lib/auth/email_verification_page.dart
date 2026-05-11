@@ -6,10 +6,7 @@ import 'login_supabase_page.dart';
 class EmailVerificationPage extends StatefulWidget {
   final String email;
 
-  const EmailVerificationPage({
-    super.key,
-    required this.email,
-  });
+  const EmailVerificationPage({super.key, required this.email});
 
   @override
   State<EmailVerificationPage> createState() => _EmailVerificationPageState();
@@ -58,10 +55,7 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
               const SizedBox(height: 8),
               Text(
                 'We sent a confirmation email to ${widget.email}',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[600],
-                ),
+                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
               ),
               const SizedBox(height: 8),
               Container(
@@ -73,10 +67,7 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
                 ),
                 child: Text(
                   '💡 Open the email and tap the "Confirm my account" button',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.blue.shade700,
-                  ),
+                  style: TextStyle(fontSize: 13, color: Colors.blue.shade700),
                 ),
               ),
               const SizedBox(height: 32),
@@ -91,10 +82,7 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
                   ),
                   child: Text(
                     _errorMessage!,
-                    style: TextStyle(
-                      color: Colors.red[700],
-                      fontSize: 14,
-                    ),
+                    style: TextStyle(color: Colors.red[700], fontSize: 14),
                   ),
                 ),
 
@@ -106,7 +94,9 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
                     ? null
                     : () {
                         Navigator.of(context).pushReplacement(
-                          MaterialPageRoute(builder: (_) => const LoginSupabasePage()),
+                          MaterialPageRoute(
+                            builder: (_) => const LoginSupabasePage(),
+                          ),
                         );
                       },
                 style: ElevatedButton.styleFrom(
@@ -138,7 +128,9 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
                           _errorMessage = null;
                         });
                         try {
-                          await _verificationService.sendConfirmationEmail(widget.email);
+                          await _verificationService.sendConfirmationEmail(
+                            widget.email,
+                          );
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
@@ -159,10 +151,7 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
                       },
                 child: const Text(
                   'Resend Confirmation Email',
-                  style: TextStyle(
-                    color: Color(0xFFFF4D97),
-                    fontSize: 14,
-                  ),
+                  style: TextStyle(color: Color(0xFFFF4D97), fontSize: 14),
                 ),
               ),
             ],
