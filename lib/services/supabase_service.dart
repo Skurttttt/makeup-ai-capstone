@@ -606,6 +606,7 @@ class SupabaseService {
 
   Future<Map<String, dynamic>> createPaymongoCheckoutForPlan({
     required String planId,
+    String? paymentMethod,
     String? successUrl,
     String? cancelUrl,
   }) async {
@@ -615,6 +616,7 @@ class SupabaseService {
         body: {
           'kind': 'subscription',
           'plan_id': planId,
+          if (paymentMethod != null) 'payment_method': paymentMethod,
           if (successUrl != null) 'success_url': successUrl,
           if (cancelUrl != null) 'cancel_url': cancelUrl,
         },
@@ -636,6 +638,7 @@ class SupabaseService {
 
   Future<Map<String, dynamic>> createPaymongoCheckoutForOrder({
     required List<Map<String, dynamic>> items,
+    String? paymentMethod,
     String? successUrl,
     String? cancelUrl,
   }) async {
@@ -645,6 +648,7 @@ class SupabaseService {
         body: {
           'kind': 'order',
           'items': items,
+          if (paymentMethod != null) 'payment_method': paymentMethod,
           if (successUrl != null) 'success_url': successUrl,
           if (cancelUrl != null) 'cancel_url': cancelUrl,
         },

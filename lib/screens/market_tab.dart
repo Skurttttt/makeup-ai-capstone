@@ -13,7 +13,6 @@ class MarketTab extends StatefulWidget {
 
 class _MarketTabState extends State<MarketTab>
     with SingleTickerProviderStateMixin {
-  final _supabaseService = SupabaseService();
   final _searchController = TextEditingController();
   String _searchQuery = '';
   String? _loadingProductId;
@@ -52,7 +51,6 @@ class _MarketTabState extends State<MarketTab>
 
   // Animation
   late AnimationController _cartAnimationController;
-  late Animation<double> _cartScaleAnimation;
 
   @override
   void initState() {
@@ -60,12 +58,6 @@ class _MarketTabState extends State<MarketTab>
     _cartAnimationController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
-    );
-    _cartScaleAnimation = Tween<double>(begin: 1.0, end: 1.3).animate(
-      CurvedAnimation(
-        parent: _cartAnimationController,
-        curve: Curves.easeInOut,
-      ),
     );
     _fetchProducts();
   }
@@ -1244,7 +1236,9 @@ class _MarketTabState extends State<MarketTab>
                                 : () => _addToCart(product),
                             style: OutlinedButton.styleFrom(
                               side: const BorderSide(color: Color(0xFFFF4D97)),
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                              ),
                               foregroundColor: const Color(0xFFFF4D97),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(6),
@@ -1282,7 +1276,9 @@ class _MarketTabState extends State<MarketTab>
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFFFF4D97),
                               foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                              ),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(6),
                               ),
@@ -1542,7 +1538,8 @@ class _MarketTabState extends State<MarketTab>
                             : 'Out of stock',
                         style: TextStyle(
                           fontSize: 11,
-                          color: (item['variation']['stock'] is int &&
+                          color:
+                              (item['variation']['stock'] is int &&
                                   (item['variation']['stock'] as int) > 0)
                               ? Colors.grey.shade500
                               : Colors.red.shade400,
@@ -2193,9 +2190,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         );
       }
 
-      if (_selectedPaymentMethod == 'paymongo') {
+      if (_selectedPaymentMethod == 'paymongo' || _selectedPaymentMethod == 'gcash') {
         final paymentResponse = await _supabaseService
-            .createPaymongoCheckoutForOrder(items: widget.cartItems);
+            .createPaymongoCheckoutForOrder(items: widget.cartItems, paymentMethod: _selectedPaymentMethod);
         final checkoutUrl = paymentResponse['checkout_url']?.toString();
         if (checkoutUrl != null && checkoutUrl.isNotEmpty) {
           await launchUrl(
@@ -2522,6 +2519,27 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         ),
                         subtitle: const Text(
                           'Pay when you receive the item',
+                          style: TextStyle(color: Colors.black54),
+                        ),
+                        activeColor: const Color(0xFFFF4D97),
+                      ),
+                      RadioListTile<String>(
+                        value: 'gcash',
+                        groupValue: _selectedPaymentMethod,
+                        onChanged: (value) =>
+                            setState(() => _selectedPaymentMethod = value!),
+                        title: const Row(
+                          children: [
+                            Icon(Icons.mobile_screen_share, color: Color(0xFF00A4EF)),
+                            SizedBox(width: 12),
+                            Text(
+                              'GCash',
+                              style: TextStyle(color: Colors.black87),
+                            ),
+                          ],
+                        ),
+                        subtitle: const Text(
+                          'Pay via GCash app',
                           style: TextStyle(color: Colors.black54),
                         ),
                         activeColor: const Color(0xFFFF4D97),

@@ -12,6 +12,7 @@ type CheckoutRequest = {
   kind: "order" | "subscription";
   items?: CheckoutItem[];
   plan_id?: string;
+  payment_method?: string;
   success_url?: string;
   cancel_url?: string;
 };
@@ -22,6 +23,20 @@ const corsHeaders = {
 };
 
 const toPaymongoAmount = (amount: number) => Math.round(amount * 100);
+
+const resolvePaymentMethodTypes = (paymentMethod?: string) => {
+  switch ((paymentMethod ?? "").toLowerCase()) {
+    case "paymongo":
+    case "card":
+      return ["card"];
+    case "gcash":
+      return ["gcash"];
+    case "paymaya":
+      return ["paymaya"];
+    default:
+      return ["card", "gcash", "paymaya"];
+  }
+};
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -216,6 +231,7 @@ serve(async (req) => {
         cancelUrl,
         description,
         metadata,
+        paymentMethodTypes: resolvePaymentMethodTypes(body.payment_method),
       });
 
       await supabase.from("orders").update({
@@ -291,6 +307,7 @@ serve(async (req) => {
         cancelUrl,
         description,
         metadata,
+        paymentMethodTypes: resolvePaymentMethodTypes(body.payment_method),
       });
 
       const { data: session } = await supabase.from("payment_sessions").insert({
@@ -334,8 +351,9 @@ async function createPaymongoCheckout(params: {
   cancelUrl: string;
   description: string;
   metadata: Record<string, unknown>;
+  paymentMethodTypes: string[];
 }) {
-  const { paymongoKey, lineItems, successUrl, cancelUrl, description, metadata } = params;
+  const { paymongoKey, lineItems, successUrl, cancelUrl, description, metadata, paymentMethodTypes } = params;
   const response = await fetch("https://api.paymongo.com/v2/checkout_sessions", {
     method: "POST",
     headers: {
@@ -347,7 +365,7 @@ async function createPaymongoCheckout(params: {
       data: {
         attributes: {
           line_items: lineItems,
-          payment_method_types: ["card", "gcash", "paymaya"],
+          payment_method_types: paymentMethodTypes,
           success_url: successUrl,
           cancel_url: cancelUrl,
           description,

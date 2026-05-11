@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'dart:math';
 
@@ -8,7 +7,7 @@ import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 import 'look_engine.dart';
 import 'openai_service.dart';
-import 'skin_analyzer.dart';
+// removed unused imports
 import 'painters/lip_guide_painter.dart';
 import 'painters/eyebrow_guide_painter.dart';
 import 'painters/base_prep_guide_painter.dart';
@@ -123,7 +122,8 @@ class _InstructionsPageState extends State<InstructionsPage> {
     final leftTop = face.contours[FaceContourType.leftEyebrowTop]?.points;
     final leftBottom = face.contours[FaceContourType.leftEyebrowBottom]?.points;
     final rightTop = face.contours[FaceContourType.rightEyebrowTop]?.points;
-    final rightBottom = face.contours[FaceContourType.rightEyebrowBottom]?.points;
+    final rightBottom =
+        face.contours[FaceContourType.rightEyebrowBottom]?.points;
 
     final all = <Point<int>>[
       ...?leftTop,
@@ -280,10 +280,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder);
 
-      final size = Size(
-        image.width.toDouble(),
-        image.height.toDouble(),
-      );
+      final size = Size(image.width.toDouble(), image.height.toDouble());
 
       canvas.drawImage(image, Offset.zero, Paint());
 
@@ -396,7 +393,10 @@ class _InstructionsPageState extends State<InstructionsPage> {
       final picture = recorder.endRecording();
       final fullGuide = await picture.toImage(image.width, image.height);
 
-      final cropRect = _computeBasePrepCropRect(widget.detectedFace!, fullGuide);
+      final cropRect = _computeBasePrepCropRect(
+        widget.detectedFace!,
+        fullGuide,
+      );
       if (cropRect == null) return;
 
       final path = await _saveCroppedImage(
@@ -593,11 +593,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
         const SizedBox(height: 8),
         Text(
           'Here are your personalized AI makeup instructions for this look.',
-          style: TextStyle(
-            fontSize: 14,
-            color: Colors.grey[700],
-            height: 1.5,
-          ),
+          style: TextStyle(fontSize: 14, color: Colors.grey[700], height: 1.5),
         ),
       ],
     );
@@ -614,9 +610,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.85),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: const Color(0xFFFF4D97).withOpacity(0.18),
-        ),
+        border: Border.all(color: const Color(0xFFFF4D97).withOpacity(0.18)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -664,9 +658,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
         decoration: BoxDecoration(
           color: const Color(0xFFFF4D97).withOpacity(0.05),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: const Color(0xFFFF4D97).withOpacity(0.15),
-          ),
+          border: Border.all(color: const Color(0xFFFF4D97).withOpacity(0.15)),
         ),
         child: Row(
           children: [
@@ -698,17 +690,11 @@ class _InstructionsPageState extends State<InstructionsPage> {
         decoration: BoxDecoration(
           color: Colors.red.withOpacity(0.05),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: Colors.red.withOpacity(0.15),
-          ),
+          border: Border.all(color: Colors.red.withOpacity(0.15)),
         ),
         child: Text(
           _aiError!,
-          style: TextStyle(
-            fontSize: 13,
-            color: Colors.red[700],
-            height: 1.5,
-          ),
+          style: TextStyle(fontSize: 13, color: Colors.red[700], height: 1.5),
         ),
       );
     }
@@ -793,7 +779,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
                   _ensureLipGuideGenerated();
                 });
               }
-              
+
               if (targetArea == 'brows') {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   _ensureEyebrowGuideGenerated();
@@ -918,7 +904,9 @@ class _InstructionsPageState extends State<InstructionsPage> {
                             ),
                           )
                         else if (_basePrepGuideImagePath != null)
-                          BasePrepGuideCard(imagePath: _basePrepGuideImagePath!),
+                          BasePrepGuideCard(
+                            imagePath: _basePrepGuideImagePath!,
+                          ),
                       ],
                       // Add eyeshadow guide card if target area is eyeshadow
                       if (targetArea == 'eyeshadow') ...[
@@ -936,7 +924,9 @@ class _InstructionsPageState extends State<InstructionsPage> {
                             ),
                           )
                         else if (_eyeshadowGuideImagePath != null)
-                          EyeshadowGuideCard(imagePath: _eyeshadowGuideImagePath!),
+                          EyeshadowGuideCard(
+                            imagePath: _eyeshadowGuideImagePath!,
+                          ),
                       ],
                       // Add eyeliner guide card if target area is eyeliner
                       if (targetArea == 'eyeliner') ...[
@@ -954,14 +944,19 @@ class _InstructionsPageState extends State<InstructionsPage> {
                             ),
                           )
                         else if (_eyelinerGuideImagePath != null)
-                          EyelinerGuideCard(imagePath: _eyelinerGuideImagePath!),
+                          EyelinerGuideCard(
+                            imagePath: _eyelinerGuideImagePath!,
+                          ),
                       ],
                       // Add blush/contour guide card if target area is blush_contour
                       if (targetArea == 'blush_contour') ...[
                         const SizedBox(height: 18),
-                        if (widget.detectedFace != null && widget.scannedImagePath != null)
+                        if (widget.detectedFace != null &&
+                            widget.scannedImagePath != null)
                           FutureBuilder<ui.Image>(
-                            future: _loadUiImageFromFile(widget.scannedImagePath!),
+                            future: _loadUiImageFromFile(
+                              widget.scannedImagePath!,
+                            ),
                             builder: (context, snapshot) {
                               if (snapshot.hasData) {
                                 return BlushContourGuideCard(
@@ -999,9 +994,12 @@ class _InstructionsPageState extends State<InstructionsPage> {
                       // Add final look guide card if target area is full_makeup
                       if (targetArea == 'full_makeup') ...[
                         const SizedBox(height: 18),
-                        if (widget.detectedFace != null && widget.scannedImagePath != null)
+                        if (widget.detectedFace != null &&
+                            widget.scannedImagePath != null)
                           FutureBuilder<ui.Image>(
-                            future: _loadUiImageFromFile(widget.scannedImagePath!),
+                            future: _loadUiImageFromFile(
+                              widget.scannedImagePath!,
+                            ),
                             builder: (context, snapshot) {
                               if (snapshot.hasData) {
                                 return FinalLookGuideCard(
@@ -1140,9 +1138,9 @@ class _InstructionsPageState extends State<InstructionsPage> {
           const SizedBox(height: 16),
           Text(
             'Note: AI tips use your look name and skin analysis. No face image data is sent.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.grey[500],
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
           ),
           const SizedBox(height: 24),
         ],

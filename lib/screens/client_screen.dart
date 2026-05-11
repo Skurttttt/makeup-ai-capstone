@@ -1,99 +1,98 @@
 // lib/screens/client_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
 import 'package:intl/intl.dart';
+import 'client_analytics_screen.dart';
+import 'client_dashboard_screen.dart';
+import 'client_product_screen.dart';
+import 'product_form_page.dart';
+import 'client_settings_screen.dart';
+import 'client_shop_screen.dart';
 import '../utils/logout_util.dart';
 
-// ==================== THEME CONSTANTS ====================
+// Minimal app theme fallback used by this screen when the shared theme
+// import is missing — keeps the file self-contained for analyzer.
 class AppTheme {
-  static const primaryColor = Color(0xFF6366F1);
-  static const primaryDark = Color(0xFF4F46E5);
-  static const secondaryColor = Color(0xFFEC4899);
-  static const successColor = Color(0xFF10B981);
-  static const warningColor = Color(0xFFF59E0B);
-  static const errorColor = Color(0xFFEF4444);
-  static const surfaceColor = Color(0xFFF8FAFC);
-  static const cardColor = Colors.white;
-  static const textPrimary = Color(0xFF1E293B);
-  static const textSecondary = Color(0xFF64748B);
-  static const dividerColor = Color(0xFFE2E8F0);
-
+  static const primaryColor = Color(0xFFFF4D97);
+  static const primaryDark = Color(0xFFCC3A7A);
+  static const successColor = Colors.green;
+  static const errorColor = Colors.red;
+  static const warningColor = Colors.orange;
+  static const secondaryColor = Colors.blueGrey;
+  static const cardColor = Color(0xFFF8F8F8);
+  static const surfaceColor = Colors.white;
+  static const textPrimary = Colors.black87;
+  static const textSecondary = Colors.black54;
+  static const dividerColor = Colors.grey;
   static const primaryGradient = LinearGradient(
+    colors: [Color(0xFFFF4D97), Color(0xFFFF8FB3)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [primaryColor, primaryDark],
   );
-
-  static const secondaryGradient = LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [secondaryColor, Color(0xFFF43F5E)],
-  );
-
-  static final boxShadow = [
-    BoxShadow(
-      color: Colors.black.withOpacity(0.04),
-      blurRadius: 12,
-      offset: const Offset(0, 2),
-    ),
+  static const boxShadow = [
+    BoxShadow(color: Color(0x11000000), blurRadius: 8, offset: Offset(0, 2)),
   ];
-
-  static final cardShadow = [
-    BoxShadow(
-      color: Colors.black.withOpacity(0.06),
-      blurRadius: 16,
-      offset: const Offset(0, 4),
-    ),
-  ];
+  static List<BoxShadow> get cardShadow => boxShadow;
 }
 
 Color contrastTextForBackground(Color bg) {
-  return bg.computeLuminance() > 0.5 ? Colors.black : Colors.white;
+  return ThemeData.estimateBrightnessForColor(bg) == Brightness.dark
+      ? Colors.white
+      : Colors.black;
 }
 
-class NumericSpinnerField extends StatelessWidget {
+class NumericSpinnerField extends StatefulWidget {
   final TextEditingController controller;
   final String label;
   final bool isDecimal;
-  final double step;
+  final num step;
   final String? suffix;
-  final ValueChanged<String>? onChanged;
   final bool enabled;
+  final ValueChanged<num>? onChanged;
 
   const NumericSpinnerField({
-    super.key,
+    Key? key,
     required this.controller,
     required this.label,
     this.isDecimal = false,
     this.step = 1,
     this.suffix,
-    this.onChanged,
     this.enabled = true,
-  });
+    this.onChanged,
+  }) : super(key: key);
 
+  @override
+  State<NumericSpinnerField> createState() => _NumericSpinnerFieldState();
+}
+
+class _NumericSpinnerFieldState extends State<NumericSpinnerField> {
   num _parseValue() {
-    final raw = controller.text.trim();
-    if (raw.isEmpty) return isDecimal ? 0.0 : 0;
-    return isDecimal ? (double.tryParse(raw) ?? 0.0) : (int.tryParse(raw) ?? 0);
-  }
-
-  String _formatValue(num value) {
-    if (!isDecimal) return value.round().toString();
-    final asDouble = value.toDouble();
-    return asDouble % 1 == 0 ? asDouble.toStringAsFixed(0) : asDouble.toString();
+    final text = widget.controller.text;
+    if (text.isEmpty) return 0;
+    return num.tryParse(text) ?? 0;
   }
 
   void _updateValue(num value) {
-    controller.text = _formatValue(value);
-    controller.selection = TextSelection.collapsed(offset: controller.text.length);
-    onChanged?.call(controller.text);
+    final isDecimal = widget.isDecimal;
+    final asDouble = value.toDouble();
+    final out = isDecimal
+        ? (asDouble % 1 == 0
+              ? asDouble.toStringAsFixed(0)
+              : asDouble.toString())
+        : value.round().toString();
+    widget.controller.text = out;
+    widget.controller.selection = TextSelection.collapsed(offset: out.length);
+    setState(() {});
+    try {
+      widget.onChanged?.call(value);
+    } catch (_) {}
   }
 
   @override
@@ -101,35 +100,34 @@ class NumericSpinnerField extends StatelessWidget {
     return Row(
       children: [
         IconButton(
-          onPressed: enabled ? () => _updateValue(_parseValue() - step) : null,
+          onPressed: widget.enabled
+              ? () => _updateValue(_parseValue() - widget.step)
+              : null,
           icon: const Icon(Icons.remove_circle_outline),
           color: AppTheme.primaryColor,
           splashRadius: 20,
         ),
         Expanded(
           child: TextFormField(
-            controller: controller,
-            onChanged: onChanged,
-            enabled: enabled,
-            keyboardType: isDecimal
+            controller: widget.controller,
+            enabled: widget.enabled,
+            keyboardType: widget.isDecimal
                 ? const TextInputType.numberWithOptions(decimal: true)
                 : TextInputType.number,
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(
-                RegExp(isDecimal ? r'[0-9.]' : r'[0-9]'),
-              ),
-            ],
             decoration: InputDecoration(
-              labelText: label,
-              suffixText: suffix,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+              labelText: widget.label,
+              suffixText: widget.suffix,
             ),
+            onChanged: (s) {
+              final parsed = num.tryParse(s) ?? 0;
+              widget.onChanged?.call(parsed);
+            },
           ),
         ),
         IconButton(
-          onPressed: enabled ? () => _updateValue(_parseValue() + step) : null,
+          onPressed: widget.enabled
+              ? () => _updateValue(_parseValue() + widget.step)
+              : null,
           icon: const Icon(Icons.add_circle_outline),
           color: AppTheme.primaryColor,
           splashRadius: 20,
@@ -189,6 +187,7 @@ String? _guessCategory(String text) {
   if (lowerText.contains('brush')) return 'Tools & Brushes';
   return null;
 }
+
 bool _isPlaceholderShopeeDescription(String? description) {
   final text = description?.trim().toLowerCase();
   if (text == null || text.isEmpty) return true;
@@ -208,51 +207,14 @@ class ClientScreen extends StatefulWidget {
   State<ClientScreen> createState() => _ClientScreenState();
 }
 
-class _ClientScreenState extends State<ClientScreen>
-    with TickerProviderStateMixin {
+class _ClientScreenState extends State<ClientScreen> {
   int _currentSection = 0;
   late Future<Map<String, dynamic>> _clientDataFuture;
-  late TabController _tabController;
-
-  // Shop data
-  String _shopName = '';
-  String _shopCategory = '';
-  String _shopPhone = '';
-  String _shopAddress = '';
-  String? _shopAvatarUrl;
-  Uint8List? _shopAvatarBytes;
-  String? _shopAvatarName;
-  bool _shopFormInitialized = false;
-  bool _isSavingShop = false;
-  bool _isUploadingAvatar = false;
-  final ImagePicker _avatarPicker = ImagePicker();
-  String? _shopProfileId;
-
-  // Notification settings
-  bool _emailNotifications = true;
-  bool _pushNotifications = true;
-  bool _darkMode = false;
-  bool _soundEffects = true;
-
-  final List<Map<String, String>> _shopCategoryOptions = const [
-    {'value': 'makeup_brand', 'label': 'Makeup Brand'},
-    {'value': 'salon', 'label': 'Salon'},
-    {'value': 'artist', 'label': 'Artist'},
-    {'value': 'distributor', 'label': 'Distributor'},
-    {'value': 'retailer', 'label': 'Retailer'},
-  ];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
     _clientDataFuture = _fetchClientData();
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   Future<Map<String, dynamic>> _fetchClientData() async {
@@ -273,12 +235,6 @@ class _ClientScreenState extends State<ClientScreen>
     }
   }
 
-  Future<void> _refreshClientData() async {
-    final refreshed = _fetchClientData();
-    setState(() => _clientDataFuture = refreshed);
-    await refreshed;
-  }
-
   void _setSection(int index) {
     if (_currentSection == index) return;
     HapticFeedback.selectionClick();
@@ -289,162 +245,39 @@ class _ClientScreenState extends State<ClientScreen>
     showLogoutConfirmationDialog(context, role: 'client');
   }
 
-  void _initializeShopForm(Map<String, dynamic> clientData) {
-    final profileId = clientData['id']?.toString();
-    if (_shopFormInitialized && _shopProfileId == profileId) return;
-
-    _shopName = (clientData['business_name'] ?? '').toString();
-    _shopCategory = (clientData['business_type'] ?? '').toString();
-    _shopPhone = (clientData['business_phone'] ?? '').toString();
-    _shopAddress = (clientData['business_address'] ?? '').toString();
-    final logoUrl =
-        (clientData['business_logo_url'] ?? clientData['avatar_url'] ?? '')
-            .toString()
-            .trim();
-    _shopAvatarUrl = logoUrl.isEmpty ? null : logoUrl;
-    _shopAvatarName = null;
-    _shopAvatarBytes = null;
-    _shopFormInitialized = true;
-    _shopProfileId = profileId;
+  Future<void> _refreshClientData() async {
+    final refreshed = _fetchClientData();
+    setState(() => _clientDataFuture = refreshed);
+    await refreshed;
   }
 
-  String _fileExtensionFromName(String fileName) {
-    final match = RegExp(r'\.(\w+)$').firstMatch(fileName);
-    return match?.group(1)?.toLowerCase() ?? 'png';
-  }
-
-  Future<void> _uploadAvatar() async {
-    if (_isUploadingAvatar) return;
-
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) return;
-
-    XFile? pickedFile;
-    try {
-      pickedFile = await _avatarPicker.pickImage(source: ImageSource.gallery);
-      if (pickedFile == null) return;
-    } catch (e) {
-      return;
-    }
-
-    setState(() => _isUploadingAvatar = true);
-
-    try {
-      final bytes = await pickedFile.readAsBytes();
-      final safeName = pickedFile.name.replaceAll(
-        RegExp(r'[^A-Za-z0-9_.-]'),
-        '_',
-      );
-      final extension = _fileExtensionFromName(pickedFile.name);
-      final fileName =
-          '${DateTime.now().millisecondsSinceEpoch}_$safeName.$extension';
-      final storagePath = '${user.id}/avatars/$fileName';
-
-      await Supabase.instance.client.storage
-          .from('scan-images')
-          .uploadBinary(
-            storagePath,
-            bytes,
-            fileOptions: const FileOptions(cacheControl: '3600', upsert: true),
-          );
-
-      final publicUrl = Supabase.instance.client.storage
-          .from('scan-images')
-          .getPublicUrl(storagePath);
-
-      await Supabase.instance.client
-          .from('accounts')
-          .update({'avatar_url': publicUrl, 'business_logo_url': publicUrl})
-          .eq('id', user.id);
-
-      if (mounted) {
-        setState(() {
-          _shopAvatarBytes = bytes;
-          _shopAvatarName = pickedFile?.name ?? 'Selected image';
-          _shopAvatarUrl = publicUrl;
-          _shopFormInitialized = false;
-          _clientDataFuture = _fetchClientData();
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Logo uploaded successfully!'),
-            backgroundColor: AppTheme.successColor,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to upload: $e'),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isUploadingAvatar = false);
-    }
-  }
-
-  Future<void> _saveShopSettings() async {
-    if (_isSavingShop) return;
-
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) return;
-
-    if (_shopName.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Shop name is required'),
-          backgroundColor: AppTheme.errorColor,
+  void _showNotifications() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Notifications', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.shopping_bag),
+              title: const Text('New order received!'),
+              subtitle: Text('Order #ORD-001 - ${formatPHP(1299)}', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.inventory),
+              title: const Text('Low stock alert'),
+              subtitle: const Text('3 products need restock'),
+            ),
+          ],
         ),
-      );
-      return;
-    }
-
-    setState(() => _isSavingShop = true);
-
-    try {
-      await Supabase.instance.client
-          .from('accounts')
-          .update({
-            'business_name': _shopName.trim(),
-            'business_type': _shopCategory.trim().isEmpty
-                ? null
-                : _shopCategory.trim(),
-            'business_phone': _shopPhone.trim().isEmpty
-                ? null
-                : _shopPhone.trim(),
-            'business_address': _shopAddress.trim().isEmpty
-                ? null
-                : _shopAddress.trim(),
-          })
-          .eq('id', user.id);
-
-      if (mounted) {
-        setState(() {
-          _shopFormInitialized = false;
-          _clientDataFuture = _fetchClientData();
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Settings saved!'),
-            backgroundColor: AppTheme.successColor,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isSavingShop = false);
-    }
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+        ],
+      ),
+    );
   }
 
   @override
@@ -773,10 +606,18 @@ class _ClientScreenState extends State<ClientScreen>
           onRefresh: _refreshClientData,
           color: AppTheme.primaryColor,
           child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(16),
-            child: _buildAnimatedSectionContent(clientData),
-          ),
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: MediaQuery.of(context).size.height -
+                      kToolbarHeight -
+                      kBottomNavigationBarHeight -
+                      MediaQuery.of(context).padding.vertical,
+                ),
+                child: _buildAnimatedSectionContent(clientData),
+              ),
+            ),
         ),
       ),
       bottomNavigationBar: Container(
@@ -853,1291 +694,26 @@ class _ClientScreenState extends State<ClientScreen>
   Widget _buildSectionContent(Map<String, dynamic> clientData) {
     switch (_currentSection) {
       case 0:
-        return _buildDashboard(clientData);
+        return ClientDashboardScreen(clientData: clientData);
       case 1:
-        return _buildMyShopSettings(clientData);
+        return ClientShopScreen(clientData: clientData);
       case 2:
-        return _buildProducts(clientData);
+        return ClientProductsSection(
+          clientData: clientData,
+          onAddProduct: _showAddProductDialog,
+          onEditProduct: _showEditProductDialog,
+          onDeleteProduct: _confirmDeleteProduct,
+          onToggleProductStatus: _toggleProductStatus,
+        );
       case 3:
-        return _buildAnalytics(clientData);
+        return ClientAnalyticsScreen(clientData: clientData);
       case 4:
-        return _buildSettings(clientData);
+        return ClientSettingsScreen(clientData: clientData);
       default:
         return const SizedBox();
     }
   }
 
-  // ==================== DASHBOARD ====================
-  Widget _buildDashboard(Map<String, dynamic> clientData) {
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: Supabase.instance.client
-          .from('order_items')
-          .stream(primaryKey: ['id'])
-          .eq('business_id', clientData['id']),
-      builder: (context, salesSnapshot) {
-        final salesItems = salesSnapshot.data ?? [];
-        final totalRevenue = salesItems.fold(
-          0.0,
-          (sum, item) => sum + ((item['total_price'] as num?)?.toDouble() ?? 0),
-        );
-        final totalUnitsSold = salesItems.fold(
-          0,
-          (sum, item) => sum + ((item['quantity'] as num?)?.toInt() ?? 0),
-        );
-        final orderCount = salesItems
-            .map((item) => item['order_id']?.toString())
-            .whereType<String>()
-            .toSet()
-            .length;
-        final averageOrderValue = orderCount == 0
-            ? 0.0
-            : totalRevenue / orderCount;
-
-        final dailyRevenue = <String, double>{};
-        for (final item in salesItems) {
-          final createdAt = DateTime.tryParse(
-            item['created_at']?.toString() ?? '',
-          );
-          if (createdAt != null) {
-            final key = DateFormat('MM/dd').format(createdAt.toLocal());
-            dailyRevenue[key] =
-                (dailyRevenue[key] ?? 0) +
-                ((item['total_price'] as num?)?.toDouble() ?? 0);
-          }
-        }
-
-        final trendKeys = dailyRevenue.keys.toList();
-        final revenueSpots = List.generate(
-          trendKeys.length,
-          (i) => FlSpot(i.toDouble(), dailyRevenue[trendKeys[i]] ?? 0),
-        );
-
-        final recentSales = [...salesItems]
-          ..sort((a, b) {
-            final aDate =
-                DateTime.tryParse(a['created_at']?.toString() ?? '') ??
-                DateTime(0);
-            final bDate =
-                DateTime.tryParse(b['created_at']?.toString() ?? '') ??
-                DateTime(0);
-            return bDate.compareTo(aDate);
-          });
-
-        return StreamBuilder<List<Map<String, dynamic>>>(
-          stream: Supabase.instance.client
-              .from('products')
-              .stream(primaryKey: ['id'])
-              .eq('business_id', clientData['id']),
-          builder: (context, productsSnapshot) {
-            final products = productsSnapshot.data ?? [];
-            final lowStockCount = products
-                .where((p) => (p['stock_quantity'] as int? ?? 0) <= 5)
-                .length;
-            final outOfStockCount = products
-                .where((p) => (p['stock_quantity'] as int? ?? 0) == 0)
-                .length;
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Welcome Banner
-                Container(
-                  padding: const EdgeInsets.all(28),
-                  decoration: BoxDecoration(
-                    gradient: AppTheme.primaryGradient,
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Welcome back, ${clientData['business_name'] ?? 'Seller'}!',
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Here\'s what\'s happening with your business today.',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.white.withOpacity(0.8),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: const Icon(
-                          Icons.celebration,
-                          color: Colors.white,
-                          size: 32,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                // Stats Grid
-                GridView.count(
-                  crossAxisCount: MediaQuery.of(context).size.width > 900
-                      ? 4
-                      : 2,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  childAspectRatio: 1.2,
-                  children: [
-                    _buildStatCard(
-                      'Total Revenue',
-                      formatPHP(totalRevenue),
-                      Icons.attach_money,
-                      AppTheme.successColor,
-                    ),
-                    _buildStatCard(
-                      'Total Orders',
-                      orderCount.toString(),
-                      Icons.receipt_long,
-                      AppTheme.primaryColor,
-                    ),
-                    _buildStatCard(
-                      'Units Sold',
-                      totalUnitsSold.toString(),
-                      Icons.shopping_bag,
-                      AppTheme.warningColor,
-                    ),
-                    _buildStatCard(
-                      'Avg Order',
-                      formatPHP(averageOrderValue),
-                      Icons.trending_up,
-                      AppTheme.secondaryColor,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                // Alerts Row
-                if (lowStockCount > 0 || outOfStockCount > 0)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 24),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppTheme.warningColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: AppTheme.warningColor.withOpacity(0.3),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.warning_amber_rounded,
-                          color: AppTheme.warningColor,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Inventory Alert: $lowStockCount product(s) low stock, $outOfStockCount out of stock',
-                            style: TextStyle(
-                              color: AppTheme.warningColor,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () => setState(() => _currentSection = 2),
-                          child: const Text('View Products'),
-                        ),
-                      ],
-                    ),
-                  ),
-                // Revenue Chart
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: _buildCardDecoration(),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: AppTheme.primaryColor.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.show_chart,
-                              color: AppTheme.primaryColor,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          const Text(
-                            'Revenue Trend',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      SizedBox(
-                        height: 280,
-                        child: revenueSpots.isEmpty
-                            ? Center(
-                                child: Text(
-                                  'No sales data yet',
-                                  style: TextStyle(
-                                    color: AppTheme.textSecondary,
-                                  ),
-                                ),
-                              )
-                            : LineChart(
-                                LineChartData(
-                                  minY: 0,
-                                  gridData: FlGridData(
-                                    show: true,
-                                    drawVerticalLine: false,
-                                  ),
-                                  titlesData: FlTitlesData(
-                                    leftTitles: AxisTitles(
-                                      sideTitles: SideTitles(
-                                        showTitles: true,
-                                        reservedSize: 40,
-                                      ),
-                                    ),
-                                    bottomTitles: AxisTitles(
-                                      sideTitles: SideTitles(
-                                        showTitles: true,
-                                        getTitlesWidget: (value, meta) {
-                                          final idx = value.toInt();
-                                          return idx >= 0 &&
-                                                  idx < trendKeys.length
-                                              ? Text(
-                                                  trendKeys[idx],
-                                                  style: TextStyle(
-                                                    fontSize: 10,
-                                                    color:
-                                                        AppTheme.textSecondary,
-                                                  ),
-                                                )
-                                              : const Text('');
-                                        },
-                                      ),
-                                    ),
-                                    topTitles: const AxisTitles(
-                                      sideTitles: SideTitles(showTitles: false),
-                                    ),
-                                    rightTitles: const AxisTitles(
-                                      sideTitles: SideTitles(showTitles: false),
-                                    ),
-                                  ),
-                                  lineBarsData: [
-                                    LineChartBarData(
-                                      spots: revenueSpots,
-                                      isCurved: true,
-                                      color: AppTheme.primaryColor,
-                                      barWidth: 3,
-                                      belowBarData: BarAreaData(
-                                        show: true,
-                                        color: AppTheme.primaryColor
-                                            .withOpacity(0.1),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                // Recent Sales and Quick Actions
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isWide = constraints.maxWidth > 800;
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: Container(
-                            padding: const EdgeInsets.all(20),
-                            decoration: _buildCardDecoration(),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(10),
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.warningColor
-                                            .withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: const Icon(
-                                        Icons.history,
-                                        color: AppTheme.warningColor,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    const Text(
-                                      'Recent Sales',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 16),
-                                if (recentSales.isEmpty)
-                                  Center(
-                                    child: Text(
-                                      'No recent sales',
-                                      style: TextStyle(
-                                        color: AppTheme.textSecondary,
-                                      ),
-                                    ),
-                                  )
-                                else
-                                  ...recentSales
-                                      .take(5)
-                                      .map((sale) => _buildSaleTile(sale)),
-                              ],
-                            ),
-                          ),
-                        ),
-                        if (isWide) const SizedBox(width: 16),
-                        if (isWide) Expanded(child: _buildQuickActionsCard()),
-                      ],
-                    );
-                  },
-                ),
-                if (MediaQuery.of(context).size.width <= 800)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 16),
-                    child: _buildQuickActionsCard(),
-                  ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildQuickActionsCard() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: _buildCardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppTheme.successColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.flash_on, color: AppTheme.successColor),
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                'Quick Actions',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _buildQuickActionButton(
-            'Add New Product',
-            Icons.add_box,
-            () => _showAddProductDialog(''),
-            AppTheme.primaryColor,
-          ),
-          const SizedBox(height: 12),
-          _buildQuickActionButton(
-            'View All Orders',
-            Icons.receipt_long,
-            () => _showOrders(),
-            AppTheme.secondaryColor,
-          ),
-          const SizedBox(height: 12),
-          _buildQuickActionButton(
-            'Export Reports',
-            Icons.download,
-            _exportReports,
-            AppTheme.successColor,
-          ),
-          const SizedBox(height: 12),
-          _buildQuickActionButton(
-            'Manage Inventory',
-            Icons.inventory,
-            () => setState(() => _currentSection = 2),
-            AppTheme.warningColor,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildQuickActionButton(
-    String title,
-    IconData icon,
-    VoidCallback onTap,
-    Color color,
-  ) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.2)),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                title,
-                style: TextStyle(fontWeight: FontWeight.w500, color: color),
-              ),
-            ),
-            Icon(Icons.arrow_forward_ios, color: color, size: 14),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showOrders() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Orders feature coming soon!'),
-        backgroundColor: AppTheme.primaryColor,
-      ),
-    );
-  }
-
-  void _exportReports() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Exporting reports...'),
-        backgroundColor: AppTheme.successColor,
-      ),
-    );
-  }
-
-  void _showNotifications() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          'Notifications',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.shopping_bag),
-              title: const Text('New order received!'),
-              subtitle: Text(
-                'Order #ORD-001 - ₱1,299.00',
-                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-              ),
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.inventory),
-              title: const Text('Low stock alert'),
-              subtitle: const Text('3 products need restock'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatCard(
-    String title,
-    String value,
-    IconData icon,
-    Color color,
-  ) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 380),
-      curve: Curves.easeOutCubic,
-      builder: (context, valueAnim, child) {
-        return Transform.translate(
-          offset: Offset(0, 12 * (1 - valueAnim)),
-          child: Opacity(opacity: valueAnim, child: child),
-        );
-      },
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: _buildCardDecoration(),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: color, size: 24),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              title,
-              style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSaleTile(Map<String, dynamic> sale) {
-    final createdAt =
-        DateTime.tryParse(sale['created_at']?.toString() ?? '') ??
-        DateTime.now();
-    final quantity = (sale['quantity'] as num?)?.toInt() ?? 0;
-    final total = (sale['total_price'] as num?)?.toDouble() ?? 0;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppTheme.successColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(
-              Icons.shopping_bag_outlined,
-              color: AppTheme.successColor,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '$quantity item${quantity == 1 ? '' : 's'} sold',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  formatPHP(total),
-                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-          Text(
-            DateFormat('MMM d, h:mm a').format(createdAt.toLocal()),
-            style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ==================== MY SHOP SETTINGS ====================
-  Widget _buildMyShopSettings(Map<String, dynamic> clientData) {
-    _initializeShopForm(clientData);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Store Profile',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Manage your store information and branding',
-          style: TextStyle(color: AppTheme.textSecondary),
-        ),
-        const SizedBox(height: 24),
-        Container(
-          padding: const EdgeInsets.all(24),
-          decoration: _buildCardDecoration(),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final isDesktop = constraints.maxWidth > 600;
-              return isDesktop
-                  ? Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildAvatarSection(),
-                        const SizedBox(width: 32),
-                        Expanded(child: _buildShopForm()),
-                      ],
-                    )
-                  : Column(
-                      children: [
-                        _buildAvatarSection(),
-                        const SizedBox(height: 32),
-                        _buildShopForm(),
-                      ],
-                    );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAvatarSection() {
-    return Column(
-      children: [
-        Stack(
-          children: [
-            Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: AppTheme.primaryGradient,
-              ),
-              child: CircleAvatar(
-                radius: 58,
-                backgroundColor: Colors.white,
-                backgroundImage: _shopAvatarBytes != null
-                    ? MemoryImage(_shopAvatarBytes!)
-                    : (_shopAvatarUrl != null
-                          ? NetworkImage(_shopAvatarUrl!)
-                          : null),
-                child: (_shopAvatarBytes == null && _shopAvatarUrl == null)
-                    ? const Icon(
-                        Icons.store,
-                        size: 50,
-                        color: AppTheme.primaryColor,
-                      )
-                    : null,
-              ),
-            ),
-            Positioned(
-              bottom: 0,
-              right: 0,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryColor,
-                  shape: BoxShape.circle,
-                ),
-                child: IconButton(
-                  icon: const Icon(
-                    Icons.camera_alt,
-                    size: 18,
-                    color: Colors.white,
-                  ),
-                  onPressed: _uploadAvatar,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(
-                    width: 32,
-                    height: 32,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Text(
-          _shopAvatarName ?? 'No logo uploaded',
-          style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildShopForm() {
-    return Column(
-      children: [
-        _buildTextField('Shop Name', _shopName, (val) => _shopName = val),
-        const SizedBox(height: 16),
-        _buildCategoryDropdown(),
-        const SizedBox(height: 16),
-        _buildTextField(
-          'Phone Number',
-          _shopPhone,
-          (val) => _shopPhone = val,
-          keyboard: TextInputType.phone,
-        ),
-        const SizedBox(height: 16),
-        _buildTextField(
-          'Address',
-          _shopAddress,
-          (val) => _shopAddress = val,
-          maxLines: 2,
-        ),
-        const SizedBox(height: 24),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: _isSavingShop ? null : _saveShopSettings,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryColor,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: _isSavingShop
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Text(
-                    'Save Changes',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTextField(
-    String label,
-    String value,
-    Function(String) onChanged, {
-    TextInputType? keyboard,
-    int maxLines = 1,
-  }) {
-    return TextFormField(
-      initialValue: value,
-      onChanged: onChanged,
-      keyboardType: keyboard,
-      maxLines: maxLines,
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(color: AppTheme.textSecondary),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppTheme.primaryColor),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCategoryDropdown() {
-    return DropdownButtonFormField<String>(
-      value: _shopCategoryOptions.any((opt) => opt['value'] == _shopCategory)
-          ? _shopCategory
-          : null,
-      decoration: InputDecoration(
-        labelText: 'Business Category',
-        labelStyle: TextStyle(color: AppTheme.textSecondary),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      items: _shopCategoryOptions
-          .map(
-            (opt) => DropdownMenuItem(
-              value: opt['value'],
-              child: Text(opt['label']!),
-            ),
-          )
-          .toList(),
-      onChanged: (val) => setState(() => _shopCategory = val ?? ''),
-    );
-  }
-
-  // ==================== PRODUCTS ====================
-  Widget _buildProducts(Map<String, dynamic> clientData) {
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: Supabase.instance.client
-          .from('products')
-          .stream(primaryKey: ['id'])
-          .eq('business_id', clientData['id']),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(color: AppTheme.primaryColor),
-          );
-        }
-        if (snapshot.hasError) {
-          return Center(
-            child: Text(
-              'Error: ${snapshot.error}',
-              style: const TextStyle(color: AppTheme.errorColor),
-            ),
-          );
-        }
-
-        final products = snapshot.data ?? [];
-        final activeCount = products
-            .where((p) => p['is_active'] == true)
-            .length;
-        final lowStockCount = products
-            .where((p) => (p['stock_quantity'] as int? ?? 0) <= 5)
-            .length;
-        final totalValue = products.fold(
-          0.0,
-          (sum, p) =>
-              sum +
-              ((p['price'] as num?)?.toDouble() ?? 0) *
-                  ((p['stock_quantity'] as num?)?.toDouble() ?? 0),
-        );
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Product Catalog',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () =>
-                      _showAddProductDialog(clientData['id'] as String),
-                  icon: const Icon(Icons.add, color: Colors.white),
-                  label: const Text(
-                    'Add Product',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryColor,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    'Total: ${products.length}',
-                    style: TextStyle(color: AppTheme.primaryColor),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppTheme.successColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    'Active: $activeCount',
-                    style: TextStyle(color: AppTheme.successColor),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                if (lowStockCount > 0)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppTheme.warningColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      'Low Stock: $lowStockCount',
-                      style: TextStyle(color: AppTheme.warningColor),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            // Inventory Value Card
-            Container(
-              padding: const EdgeInsets.all(16),
-              margin: const EdgeInsets.only(bottom: 24),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [AppTheme.primaryColor, AppTheme.primaryDark],
-                ),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.inventory_2, color: Colors.white, size: 32),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Total Inventory Value',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.8),
-                          ),
-                        ),
-                        Text(
-                          formatPHP(totalValue),
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (products.isEmpty)
-              _buildEmptyProductsState()
-            else
-              _buildProductGrid(products),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildEmptyProductsState() {
-    return Container(
-      padding: const EdgeInsets.all(48),
-      decoration: _buildCardDecoration(),
-      child: Column(
-        children: [
-          Icon(
-            Icons.inventory_2_outlined,
-            size: 64,
-            color: AppTheme.textSecondary,
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'No products yet',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Start adding products to sell to your customers',
-            style: TextStyle(color: AppTheme.textSecondary),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: () => _showAddProductDialog(''),
-            icon: const Icon(Icons.add, color: Colors.white),
-            label: const Text(
-              'Add Your First Product',
-              style: TextStyle(color: Colors.white),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryColor,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProductGrid(List<Map<String, dynamic>> products) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 280,
-        childAspectRatio: 0.75,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-      ),
-      itemCount: products.length,
-      itemBuilder: (context, index) {
-        final product = products[index];
-        final stock = (product['stock_quantity'] as int?) ?? 0;
-        final isLowStock = stock <= 5;
-        final isOutOfStock = stock == 0;
-        final price = (product['price'] as num?)?.toDouble() ?? 0;
-        return TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0, end: 1),
-          duration: Duration(milliseconds: 220 + ((index % 6) * 40)),
-          curve: Curves.easeOutCubic,
-          builder: (context, animationValue, child) {
-            return Transform.translate(
-              offset: Offset(0, 18 * (1 - animationValue)),
-              child: Opacity(opacity: animationValue, child: child),
-            );
-          },
-          child: Container(
-            decoration: _buildCardDecoration(),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Stack(
-                    children: [
-                      ClipRRect(
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(16),
-                        ),
-                        child: product['image_url'] != null
-                            ? Image.network(
-                                product['image_url'],
-                                fit: BoxFit.cover,
-                                width: double.infinity,
-                                height: double.infinity,
-                                errorBuilder: (context, error, stackTrace) =>
-                                    Container(
-                                      color: AppTheme.surfaceColor,
-                                      child: const Icon(
-                                        Icons.broken_image,
-                                        size: 50,
-                                        color: AppTheme.textSecondary,
-                                      ),
-                                    ),
-                              )
-                            : Container(
-                                color: AppTheme.surfaceColor,
-                                child: const Icon(
-                                  Icons.image,
-                                  size: 50,
-                                  color: AppTheme.textSecondary,
-                                ),
-                              ),
-                      ),
-                      if (isOutOfStock)
-                        Positioned(
-                          top: 8,
-                          left: 8,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppTheme.errorColor,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Text(
-                              'Out of Stock',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        )
-                      else if (isLowStock)
-                        Positioned(
-                          top: 8,
-                          left: 8,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppTheme.warningColor,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Text(
-                              'Low Stock',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.5),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: PopupMenuButton(
-                            icon: const Icon(
-                              Icons.more_vert,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                            itemBuilder: (context) => [
-                              const PopupMenuItem(
-                                value: 'edit',
-                                child: Text('Edit'),
-                              ),
-                              PopupMenuItem(
-                                value: 'toggle',
-                                child: Text(
-                                  product['is_active'] == true
-                                      ? 'Deactivate'
-                                      : 'Activate',
-                                ),
-                              ),
-                              const PopupMenuItem(
-                                value: 'delete',
-                                child: Text(
-                                  'Delete',
-                                  style: TextStyle(color: AppTheme.errorColor),
-                                ),
-                              ),
-                            ],
-                            onSelected: (action) {
-                              if (action == 'edit') {
-                                _showEditProductDialog(product);
-                              } else if (action == 'toggle') {
-                                _toggleProductStatus(product);
-                              } else if (action == 'delete') {
-                                _confirmDeleteProduct(
-                                  product['id'],
-                                  product['name'],
-                                );
-                              }
-                            },
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        product['name'] ?? 'Unnamed',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        formatPHP(price),
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.primaryColor,
-                          fontSize: 18,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: product['is_active'] == true
-                                  ? AppTheme.successColor.withOpacity(0.1)
-                                  : AppTheme.errorColor.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              product['is_active'] == true
-                                  ? 'Active'
-                                  : 'Inactive',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: product['is_active'] == true
-                                    ? AppTheme.successColor
-                                    : AppTheme.errorColor,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Stock: $stock',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isLowStock
-                                  ? AppTheme.warningColor
-                                  : AppTheme.textSecondary,
-                              fontWeight: isLowStock
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 
   Future<void> _toggleProductStatus(Map<String, dynamic> product) async {
     try {
@@ -2169,880 +745,12 @@ class _ClientScreenState extends State<ClientScreen>
     }
   }
 
-  // ==================== ANALYTICS ====================
-  Widget _buildAnalytics(Map<String, dynamic> clientData) {
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: Supabase.instance.client
-          .from('products')
-          .stream(primaryKey: ['id'])
-          .eq('business_id', clientData['id']),
-      builder: (context, productsSnapshot) {
-        final products = productsSnapshot.data ?? [];
-
-        return StreamBuilder<List<Map<String, dynamic>>>(
-          stream: Supabase.instance.client
-              .from('order_items')
-              .stream(primaryKey: ['id'])
-              .eq('business_id', clientData['id']),
-          builder: (context, ordersSnapshot) {
-            final orderItems = ordersSnapshot.data ?? [];
-
-            final activeProducts = products
-                .where((p) => p['is_active'] == true)
-                .length;
-            final lowStockProducts = products
-                .where((p) => (p['stock_quantity'] as int? ?? 0) <= 5)
-                .toList();
-            final totalInventoryValue = products.fold(
-              0.0,
-              (sum, p) =>
-                  sum +
-                  ((p['price'] as num?)?.toDouble() ?? 0) *
-                      ((p['stock_quantity'] as num?)?.toDouble() ?? 0),
-            );
-            final averagePrice = products.isEmpty
-                ? 0.0
-                : products.fold(
-                        0.0,
-                        (sum, p) =>
-                            sum + ((p['price'] as num?)?.toDouble() ?? 0),
-                      ) /
-                      products.length;
-
-            final totalRevenue = orderItems.fold(
-              0.0,
-              (sum, item) =>
-                  sum + ((item['total_price'] as num?)?.toDouble() ?? 0),
-            );
-            final totalOrders = orderItems
-                .map((item) => item['order_id']?.toString())
-                .whereType<String>()
-                .toSet()
-                .length;
-            final totalUnitsSold = orderItems.fold(
-              0,
-              (sum, item) => sum + ((item['quantity'] as num?)?.toInt() ?? 0),
-            );
-
-            final categoryCount = <String, int>{};
-            for (final product in products) {
-              final category = product['category'] ?? 'Uncategorized';
-              categoryCount[category] = (categoryCount[category] ?? 0) + 1;
-            }
-
-            final sortedProducts = [...products]
-              ..sort(
-                (a, b) => ((b['price'] as num?)?.toDouble() ?? 0).compareTo(
-                  (a['price'] as num?)?.toDouble() ?? 0,
-                ),
-              );
-            final topProducts = sortedProducts.take(3).toList();
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    gradient: AppTheme.primaryGradient,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.insights, color: Colors.white, size: 32),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Business Insights',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                            Text(
-                              'AI-powered analytics to grow your business',
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.8),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                GridView.count(
-                  crossAxisCount: MediaQuery.of(context).size.width > 900
-                      ? 4
-                      : 2,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  childAspectRatio: 1.2,
-                  children: [
-                    _buildStatCard(
-                      'Total Products',
-                      products.length.toString(),
-                      Icons.inventory,
-                      AppTheme.primaryColor,
-                    ),
-                    _buildStatCard(
-                      'Active Products',
-                      activeProducts.toString(),
-                      Icons.check_circle,
-                      AppTheme.successColor,
-                    ),
-                    _buildStatCard(
-                      'Total Revenue',
-                      formatPHP(totalRevenue),
-                      Icons.attach_money,
-                      AppTheme.secondaryColor,
-                    ),
-                    _buildStatCard(
-                      'Total Orders',
-                      totalOrders.toString(),
-                      Icons.receipt_long,
-                      AppTheme.warningColor,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isWide = constraints.maxWidth > 800;
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: Column(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(20),
-                                margin: const EdgeInsets.only(bottom: 16),
-                                decoration: _buildCardDecoration(),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.all(8),
-                                          decoration: BoxDecoration(
-                                            color: AppTheme.primaryColor
-                                                .withOpacity(0.1),
-                                            borderRadius: BorderRadius.circular(
-                                              10,
-                                            ),
-                                          ),
-                                          child: const Icon(
-                                            Icons.category,
-                                            color: AppTheme.primaryColor,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        const Text(
-                                          'Category Distribution',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 16),
-                                    ...categoryCount.entries.map(
-                                      (entry) => Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 4,
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            SizedBox(
-                                              width: 120,
-                                              child: Text(
-                                                entry.key,
-                                                style: TextStyle(
-                                                  fontSize: 13,
-                                                  color: AppTheme.textSecondary,
-                                                ),
-                                              ),
-                                            ),
-                                            Expanded(
-                                              child: LinearProgressIndicator(
-                                                value:
-                                                    entry.value /
-                                                    products.length,
-                                                backgroundColor:
-                                                    AppTheme.dividerColor,
-                                                color: AppTheme.primaryColor,
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Text(
-                                              entry.value.toString(),
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.all(20),
-                                decoration: _buildCardDecoration(),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.all(8),
-                                          decoration: BoxDecoration(
-                                            color: AppTheme.successColor
-                                                .withOpacity(0.1),
-                                            borderRadius: BorderRadius.circular(
-                                              10,
-                                            ),
-                                          ),
-                                          child: const Icon(
-                                            Icons.trending_up,
-                                            color: AppTheme.successColor,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        const Text(
-                                          'Performance Metrics',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 16),
-                                    _buildMetricRow(
-                                      'Conversion Rate',
-                                      '${totalOrders > 0 ? ((totalUnitsSold / totalOrders) * 100).toStringAsFixed(1) : '0'}%',
-                                      AppTheme.secondaryColor,
-                                    ),
-                                    const SizedBox(height: 12),
-                                    _buildMetricRow(
-                                      'Avg Order Value',
-                                      formatPHP(
-                                        totalOrders > 0
-                                            ? totalRevenue / totalOrders
-                                            : 0,
-                                      ),
-                                      AppTheme.primaryColor,
-                                    ),
-                                    const SizedBox(height: 12),
-                                    _buildMetricRow(
-                                      'Units per Order',
-                                      totalOrders > 0
-                                          ? (totalUnitsSold / totalOrders)
-                                                .toStringAsFixed(1)
-                                          : '0',
-                                      AppTheme.warningColor,
-                                    ),
-                                    const SizedBox(height: 12),
-                                    _buildMetricRow(
-                                      'Inventory Turnover',
-                                      products.isEmpty
-                                          ? '0'
-                                          : (totalUnitsSold / products.length)
-                                                .toStringAsFixed(1),
-                                      AppTheme.successColor,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (isWide) const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            children: [
-                              if (lowStockProducts.isNotEmpty)
-                                Container(
-                                  padding: const EdgeInsets.all(20),
-                                  margin: const EdgeInsets.only(bottom: 16),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.warningColor.withOpacity(
-                                      0.1,
-                                    ),
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
-                                      color: AppTheme.warningColor.withOpacity(
-                                        0.3,
-                                      ),
-                                    ),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Icon(
-                                            Icons.warning,
-                                            color: AppTheme.warningColor,
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Text(
-                                            'Low Stock Alert',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              color: AppTheme.warningColor,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 12),
-                                      ...lowStockProducts
-                                          .take(3)
-                                          .map(
-                                            (product) => Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    vertical: 4,
-                                                  ),
-                                              child: Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment
-                                                        .spaceBetween,
-                                                children: [
-                                                  Expanded(
-                                                    child: Text(
-                                                      product['name'] ??
-                                                          'Unknown',
-                                                      maxLines: 1,
-                                                    ),
-                                                  ),
-                                                  Text(
-                                                    'Stock: ${product['stock_quantity']}',
-                                                    style: TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      color:
-                                                          AppTheme.warningColor,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                      if (lowStockProducts.length > 3)
-                                        TextButton(
-                                          onPressed: () => setState(
-                                            () => _currentSection = 2,
-                                          ),
-                                          child: Text(
-                                            'View all (${lowStockProducts.length})',
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              Container(
-                                padding: const EdgeInsets.all(20),
-                                decoration: _buildCardDecoration(),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.all(8),
-                                          decoration: BoxDecoration(
-                                            color: AppTheme.secondaryColor
-                                                .withOpacity(0.1),
-                                            borderRadius: BorderRadius.circular(
-                                              10,
-                                            ),
-                                          ),
-                                          child: const Icon(
-                                            Icons.star,
-                                            color: AppTheme.secondaryColor,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        const Text(
-                                          'Top Products by Price',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 16),
-                                    ...topProducts.asMap().entries.map(
-                                      (entry) => Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 8,
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Container(
-                                              width: 28,
-                                              height: 28,
-                                              decoration: BoxDecoration(
-                                                color: AppTheme.primaryColor
-                                                    .withOpacity(0.1),
-                                                borderRadius:
-                                                    BorderRadius.circular(8),
-                                              ),
-                                              child: Center(
-                                                child: Text(
-                                                  '${entry.key + 1}',
-                                                  style: TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    color:
-                                                        AppTheme.primaryColor,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    entry.value['name'] ??
-                                                        'Unknown',
-                                                    style: const TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                    ),
-                                                    maxLines: 1,
-                                                  ),
-                                                  Text(
-                                                    formatPHP(
-                                                      (entry.value['price']
-                                                                  as num?)
-                                                              ?.toDouble() ??
-                                                          0,
-                                                    ),
-                                                    style: TextStyle(
-                                                      fontSize: 12,
-                                                      color: AppTheme
-                                                          .textSecondary,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 8,
-                                                    vertical: 4,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color:
-                                                    entry.value['is_active'] ==
-                                                        true
-                                                    ? AppTheme.successColor
-                                                          .withOpacity(0.1)
-                                                    : AppTheme.errorColor
-                                                          .withOpacity(0.1),
-                                                borderRadius:
-                                                    BorderRadius.circular(6),
-                                              ),
-                                              child: Text(
-                                                entry.value['is_active'] == true
-                                                    ? 'Active'
-                                                    : 'Inactive',
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  color:
-                                                      entry.value['is_active'] ==
-                                                          true
-                                                      ? AppTheme.successColor
-                                                      : AppTheme.errorColor,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.all(20),
-                                margin: const EdgeInsets.only(top: 16),
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      AppTheme.secondaryColor.withOpacity(0.1),
-                                      AppTheme.primaryColor.withOpacity(0.05),
-                                    ],
-                                  ),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: AppTheme.primaryColor.withOpacity(
-                                      0.2,
-                                    ),
-                                  ),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      'Recommended Actions',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    if (lowStockProducts.isNotEmpty)
-                                      _buildActionSuggestion(
-                                        'Restock ${lowStockProducts.length} low inventory items',
-                                        Icons.inventory,
-                                        AppTheme.warningColor,
-                                      ),
-                                    if (averagePrice < 500)
-                                      _buildActionSuggestion(
-                                        'Consider premium product bundle to increase AOV',
-                                        Icons.inventory_2,
-                                        AppTheme.secondaryColor,
-                                      ),
-                                    if (products.isEmpty)
-                                      _buildActionSuggestion(
-                                        'Add your first product to start selling',
-                                        Icons.add_box,
-                                        AppTheme.primaryColor,
-                                      ),
-                                    _buildActionSuggestion(
-                                      'Run a promotion on top-performing items',
-                                      Icons.local_offer,
-                                      AppTheme.successColor,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildMetricRow(String label, String value, Color color) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-        ),
-        Text(
-          value,
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: color,
-            fontSize: 15,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildActionSuggestion(String text, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.2)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 18),
-          const SizedBox(width: 12),
-          Expanded(child: Text(text, style: TextStyle(fontSize: 13))),
-          Icon(Icons.arrow_forward, color: color, size: 16),
-        ],
-      ),
-    );
-  }
-
-  // ==================== SETTINGS ====================
-  Widget _buildSettings(Map<String, dynamic> clientData) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Preferences',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 24),
-        Container(
-          decoration: _buildCardDecoration(),
-          child: Column(
-            children: [
-              _buildSettingsTile(
-                'Email Notifications',
-                Icons.email_outlined,
-                _emailNotifications,
-                (val) => setState(() => _emailNotifications = val),
-                onTap: () =>
-                    _showSettingsMessage('Email Notifications toggled'),
-              ),
-              _buildSettingsTile(
-                'Push Notifications',
-                Icons.notifications_outlined,
-                _pushNotifications,
-                (val) => setState(() => _pushNotifications = val),
-                onTap: () => _showSettingsMessage('Push Notifications toggled'),
-              ),
-              _buildSettingsTile(
-                'Dark Mode',
-                Icons.dark_mode_outlined,
-                _darkMode,
-                (val) {
-                  setState(() => _darkMode = val);
-                  _showSettingsMessage(
-                    'Dark Mode ${val ? "enabled" : "disabled"}',
-                  );
-                },
-              ),
-              _buildSettingsTile(
-                'Sound Effects',
-                Icons.volume_up_outlined,
-                _soundEffects,
-                (val) => setState(() => _soundEffects = val),
-                onTap: () => _showSettingsMessage('Sound Effects toggled'),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 24),
-        const Text(
-          'Account',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 16),
-        Container(
-          decoration: _buildCardDecoration(),
-          child: Column(
-            children: [
-              _buildSettingsTile(
-                'Change Password',
-                Icons.lock_outline,
-                null,
-                null,
-                isSwitch: false,
-                onTap: _showChangePasswordDialog,
-              ),
-              _buildSettingsTile(
-                'Language',
-                Icons.language_outlined,
-                null,
-                null,
-                isSwitch: false,
-                value: 'English',
-                onTap: _showLanguageDialog,
-              ),
-              _buildSettingsTile(
-                'Export Data',
-                Icons.download_outlined,
-                null,
-                null,
-                isSwitch: false,
-                onTap: _exportData,
-              ),
-              _buildSettingsTile(
-                'About',
-                Icons.info_outline,
-                null,
-                null,
-                isSwitch: false,
-                onTap: _showAboutDialog,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 24),
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: _buildCardDecoration(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Store Information',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-              _buildInfoRow('Store ID', clientData['id']?.toString() ?? 'N/A'),
-              _buildInfoRow(
-                'Member Since',
-                DateFormat('MMM d, yyyy').format(DateTime.now()),
-              ),
-              _buildInfoRow('Account Type', 'Business Account'),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-          ),
-          Text(
-            value,
-            style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showSettingsMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: AppTheme.successColor,
-        duration: const Duration(seconds: 1),
-      ),
-    );
-  }
-
-  void _showChangePasswordDialog() {
-    _showSettingsMessage('Change Password feature coming soon');
-  }
-
-  void _showLanguageDialog() {
-    _showSettingsMessage('Language selection coming soon');
-  }
-
-  void _exportData() {
-    _showSettingsMessage('Exporting your data...');
-  }
-
-  void _showAboutDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          'About',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.storefront,
-              size: 48,
-              color: AppTheme.primaryColor,
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Seller Centre',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Version 1.0.0',
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Your complete solution for managing your beauty business online.',
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSettingsTile(
-    String title,
-    IconData icon,
-    bool? switchValue,
-    Function(bool)? onSwitchChange, {
-    bool isSwitch = true,
-    String? value,
-    VoidCallback? onTap,
-  }) {
-    return ListTile(
-      leading: Icon(icon, color: AppTheme.textSecondary),
-      title: Text(title),
-      trailing: isSwitch
-          ? Switch(
-              value: switchValue!,
-              onChanged: onSwitchChange,
-              activeColor: AppTheme.primaryColor,
-            )
-          : (value != null
-                ? Text(value, style: TextStyle(color: AppTheme.textSecondary))
-                : const Icon(
-                    Icons.chevron_right,
-                    color: AppTheme.textSecondary,
-                  )),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      onTap: onTap,
-    );
-  }
-
-  // ==================== Helper Methods ====================
-  BoxDecoration _buildCardDecoration() {
-    return BoxDecoration(
-      color: AppTheme.cardColor,
-      borderRadius: BorderRadius.circular(20),
-      boxShadow: AppTheme.cardShadow,
-    );
-  }
 
   void _showAddProductDialog(String businessId) async {
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (context) => _AddProductDialog(businessId: businessId),
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (context) => ProductFormPage(businessId: businessId),
+      ),
     );
     if (saved == true && mounted) {
       setState(() {
@@ -3146,12 +854,12 @@ class _AddProductDialogState extends State<_AddProductDialog> {
   final _categories = [
     'Lipstick',
     'Blush',
-    'Foundation',
+    'Contour',
+    'Setting Spray',
+    'Eyebrow',
+    'Eyeliner',
     'Concealer',
     'Eyeshadow',
-    'Eyeliner',
-    'Mascara',
-    'Eyebrow',
     'Tools & Brushes',
   ];
   final List<Map<String, dynamic>> _variations = [];
@@ -3264,7 +972,8 @@ class _AddProductDialogState extends State<_AddProductDialog> {
   Future<void> _persistColorPaletteEntry(String name, String hex) async {
     final normalizedName = name.trim();
     final normalizedHex = _normalizeHexColor(hex);
-    if (normalizedName.isEmpty || normalizedHex == '#FFFFFF' && hex.trim().isEmpty) {
+    if (normalizedName.isEmpty ||
+        normalizedHex == '#FFFFFF' && hex.trim().isEmpty) {
       return;
     }
 
@@ -3388,12 +1097,14 @@ class _AddProductDialogState extends State<_AddProductDialog> {
 
     final dx = details.localPosition.dx.clamp(0.0, size.width - 1);
     final dy = details.localPosition.dy.clamp(0.0, size.height - 1);
-    final x = (dx / size.width * decoded.width)
-        .floor()
-        .clamp(0, decoded.width - 1);
-    final y = (dy / size.height * decoded.height)
-        .floor()
-        .clamp(0, decoded.height - 1);
+    final x = (dx / size.width * decoded.width).floor().clamp(
+      0,
+      decoded.width - 1,
+    );
+    final y = (dy / size.height * decoded.height).floor().clamp(
+      0,
+      decoded.height - 1,
+    );
 
     final pixel = decoded.getPixel(x, y);
     final color = Color.fromARGB(
@@ -3443,7 +1154,11 @@ class _AddProductDialogState extends State<_AddProductDialog> {
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.bolt, color: AppTheme.primaryColor, size: 20),
+                          const Icon(
+                            Icons.bolt,
+                            color: AppTheme.primaryColor,
+                            size: 20,
+                          ),
                           const SizedBox(width: 8),
                           const Text(
                             'Quick Import',
@@ -3463,7 +1178,7 @@ class _AddProductDialogState extends State<_AddProductDialog> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                
+
                 // MANUAL ENTRY SECTION
                 _buildTextField(
                   _nameController,
@@ -3579,7 +1294,10 @@ class _AddProductDialogState extends State<_AddProductDialog> {
         prefixIcon: const Icon(Icons.link, color: AppTheme.primaryColor),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+          borderSide: const BorderSide(
+            color: AppTheme.primaryColor,
+            width: 1.5,
+          ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -3593,7 +1311,9 @@ class _AddProductDialogState extends State<_AddProductDialog> {
                   height: 20,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      AppTheme.primaryColor,
+                    ),
                   ),
                 ),
               )
@@ -3618,8 +1338,8 @@ class _AddProductDialogState extends State<_AddProductDialog> {
             canBulkImport
                 ? '🔍 Shopee search detected - Click below to import matching products'
                 : hasLink
-                    ? '✓ Link ready - Click below to extract product details'
-                    : '💡 Paste a Shopee product link or search URL to auto-fill details',
+                ? '✓ Link ready - Click below to extract product details'
+                : '💡 Paste a Shopee product link or search URL to auto-fill details',
             style: TextStyle(
               fontSize: 12,
               color: hasLink ? AppTheme.primaryColor : AppTheme.textSecondary,
@@ -3638,11 +1358,15 @@ class _AddProductDialogState extends State<_AddProductDialog> {
                         height: 16,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
                         ),
                       )
                     : Icon(
-                        canBulkImport ? Icons.file_download_outlined : Icons.auto_awesome,
+                        canBulkImport
+                            ? Icons.file_download_outlined
+                            : Icons.auto_awesome,
                       ),
                 label: Text(
                   canBulkImport ? 'Import Shopee Search' : 'Extract Details',
@@ -3736,7 +1460,7 @@ class _AddProductDialogState extends State<_AddProductDialog> {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             TextButton.icon(
-                onPressed: () => setState(() {
+              onPressed: () => setState(() {
                 final initialStock = _variations.isEmpty
                     ? (_stockController.text.isNotEmpty
                           ? _stockController.text
@@ -3785,9 +1509,7 @@ class _AddProductDialogState extends State<_AddProductDialog> {
     final nameController = TextEditingController(
       text: variation['name']?.toString() ?? '',
     );
-    final hexController = TextEditingController(
-      text: _variationHex(variation),
-    );
+    final hexController = TextEditingController(text: _variationHex(variation));
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -4079,7 +1801,9 @@ class _AddProductDialogState extends State<_AddProductDialog> {
 
   double? _parseShopeePrice(dynamic rawPrice) {
     if (rawPrice == null) return null;
-    final numVal = rawPrice is num ? rawPrice : num.tryParse(rawPrice.toString());
+    final numVal = rawPrice is num
+        ? rawPrice
+        : num.tryParse(rawPrice.toString());
     if (numVal == null) return null;
     final value = numVal.toDouble();
     if (value > 1000000) return value / 100000;
@@ -4125,7 +1849,9 @@ class _AddProductDialogState extends State<_AddProductDialog> {
     ];
     for (final raw in candidates) {
       final str = raw?.toString().trim();
-      if (str != null && str.isNotEmpty && !_isPlaceholderShopeeDescription(str)) {
+      if (str != null &&
+          str.isNotEmpty &&
+          !_isPlaceholderShopeeDescription(str)) {
         return str;
       }
     }
@@ -4143,10 +1869,14 @@ class _AddProductDialogState extends State<_AddProductDialog> {
 
     return {
       'description': cleanMeta(
-        document.querySelector('meta[name="description"]')?.attributes['content'],
+        document
+            .querySelector('meta[name="description"]')
+            ?.attributes['content'],
       ),
       'image': cleanMeta(
-        document.querySelector('meta[property="og:image"]')?.attributes['content'],
+        document
+            .querySelector('meta[property="og:image"]')
+            ?.attributes['content'],
       ),
     };
   }
@@ -4200,7 +1930,9 @@ class _AddProductDialogState extends State<_AddProductDialog> {
         for (var i = 0; i < options.length; i++) {
           final optionValue = options[i]?.toString();
           if (optionValue == null || optionValue.isEmpty) continue;
-          final tierName = optionNames.keys.elementAt(i < optionNames.length ? i : 0);
+          final tierName = optionNames.keys.elementAt(
+            i < optionNames.length ? i : 0,
+          );
           if (tierName.isNotEmpty) {
             values.add('$tierName: $optionValue');
           } else {
@@ -4214,11 +1946,13 @@ class _AddProductDialogState extends State<_AddProductDialog> {
         displayName = 'Variant';
       }
 
-      final price = _parseShopeePrice(
+      final price =
+          _parseShopeePrice(
             map['price'] ?? map['price_value'] ?? map['price_min'],
           ) ??
           0.0;
-      final stockRaw = map['stock'] ?? map['normal_stock'] ?? map['stock_quantity'];
+      final stockRaw =
+          map['stock'] ?? map['normal_stock'] ?? map['stock_quantity'];
       final stock = stockRaw is int
           ? stockRaw
           : int.tryParse(stockRaw?.toString() ?? '') ?? 0;
@@ -4235,16 +1969,16 @@ class _AddProductDialogState extends State<_AddProductDialog> {
     return variations;
   }
 
-  String _buildShopeeProductLink(
-    Map<String, dynamic> item,
-    Uri sourceUri,
-  ) {
+  String _buildShopeeProductLink(Map<String, dynamic> item, Uri sourceUri) {
     final shopId = item['shopid']?.toString() ?? item['shop_id']?.toString();
     final itemId = item['itemid']?.toString() ?? item['item_id']?.toString();
     final name = (item['name'] ?? item['item_basic']?['name'] ?? 'product')
         .toString()
         .trim();
-    if (shopId != null && shopId.isNotEmpty && itemId != null && itemId.isNotEmpty) {
+    if (shopId != null &&
+        shopId.isNotEmpty &&
+        itemId != null &&
+        itemId.isNotEmpty) {
       final slug = name
           .toLowerCase()
           .replaceAll(RegExp(r'[^a-z0-9\s-]'), '')
@@ -4266,14 +2000,24 @@ class _AddProductDialogState extends State<_AddProductDialog> {
         if (map['item_basic'] is Map) {
           final base = Map<String, dynamic>.from(map['item_basic'] as Map);
           final combined = <String, dynamic>{...map, ...base};
-          final key = '${combined['shopid'] ?? combined['shop_id'] ?? ''}-${combined['itemid'] ?? combined['item_id'] ?? ''}-${combined['name'] ?? ''}';
+          final key =
+              '${combined['shopid'] ?? combined['shop_id'] ?? ''}-${combined['itemid'] ?? combined['item_id'] ?? ''}-${combined['name'] ?? ''}';
           if (seenKeys.add(key)) items.add(combined);
-        } else if (map.containsKey('itemid') || map.containsKey('shopid') || map.containsKey('name')) {
-          final key = '${map['shopid'] ?? map['shop_id'] ?? ''}-${map['itemid'] ?? map['item_id'] ?? ''}-${map['name'] ?? ''}';
+        } else if (map.containsKey('itemid') ||
+            map.containsKey('shopid') ||
+            map.containsKey('name')) {
+          final key =
+              '${map['shopid'] ?? map['shop_id'] ?? ''}-${map['itemid'] ?? map['item_id'] ?? ''}-${map['name'] ?? ''}';
           if (seenKeys.add(key)) items.add(map);
         }
 
-        for (final key in ['items', 'item', 'data', 'results', 'search_items']) {
+        for (final key in [
+          'items',
+          'item',
+          'data',
+          'results',
+          'search_items',
+        ]) {
           final child = map[key];
           if (child != null) visit(child);
         }
@@ -4319,7 +2063,9 @@ class _AddProductDialogState extends State<_AddProductDialog> {
   }
 
   Future<void> _importShopeeSearchProducts(Uri uri) async {
-    final keyword = _normalizeShopeeKeyword(uri.queryParameters['keyword'] ?? '');
+    final keyword = _normalizeShopeeKeyword(
+      uri.queryParameters['keyword'] ?? '',
+    );
     if (keyword.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -4412,20 +2158,27 @@ class _AddProductDialogState extends State<_AddProductDialog> {
 
         final productLink = _buildShopeeProductLink(item, uri);
         final normalizedName = name.toLowerCase();
-        if (existingLinks.contains(productLink) || existingNames.contains(normalizedName)) {
+        if (existingLinks.contains(productLink) ||
+            existingNames.contains(normalizedName)) {
           skipped++;
           continue;
         }
 
         final imageUrl = _buildShopeeImageUrl(item);
-        final price = _parseShopeePrice(
+        final price =
+            _parseShopeePrice(
               item['price_min'] ?? item['price'] ?? item['price_max'],
             ) ??
             0.0;
         final description = _extractShopeeDescription(item) ?? '';
-        final stock = (item['stock'] ?? item['item_basic']?['stock'] ?? 0) is int
+        final stock =
+            (item['stock'] ?? item['item_basic']?['stock'] ?? 0) is int
             ? (item['stock'] ?? item['item_basic']?['stock'] ?? 0) as int
-            : int.tryParse((item['stock'] ?? item['item_basic']?['stock'] ?? 0).toString()) ?? 0;
+            : int.tryParse(
+                    (item['stock'] ?? item['item_basic']?['stock'] ?? 0)
+                        .toString(),
+                  ) ??
+                  0;
         final variations = _extractShopeeVariations(item);
 
         final productData = <String, dynamic>{
@@ -4455,7 +2208,9 @@ class _AddProductDialogState extends State<_AddProductDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Imported $inserted product(s) from Shopee search${skipped > 0 ? ' ($skipped skipped)' : ''}'),
+            content: Text(
+              'Imported $inserted product(s) from Shopee search${skipped > 0 ? ' ($skipped skipped)' : ''}',
+            ),
             backgroundColor: Colors.green,
           ),
         );
@@ -4505,7 +2260,8 @@ class _AddProductDialogState extends State<_AddProductDialog> {
             if (normalizedShopId == null || normalizedShopId.isEmpty) return;
             if (normalizedItemId == null || normalizedItemId.isEmpty) return;
             final key = '$normalizedShopId:$normalizedItemId';
-            if (candidateIds.any((candidate) => candidate['key'] == key)) return;
+            if (candidateIds.any((candidate) => candidate['key'] == key))
+              return;
             candidateIds.add({
               'shopId': normalizedShopId,
               'itemId': normalizedItemId,
@@ -4513,16 +2269,26 @@ class _AddProductDialogState extends State<_AddProductDialog> {
             });
           }
 
-          final pathMatch = RegExp(r'/product/(\d+)/(\d+)').firstMatch(full) ??
+          final pathMatch =
+              RegExp(r'/product/(\d+)/(\d+)').firstMatch(full) ??
               RegExp(r'/item/(\d+)/(\d+)').firstMatch(full) ??
               RegExp(r'-i\.(\d+)\.(\d+)').firstMatch(full);
           if (pathMatch != null) {
             addCandidate(pathMatch.group(1), pathMatch.group(2));
           }
 
-          addCandidate(uri.queryParameters['vShopId'], uri.queryParameters['vItemId']);
-          addCandidate(uri.queryParameters['shopid'], uri.queryParameters['itemid']);
-          addCandidate(uri.queryParameters['shopId'], uri.queryParameters['itemId']);
+          addCandidate(
+            uri.queryParameters['vShopId'],
+            uri.queryParameters['vItemId'],
+          );
+          addCandidate(
+            uri.queryParameters['shopid'],
+            uri.queryParameters['itemid'],
+          );
+          addCandidate(
+            uri.queryParameters['shopId'],
+            uri.queryParameters['itemId'],
+          );
 
           Map<String, dynamic>? extractShopeeItem(dynamic payload) {
             if (payload is Map) {
@@ -4578,7 +2344,9 @@ class _AddProductDialogState extends State<_AddProductDialog> {
             for (final candidate in candidateIds) {
               final shopId = candidate['shopId']!;
               final itemId = candidate['itemId']!;
-              final apiUri = Uri.parse('${uri.scheme}://${uri.host}/api/v4/item/get?itemid=$itemId&shopid=$shopId');
+              final apiUri = Uri.parse(
+                '${uri.scheme}://${uri.host}/api/v4/item/get?itemid=$itemId&shopid=$shopId',
+              );
               final apiRes = await http.get(
                 apiUri,
                 headers: {
@@ -4603,9 +2371,14 @@ class _AddProductDialogState extends State<_AddProductDialog> {
           }
 
           if (item != null) {
-            final productName = (item['name'] ?? item['item_basic']?['name'])?.toString().trim();
+            final productName = (item['name'] ?? item['item_basic']?['name'])
+                ?.toString()
+                .trim();
             final description = _extractShopeeDescription(item);
-            final stockRaw = item['stock'] ?? item['item_basic']?['stock'] ?? item['models']?['stock'];
+            final stockRaw =
+                item['stock'] ??
+                item['item_basic']?['stock'] ??
+                item['models']?['stock'];
             final imageUrl = _buildShopeeImageUrl(item);
 
             String? enrichedDescription = description;
@@ -4613,15 +2386,20 @@ class _AddProductDialogState extends State<_AddProductDialog> {
             if ((enrichedDescription == null || enrichedDescription.isEmpty) ||
                 (enrichedImageUrl == null || enrichedImageUrl.isEmpty)) {
               try {
-                final pageResponse = await http.get(
-                  uri,
-                  headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                  },
-                ).timeout(const Duration(seconds: 8));
+                final pageResponse = await http
+                    .get(
+                      uri,
+                      headers: {
+                        'User-Agent':
+                            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                      },
+                    )
+                    .timeout(const Duration(seconds: 8));
 
                 if (pageResponse.statusCode == 200) {
-                  final htmlMeta = _extractShopeeMetadataFromHtml(pageResponse.body);
+                  final htmlMeta = _extractShopeeMetadataFromHtml(
+                    pageResponse.body,
+                  );
                   enrichedDescription ??= htmlMeta['description'];
                   enrichedImageUrl ??= htmlMeta['image'];
                 }
@@ -4647,7 +2425,9 @@ class _AddProductDialogState extends State<_AddProductDialog> {
               }
             }
 
-            final guessedCategory = productName != null ? _guessCategory(productName) : null;
+            final guessedCategory = productName != null
+                ? _guessCategory(productName)
+                : null;
             final stock = stockRaw is int
                 ? stockRaw
                 : int.tryParse(stockRaw?.toString() ?? '') ?? 0;
@@ -4660,7 +2440,8 @@ class _AddProductDialogState extends State<_AddProductDialog> {
               if (price != null && price > 0) {
                 _priceController.text = price.toStringAsFixed(2);
               }
-              if (enrichedDescription != null && enrichedDescription.isNotEmpty) {
+              if (enrichedDescription != null &&
+                  enrichedDescription.isNotEmpty) {
                 _descriptionController.text = enrichedDescription;
               }
               if (enrichedImageUrl != null && enrichedImageUrl.isNotEmpty) {
@@ -4682,7 +2463,9 @@ class _AddProductDialogState extends State<_AddProductDialog> {
 
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('✓ Shopee product loaded from ${matchedSource ?? 'link'}!'),
+                content: Text(
+                  '✓ Shopee product loaded from ${matchedSource ?? 'link'}!',
+                ),
                 backgroundColor: Colors.green,
               ),
             );
@@ -4696,19 +2479,25 @@ class _AddProductDialogState extends State<_AddProductDialog> {
           if ((item == null || item.isEmpty) && localTitle.isNotEmpty) {
             setState(() {
               _nameController.text = localTitle;
-              _selectedCategory = _guessCategory(localTitle) ?? _selectedCategory;
+              _selectedCategory =
+                  _guessCategory(localTitle) ?? _selectedCategory;
             });
-            if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('✓ Title extracted from link — fill remaining details manually.'),
-                backgroundColor: Colors.green,
-              ),
-            );
+            if (mounted)
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    '✓ Title extracted from link — fill remaining details manually.',
+                  ),
+                  backgroundColor: Colors.green,
+                ),
+              );
             return;
           }
 
           // Inform the user and allow the generic HTML extractor to run as a fallback.
-          final idList = candidateIds.map((c) => '${c['shopId']}:${c['itemId']}').join(', ');
+          final idList = candidateIds
+              .map((c) => '${c['shopId']}:${c['itemId']}')
+              .join(', ');
           if (mounted) {
             showDialog(
               context: context,
@@ -4723,7 +2512,9 @@ class _AddProductDialogState extends State<_AddProductDialog> {
                       Navigator.pop(context);
                       Clipboard.setData(ClipboardData(text: idList));
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Candidate IDs copied to clipboard')),
+                        const SnackBar(
+                          content: Text('Candidate IDs copied to clipboard'),
+                        ),
                       );
                     },
                     child: const Text('Copy IDs'),
@@ -4749,25 +2540,32 @@ class _AddProductDialogState extends State<_AddProductDialog> {
       }
 
       // Generic HTML metadata extraction fallback
-      final response = await http.get(
-        uri,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        },
-      ).timeout(const Duration(seconds: 8));
+      final response = await http
+          .get(
+            uri,
+            headers: {
+              'User-Agent':
+                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            },
+          )
+          .timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200) {
         final document = html_parser.parse(response.body);
 
         String? productName =
-            document.querySelector('meta[property="og:title"]')?.attributes['content'] ??
+            document
+                .querySelector('meta[property="og:title"]')
+                ?.attributes['content'] ??
             document.querySelector('title')?.text;
 
         if (productName != null && productName.contains('|')) {
           productName = productName.split('|')[0].trim();
         }
 
-        String? priceStr = document.querySelector('meta[property="product:price:amount"]')?.attributes['content'];
+        String? priceStr = document
+            .querySelector('meta[property="product:price:amount"]')
+            ?.attributes['content'];
         double? price;
         if (priceStr != null) {
           final priceMatch = RegExp(r'(\d+(?:\.\d+)?)').firstMatch(priceStr);
@@ -4776,8 +2574,12 @@ class _AddProductDialogState extends State<_AddProductDialog> {
           }
         }
 
-        String? description = document.querySelector('meta[name="description"]')?.attributes['content'];
-        String? imageUrl = document.querySelector('meta[property="og:image"]')?.attributes['content'];
+        String? description = document
+            .querySelector('meta[name="description"]')
+            ?.attributes['content'];
+        String? imageUrl = document
+            .querySelector('meta[property="og:image"]')
+            ?.attributes['content'];
 
         String? guessedCategory;
         if (productName != null) {
@@ -4804,9 +2606,14 @@ class _AddProductDialogState extends State<_AddProductDialog> {
         dynamic findItemInJson(dynamic payload) {
           if (payload is Map) {
             final map = Map<String, dynamic>.from(payload);
-            if (map.containsKey('item') && map['item'] is Map) return Map<String, dynamic>.from(map['item']);
-            if (map.containsKey('item_basic') && map['item_basic'] is Map) return Map<String, dynamic>.from(map['item_basic']);
-            if (map.containsKey('name') || map.containsKey('price') || map.containsKey('images')) return map;
+            if (map.containsKey('item') && map['item'] is Map)
+              return Map<String, dynamic>.from(map['item']);
+            if (map.containsKey('item_basic') && map['item_basic'] is Map)
+              return Map<String, dynamic>.from(map['item_basic']);
+            if (map.containsKey('name') ||
+                map.containsKey('price') ||
+                map.containsKey('images'))
+              return map;
             for (final v in map.values) {
               final found = findItemInJson(v);
               if (found != null) return found;
@@ -4820,12 +2627,17 @@ class _AddProductDialogState extends State<_AddProductDialog> {
           return null;
         }
 
-        if (productName == null || (price == null && description == null && imageUrl == null)) {
+        if (productName == null ||
+            (price == null && description == null && imageUrl == null)) {
           final scripts = document.getElementsByTagName('script');
           for (final script in scripts) {
-            final text = script.text ?? '';
+            final text = script.text;
             if (text.isEmpty) continue;
-            if (!(text.contains('window.__INITIAL_STATE__') || text.contains('g_page_config') || text.contains('item_basic') || text.contains('itemid') || text.contains('itemid'))) {
+            if (!(text.contains('window.__INITIAL_STATE__') ||
+                text.contains('g_page_config') ||
+                text.contains('item_basic') ||
+                text.contains('itemid') ||
+                text.contains('itemid'))) {
               continue;
             }
 
@@ -4846,12 +2658,17 @@ class _AddProductDialogState extends State<_AddProductDialog> {
 
           if (scriptFoundItem != null) {
             // prefer script-found values when meta tags were missing
-            final sf = scriptFoundItem!;
-            if (productName == null || productName!.isEmpty) {
-              productName = (sf['name'] ?? sf['item_basic']?['name'])?.toString();
+            final sf = scriptFoundItem;
+            if (productName == null || productName.isEmpty) {
+              productName = (sf['name'] ?? sf['item_basic']?['name'])
+                  ?.toString();
             }
             if ((price == null || price == 0) && sf.isNotEmpty) {
-              final cand = sf['price_min'] ?? sf['price'] ?? sf['price_max'] ?? sf['item_basic']?['price_min'];
+              final cand =
+                  sf['price_min'] ??
+                  sf['price'] ??
+                  sf['price_max'] ??
+                  sf['item_basic']?['price_min'];
               final parsed = _parseShopeePrice(cand);
               if (parsed != null && parsed > 0) price = parsed;
             }
@@ -4865,21 +2682,27 @@ class _AddProductDialogState extends State<_AddProductDialog> {
             if (_isPlaceholderShopeeDescription(description)) {
               description = null;
             }
-            if (imageUrl == null || imageUrl!.isEmpty) {
+            if (imageUrl == null || imageUrl.isEmpty) {
               imageUrl = _buildShopeeImageUrl(sf);
             }
 
-            final guessed = productName != null ? _guessCategory(productName!) : null;
+            final guessed = productName != null
+                ? _guessCategory(productName)
+                : null;
             final variationsFromScript = <Map<String, dynamic>>[];
             try {
-              final extractedVar = _extractShopeeVariations(scriptFoundItem!);
-              if (extractedVar.isNotEmpty) variationsFromScript.addAll(extractedVar);
+              final extractedVar = _extractShopeeVariations(scriptFoundItem);
+              if (extractedVar.isNotEmpty)
+                variationsFromScript.addAll(extractedVar);
             } catch (_) {}
 
             setState(() {
-              if (productName != null && productName!.isNotEmpty) _nameController.text = productName!.trim();
-              if (price != null && price > 0) _priceController.text = price!.toStringAsFixed(2);
-              if (description != null && description!.isNotEmpty) _descriptionController.text = description!;
+              if (productName != null && productName.isNotEmpty)
+                _nameController.text = productName.trim();
+              if (price != null && price > 0)
+                _priceController.text = price.toStringAsFixed(2);
+              if (description != null && description.isNotEmpty)
+                _descriptionController.text = description;
               if (imageUrl != null && imageUrl.isNotEmpty) {
                 _imagePreviewUrl = imageUrl;
                 _imageUrlController.text = imageUrl;
@@ -4903,7 +2726,11 @@ class _AddProductDialogState extends State<_AddProductDialog> {
         }
 
         // Check if we actually extracted anything
-        final extracted = productName != null || price != null || description != null || imageUrl != null;
+        final extracted =
+            productName != null ||
+            price != null ||
+            description != null ||
+            imageUrl != null;
 
         setState(() {
           if (productName != null && productName.isNotEmpty) {
@@ -4934,7 +2761,9 @@ class _AddProductDialogState extends State<_AddProductDialog> {
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('⚠ No product data found on this page. Enter details manually.'),
+              content: Text(
+                '⚠ No product data found on this page. Enter details manually.',
+              ),
               backgroundColor: Colors.orange,
             ),
           );
@@ -4951,7 +2780,9 @@ class _AddProductDialogState extends State<_AddProductDialog> {
       print('Metadata fetch error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error fetching details: ${e.toString().replaceAll('Exception: ', '')}'),
+          content: Text(
+            'Error fetching details: ${e.toString().replaceAll('Exception: ', '')}',
+          ),
           backgroundColor: Colors.orange,
         ),
       );
@@ -4960,7 +2791,9 @@ class _AddProductDialogState extends State<_AddProductDialog> {
     }
   }
 
-  Future<void> _attemptShopeeApiByCandidates(List<Map<String, String>> candidateIds) async {
+  Future<void> _attemptShopeeApiByCandidates(
+    List<Map<String, String>> candidateIds,
+  ) async {
     if (candidateIds.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No Shopee candidate IDs available')),
@@ -4981,10 +2814,15 @@ class _AddProductDialogState extends State<_AddProductDialog> {
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
-            title: Text('Shopee proxy response (${proxyResult['source'] ?? 'proxy'})'),
+            title: Text(
+              'Shopee proxy response (${proxyResult['source'] ?? 'proxy'})',
+            ),
             content: SingleChildScrollView(child: SelectableText(pretty)),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
             ],
           ),
         );
@@ -4993,7 +2831,9 @@ class _AddProductDialogState extends State<_AddProductDialog> {
 
       final shopId = firstCandidate['shopId'] ?? '';
       final itemId = firstCandidate['itemId'] ?? '';
-      final apiUri = Uri.parse('https://shopee.ph/api/v4/item/get?itemid=$itemId&shopid=$shopId');
+      final apiUri = Uri.parse(
+        'https://shopee.ph/api/v4/item/get?itemid=$itemId&shopid=$shopId',
+      );
       final apiRes = await http.get(
         apiUri,
         headers: {
@@ -5008,17 +2848,22 @@ class _AddProductDialogState extends State<_AddProductDialog> {
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Shopee API Error'),
-          content: Text('Status ${apiRes.statusCode}: ${apiRes.reasonPhrase ?? ''}'),
+          content: Text(
+            'Status ${apiRes.statusCode}: ${apiRes.reasonPhrase ?? ''}',
+          ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
           ],
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error calling Shopee API: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error calling Shopee API: $e')));
     }
   }
 
@@ -5031,8 +2876,12 @@ class _AddProductDialogState extends State<_AddProductDialog> {
         'shopee-import',
         body: {
           'url': sourceUri.toString(),
-          'shopId': candidateIds.isNotEmpty ? candidateIds.first['shopId'] : null,
-          'itemId': candidateIds.isNotEmpty ? candidateIds.first['itemId'] : null,
+          'shopId': candidateIds.isNotEmpty
+              ? candidateIds.first['shopId']
+              : null,
+          'itemId': candidateIds.isNotEmpty
+              ? candidateIds.first['itemId']
+              : null,
           'displayModelId': sourceUri.queryParameters['display_model_id'],
         },
       );
@@ -5162,9 +3011,10 @@ class _AddProductDialogState extends State<_AddProductDialog> {
       };
 
       for (final variation in _variations) {
-        final variationName = (variation['name'] ?? variation['color_name'] ?? '')
-            .toString()
-            .trim();
+        final variationName =
+            (variation['name'] ?? variation['color_name'] ?? '')
+                .toString()
+                .trim();
         final variationHex = _variationHex(variation);
         await _persistColorPaletteEntry(variationName, variationHex);
       }
@@ -5230,12 +3080,12 @@ class _EditProductDialogState extends State<_EditProductDialog> {
   final _categories = [
     'Lipstick',
     'Blush',
-    'Foundation',
+    'Contour',
+    'Setting Spray',
+    'Eyebrow',
+    'Eyeliner',
     'Concealer',
     'Eyeshadow',
-    'Eyeliner',
-    'Mascara',
-    'Eyebrow',
     'Tools & Brushes',
   ];
 

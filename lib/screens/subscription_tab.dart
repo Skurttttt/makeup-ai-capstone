@@ -13,6 +13,7 @@ class SubscriptionTab extends StatefulWidget {
 class _SubscriptionTabState extends State<SubscriptionTab> {
   final _supabaseService = SupabaseService();
   Map<String, dynamic>? _selectedPlan;
+  String _selectedPaymentMethod = 'paymongo';
 
   @override
   Widget build(BuildContext context) {
@@ -566,87 +567,142 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
 
+    // Reset payment method to paymongo when showing confirmation
+    _selectedPaymentMethod = 'paymongo';
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          'Subscribe to $planName',
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Plan: $planName',
-              style: const TextStyle(fontWeight: FontWeight.w500),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(
+            'Subscribe to $planName',
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Plan: $planName',
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Price: ₱${price.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFFF4D97),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Billing: $billingPeriod',
+                  style: const TextStyle(fontSize: 13, color: Colors.black54),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Payment Method',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                RadioListTile<String>(
+                  value: 'paymongo',
+                  groupValue: _selectedPaymentMethod,
+                  onChanged: (value) =>
+                      setDialogState(() => _selectedPaymentMethod = value!),
+                  title: Row(
+                    children: [
+                      Image.network(
+                        'https://paymongo.com/favicon.ico',
+                        height: 24,
+                        width: 24,
+                        errorBuilder: (_, __, ___) =>
+                            const Icon(Icons.credit_card),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Credit / Debit Card',
+                        style: TextStyle(color: Colors.black87, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                  activeColor: const Color(0xFFFF4D97),
+                  dense: true,
+                ),
+                RadioListTile<String>(
+                  value: 'gcash',
+                  groupValue: _selectedPaymentMethod,
+                  onChanged: (value) =>
+                      setDialogState(() => _selectedPaymentMethod = value!),
+                  title: const Row(
+                    children: [
+                      Icon(Icons.mobile_screen_share, color: Color(0xFF00A4EF)),
+                      SizedBox(width: 12),
+                      Text(
+                        'GCash',
+                        style: TextStyle(color: Colors.black87, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                  activeColor: const Color(0xFFFF4D97),
+                  dense: true,
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Price: ₱${price.toStringAsFixed(2)}',
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFFFF4D97),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => navigator.pop(),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                navigator.pop();
+
+                try {
+                  final response = await _supabaseService
+                      .createPaymongoCheckoutForPlan(
+                        planId: _selectedPlan!['id'],
+                        paymentMethod: _selectedPaymentMethod,
+                      );
+
+                  final checkoutUrl = response['checkout_url']?.toString();
+                  if (checkoutUrl == null || checkoutUrl.isEmpty) {
+                    throw 'Missing checkout URL';
+                  }
+
+                  await _openCheckoutUrl(checkoutUrl);
+                } catch (e) {
+                  if (mounted) {
+                    scaffoldMessenger.showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to start checkout: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF4D97),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Billing: $billingPeriod',
-              style: const TextStyle(fontSize: 13, color: Colors.black54),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'You will be redirected to PayMongo to complete payment.',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+              child: const Text(
+                'Subscribe',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => navigator.pop(),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              navigator.pop();
-
-              try {
-                final response = await _supabaseService
-                    .createPaymongoCheckoutForPlan(
-                      planId: _selectedPlan!['id'],
-                    );
-
-                final checkoutUrl = response['checkout_url']?.toString();
-                if (checkoutUrl == null || checkoutUrl.isEmpty) {
-                  throw 'Missing checkout URL';
-                }
-
-                await _openCheckoutUrl(checkoutUrl);
-              } catch (e) {
-                if (mounted) {
-                  scaffoldMessenger.showSnackBar(
-                    SnackBar(
-                      content: Text('Failed to start checkout: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF4D97),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text(
-              'Subscribe',
-              style: TextStyle(color: Colors.white),
-            ),
-          ),
-        ],
       ),
     );
   }

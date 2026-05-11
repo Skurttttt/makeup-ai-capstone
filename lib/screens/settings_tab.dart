@@ -117,6 +117,7 @@ class _SettingsTabState extends State<SettingsTab> {
             ? name.trim()
             : 'Beauty Enthusiast';
       });
+      debugPrint('Loaded user id: $_userId');
     }
   }
 
