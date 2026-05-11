@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'dart:math';
 
@@ -7,7 +8,7 @@ import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 import 'look_engine.dart';
 import 'openai_service.dart';
-// removed unused imports
+import 'skin_analyzer.dart';
 import 'painters/lip_guide_painter.dart';
 import 'painters/eyebrow_guide_painter.dart';
 import 'painters/base_prep_guide_painter.dart';
