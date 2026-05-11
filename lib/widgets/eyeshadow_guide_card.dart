@@ -66,21 +66,25 @@ class EyeshadowGuideCard extends StatelessWidget {
             child: SizedBox(
               width: double.infinity,
               height: 230,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  RawImage(
-                    image: image,
-                    fit: BoxFit.cover,
-                  ),
-                  CustomPaint(
-                    painter: EyeshadowGuidePainter(
-                      face: face,
-                      config: config,
-                      palette: palette,
+              child: Transform.scale(
+                scale: 1.85,
+                alignment: const Alignment(0, -0.25),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    RawImage(
+                      image: image,
+                      fit: BoxFit.cover,
                     ),
-                  ),
-                ],
+                    CustomPaint(
+                      painter: EyeshadowGuidePainter(
+                        face: face,
+                        config: config,
+                        palette: palette,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -123,24 +127,6 @@ class EyeshadowGuideCard extends StatelessWidget {
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 14),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.85),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: guidePink.withOpacity(0.10)),
-            ),
-            child: Text(
-              '💡 TIP: Start with less pigment, then build intensity slowly so the blend stays smooth.',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[800],
-                height: 1.45,
-              ),
-            ),
           ),
         ],
       ),

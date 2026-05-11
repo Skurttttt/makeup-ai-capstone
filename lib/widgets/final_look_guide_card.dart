@@ -45,29 +45,33 @@ class FinalLookGuideCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             child: SizedBox(
               width: double.infinity,
-              height: 360,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  RawImage(
-                    image: image,
-                    fit: BoxFit.cover,
-                  ),
-                  CustomPaint(
-                    painter: FinalLookGuidePainter(
-                      face: face,
-                      imageSize: Size(
-                        image.width.toDouble(),
-                        image.height.toDouble(),
+              height: 300,
+              child: Transform.scale(
+                scale: 1.25,
+                alignment: const Alignment(0, 0.10),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    RawImage(
+                      image: image,
+                      fit: BoxFit.cover,
+                    ),
+                    CustomPaint(
+                      painter: FinalLookGuidePainter(
+                        face: face,
+                        imageSize: Size(
+                          image.width.toDouble(),
+                          image.height.toDouble(),
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 10),
           const Text(
             'HOW TO APPLY',
             style: TextStyle(
@@ -126,7 +130,7 @@ class _StepCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
@@ -158,7 +162,7 @@ class _StepCard extends StatelessWidget {
           Text(
             description,
             style: TextStyle(
-              fontSize: 10,
+              fontSize: 9,
               color: Colors.grey.shade600,
               height: 1.3,
             ),

@@ -42,9 +42,9 @@ class EyebrowGuideCard extends StatelessWidget {
           const SizedBox(height: 14),
           ClipRRect(
             borderRadius: BorderRadius.circular(18),
-            child: Container(
-              width: double.infinity,
-              color: Colors.white,
+            child: Transform.scale(
+              scale: 1.75,
+              alignment: const Alignment(0, -0.35),
               child: Image.file(
                 File(imagePath),
                 width: double.infinity,
@@ -75,20 +75,6 @@ class EyebrowGuideCard extends StatelessWidget {
               SizedBox(width: 8),
               Expanded(child: _StepCard(number: '3', title: 'Tail', desc: 'Extend and define the outer tail.')),
             ],
-          ),
-          const SizedBox(height: 14),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.85),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: guidePink.withOpacity(0.10)),
-            ),
-            child: Text(
-              '💡 TIP: Use light hair-like strokes first, then build definition gradually.',
-              style: TextStyle(fontSize: 12, color: Colors.grey[800], height: 1.45),
-            ),
           ),
         ],
       ),

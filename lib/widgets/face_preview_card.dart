@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 import '../look_engine.dart';
+import '../makeup_layer.dart';
 import '../painters/makeup_overlay_painter.dart';
 import '../utils.dart';
 
@@ -53,6 +54,7 @@ class FacePreviewCard extends StatelessWidget {
   final FaceProfile? faceProfile;
   final MakeupLookPreset preset;
   final ValueNotifier<MakeupPreviewValues> previewValues;
+  final MakeupLayer makeupLayer;
 
   const FacePreviewCard({
     super.key,
@@ -64,6 +66,7 @@ class FacePreviewCard extends StatelessWidget {
     required this.faceProfile,
     required this.preset,
     required this.previewValues,
+    this.makeupLayer = MakeupLayer.full,
   });
 
   @override
@@ -86,6 +89,7 @@ class FacePreviewCard extends StatelessWidget {
           faceProfile: faceProfile,
           preset: preset,
           previewValues: previewValues,
+          makeupLayer: makeupLayer,
         ),
       ),
     );
@@ -101,6 +105,7 @@ class _PreviewLayer extends StatelessWidget {
   final FaceProfile? faceProfile;
   final MakeupLookPreset preset;
   final ValueNotifier<MakeupPreviewValues> previewValues;
+  final MakeupLayer makeupLayer;
 
   const _PreviewLayer({
     required this.uiImage,
@@ -111,6 +116,7 @@ class _PreviewLayer extends StatelessWidget {
     required this.faceProfile,
     required this.preset,
     required this.previewValues,
+    required this.makeupLayer,
   });
 
   @override
@@ -171,6 +177,7 @@ class _PreviewLayer extends StatelessWidget {
                         leftCheekLuminance: 0.5,
                         rightCheekLuminance: 0.5,
                         profile: faceProfile,
+                        makeupLayer: makeupLayer,
                       ),
                     );
                   },

@@ -42,12 +42,16 @@ class BasePrepGuideCard extends StatelessWidget {
           const SizedBox(height: 14),
           ClipRRect(
             borderRadius: BorderRadius.circular(18),
-            child: Image.file(
-              File(imagePath),
-              width: double.infinity,
-              height: 260,
-              fit: BoxFit.cover,
-              alignment: Alignment.center,
+            child: Transform.scale(
+              scale: 1.18,
+              alignment: const Alignment(0, 0.05),
+              child: Image.file(
+                File(imagePath),
+                width: double.infinity,
+                height: 260,
+                fit: BoxFit.cover,
+                alignment: Alignment.center,
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -89,24 +93,6 @@ class BasePrepGuideCard extends StatelessWidget {
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 14),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.85),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: guidePink.withOpacity(0.10)),
-            ),
-            child: Text(
-              '💡 TIP: Keep your base thin first. Add more only where you need coverage.',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[800],
-                height: 1.45,
-              ),
-            ),
           ),
         ],
       ),

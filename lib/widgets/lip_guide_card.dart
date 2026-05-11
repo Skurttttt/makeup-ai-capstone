@@ -75,12 +75,18 @@ class LipGuideCard extends StatelessWidget {
 
           ClipRRect(
             borderRadius: BorderRadius.circular(18),
-            child: Container(
-              color: Colors.white,
-              child: Image.file(
-                File(imagePath),
-                width: double.infinity,
-                fit: BoxFit.cover,
+            child: SizedBox(
+              height: 260,
+              width: double.infinity,
+              child: Transform.scale(
+                scale: 2.15,
+                alignment: const Alignment(0, 0.68),
+                child: Image.file(
+                  File(imagePath),
+                  width: double.infinity,
+                  height: 260,
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
           ),
@@ -127,38 +133,6 @@ class LipGuideCard extends StatelessWidget {
                 ),
               ),
             ],
-          ),
-
-          const SizedBox(height: 14),
-
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.85),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: guidePink.withOpacity(0.10)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  '💡',
-                  style: TextStyle(fontSize: 15),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'For fuller-looking lips, keep the strongest color in the center and avoid making the corners too dark.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[800],
-                      height: 1.45,
-                    ),
-                  ),
-                ),
-              ],
-            ),
           ),
         ],
       ),
@@ -208,7 +182,7 @@ class _StepCard extends StatelessWidget {
     const guidePink = Color(0xFFFF4D97);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -228,7 +202,7 @@ class _StepCard extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Text(
             title,
             textAlign: TextAlign.center,
@@ -238,12 +212,12 @@ class _StepCard extends StatelessWidget {
               color: Colors.black87,
             ),
           ),
-          const SizedBox(height: 5),
+          const SizedBox(height: 2),
           Text(
             desc,
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 10.5,
+              fontSize: 8.5,
               color: Colors.grey[700],
               height: 1.35,
             ),

@@ -5,6 +5,7 @@ import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 import '../utils.dart';
 import '../look_engine.dart';
+import '../makeup_layer.dart';
 
 import 'lip_painter.dart';
 import 'eyeshadow_painter.dart';
@@ -57,6 +58,8 @@ class MakeupOverlayPainter extends CustomPainter {
   final bool showContour;
   final bool showLips;
 
+  final MakeupLayer makeupLayer;
+
   MakeupOverlayPainter({
     this.image,
     required this.face,
@@ -87,6 +90,7 @@ class MakeupOverlayPainter extends CustomPainter {
     this.showBlush = true,
     this.showContour = true,
     this.showLips = true,
+    this.makeupLayer = MakeupLayer.full,
   });
 
   double _layerIntensity(double layerOpacity) {
@@ -122,12 +126,35 @@ class MakeupOverlayPainter extends CustomPainter {
     final contourIntensity = _layerIntensity(contourOpacity);
     final lipIntensity = _layerIntensity(lipstickOpacity);
 
-    final shouldPaintBrows = showBrows && browIntensity > 0.001;
-    final shouldPaintEyeshadow = showEyeshadow && eyeshadowIntensity > 0.001;
-    final shouldPaintEyeliner = showEyeliner && eyelinerIntensity > 0.001;
-    final shouldPaintBlush = showBlush && blushIntensity > 0.001;
-    final shouldPaintContour = showContour && contourIntensity > 0.001;
-    final shouldPaintLips = showLips && lipIntensity > 0.001;
+    final shouldPaintBrows =
+        showBrows &&
+        browIntensity > 0.001 &&
+        (makeupLayer == MakeupLayer.full || makeupLayer == MakeupLayer.brows);
+
+    final shouldPaintEyeshadow =
+        showEyeshadow &&
+        eyeshadowIntensity > 0.001 &&
+        (makeupLayer == MakeupLayer.full || makeupLayer == MakeupLayer.eyeshadow);
+
+    final shouldPaintEyeliner =
+        showEyeliner &&
+        eyelinerIntensity > 0.001 &&
+        (makeupLayer == MakeupLayer.full || makeupLayer == MakeupLayer.eyeliner);
+
+    final shouldPaintBlush =
+        showBlush &&
+        blushIntensity > 0.001 &&
+        (makeupLayer == MakeupLayer.full || makeupLayer == MakeupLayer.blush);
+
+    final shouldPaintContour =
+        showContour &&
+        contourIntensity > 0.001 &&
+        (makeupLayer == MakeupLayer.full || makeupLayer == MakeupLayer.contour);
+
+    final shouldPaintLips =
+        showLips &&
+        lipIntensity > 0.001 &&
+        (makeupLayer == MakeupLayer.full || makeupLayer == MakeupLayer.lips);
 
     if (!shouldPaintBrows &&
         !shouldPaintEyeshadow &&
@@ -248,6 +275,7 @@ class MakeupOverlayPainter extends CustomPainter {
         old.showEyeliner != showEyeliner ||
         old.showBlush != showBlush ||
         old.showContour != showContour ||
-        old.showLips != showLips;
+        old.showLips != showLips ||
+        old.makeupLayer != makeupLayer;
   }
 }

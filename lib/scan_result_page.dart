@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 import 'home_screen.dart';
+import 'makeup_layer.dart';
 import 'instructions_page.dart';
 import 'look_engine.dart';
 import 'widgets/bottom_beauty_nav.dart';
@@ -52,12 +53,12 @@ class _ScanResultPageState extends State<ScanResultPage> {
   final ValueNotifier<MakeupPreviewValues> _previewValues =
       ValueNotifier<MakeupPreviewValues>(
     const MakeupPreviewValues(
-      globalIntensity: 0.85,
-      lipOpacity: 0.85,
-      blushOpacity: 0.70,
-      eyeOpacity: 0.80,
-      linerOpacity: 0.85,
-      browOpacity: 0.75,
+      globalIntensity: 1.0,
+      lipOpacity: 1.0,
+      blushOpacity: 1.0,
+      eyeOpacity: 1.0,
+      linerOpacity: 1.0,
+      browOpacity: 1.0,
     ),
   );
 
@@ -217,12 +218,12 @@ class _ScanResultPageState extends State<ScanResultPage> {
 
   void _resetAll() {
     _previewValues.value = const MakeupPreviewValues(
-      globalIntensity: 0.85,
-      lipOpacity: 0.85,
-      blushOpacity: 0.70,
-      eyeOpacity: 0.80,
-      linerOpacity: 0.85,
-      browOpacity: 0.75,
+      globalIntensity: 1.0,
+      lipOpacity: 1.0,
+      blushOpacity: 1.0,
+      eyeOpacity: 1.0,
+      linerOpacity: 1.0,
+      browOpacity: 1.0,
     );
 
     setState(() {
@@ -297,6 +298,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
                               faceProfile: widget.faceProfile,
                               preset: _currentPreset,
                               previewValues: _previewValues,
+                              makeupLayer: MakeupLayer.full,
                             ),
                             Positioned(
                               top: 12,
@@ -326,9 +328,9 @@ class _ScanResultPageState extends State<ScanResultPage> {
                                   color: Colors.black.withOpacity(0.35),
                                   borderRadius: BorderRadius.circular(999),
                                 ),
-                                child: const Text(
-                                  'Soft Glam',
-                                  style: TextStyle(
+                                child: Text(
+                                  _currentPreset.name,
+                                  style: const TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w700,
                                     color: Colors.white,
