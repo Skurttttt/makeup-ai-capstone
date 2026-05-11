@@ -6,8 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 import 'look_engine.dart';
-import 'config/makeup_look_config.dart' as guide_config;
-import 'config/makeup_look_configs.dart';
 import 'openai_service.dart';
 import 'painters/base_prep_guide_painter.dart';
 import 'painters/eyebrow_guide_painter.dart';
@@ -45,8 +43,6 @@ class InstructionsPage extends StatefulWidget {
 }
 
 class _InstructionsPageState extends State<InstructionsPage> {
-  late final guide_config.MakeupLookConfig _config;
-
   // AI-related state
   bool _loadingAI = false;
   String? _aiError;
@@ -70,7 +66,6 @@ class _InstructionsPageState extends State<InstructionsPage> {
   @override
   void initState() {
     super.initState();
-    _config = MakeupLookConfigs.get(widget.selectedPreset);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _generateAIInstructions();
@@ -269,7 +264,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
         prefix: 'eyeshadow_guide_',
         painter: EyeshadowGuidePainter(
           face: widget.detectedFace!,
-          config: _config,
+          preset: widget.selectedPreset,
           palette: EyeshadowGuidePalette(
             lidColor: widget.look.eyeshadowColor.withOpacity(0.95),
             creaseColor: widget.look.eyeshadowColor.withOpacity(0.75),
@@ -301,7 +296,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
         prefix: 'eyeliner_guide_',
         painter: EyelinerGuidePainter(
           face: widget.detectedFace!,
-          config: _config,
+          preset: widget.selectedPreset,
           guideColor: const Color(0xFFFF4D97),
         ),
       );
@@ -612,19 +607,8 @@ class _InstructionsPageState extends State<InstructionsPage> {
                         if (_generatingEyeshadowGuide)
                           const Center(child: CircularProgressIndicator())
                         else if (_eyeshadowGuideImagePath != null)
-                          FutureBuilder<ui.Image>(
-                            future: _loadUiImageFromFile(_eyeshadowGuideImagePath!),
-                            builder: (context, snapshot) {
-                              if (!snapshot.hasData) {
-                                return const Center(child: CircularProgressIndicator());
-                              }
-
-                              return EyeshadowGuideCard(
-                                face: widget.detectedFace!,
-                                config: _config,
-                                image: snapshot.data!,
-                              );
-                            },
+                          EyeshadowGuideCard(
+                            imagePath: _eyeshadowGuideImagePath!,
                           ),
                       ],
 
@@ -632,19 +616,8 @@ class _InstructionsPageState extends State<InstructionsPage> {
                         if (_generatingEyelinerGuide)
                           const Center(child: CircularProgressIndicator())
                         else if (_eyelinerGuideImagePath != null)
-                          FutureBuilder<ui.Image>(
-                            future: _loadUiImageFromFile(_eyelinerGuideImagePath!),
-                            builder: (context, snapshot) {
-                              if (!snapshot.hasData) {
-                                return const Center(child: CircularProgressIndicator());
-                              }
-
-                              return EyelinerGuideCard(
-                                face: widget.detectedFace!,
-                                config: _config,
-                                image: snapshot.data!,
-                              );
-                            },
+                          EyelinerGuideCard(
+                            imagePath: _eyelinerGuideImagePath!,
                           ),
                       ],
 
@@ -662,7 +635,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
 
                               return BlushContourGuideCard(
                                 face: widget.detectedFace!,
-                                config: _config,
+                                preset: widget.selectedPreset,
                                 image: snapshot.data!,
                               );
                             },

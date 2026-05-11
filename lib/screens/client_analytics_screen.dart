@@ -620,25 +620,24 @@ class _ClientAnalyticsScreenState extends State<ClientAnalyticsScreen>
                 ),
                 child: Icon(metric.icon, color: metric.color, size: 22),
               ),
-              if (metric.trend != null)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [pinkSoft, pinkLight.withOpacity(0.5)],
-                    ),
-                    borderRadius: BorderRadius.circular(8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [pinkSoft, pinkLight.withOpacity(0.5)],
                   ),
-                  child: Text(
-                    metric.trend!,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: pinkPrimary,
-                    ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  metric.trend,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: pinkPrimary,
                   ),
                 ),
+              ),
             ],
           ),
           Column(

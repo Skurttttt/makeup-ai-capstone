@@ -86,7 +86,6 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
   @override
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width > 1200;
-    final isTablet = MediaQuery.of(context).size.width > 600;
 
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: Supabase.instance.client

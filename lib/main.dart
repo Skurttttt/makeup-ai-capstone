@@ -872,7 +872,13 @@ class _FaceScanPageState extends State<FaceScanPage> {
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => InstructionsPage(look: look, faceProfile: _faceProfile),
+        builder: (_) => InstructionsPage(
+          look: look,
+          faceProfile: _faceProfile,
+          scannedImagePath: _capturedFile?.path,
+          detectedFace: _detectedFace,
+          selectedPreset: _selectedLook,
+        ),
       ),
     );
   }

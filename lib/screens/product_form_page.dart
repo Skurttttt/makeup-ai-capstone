@@ -17,9 +17,7 @@ class ProductFormPage extends StatefulWidget {
 
 class _ProductFormPageState extends State<ProductFormPage> {
   static const Color primaryPink = Color(0xFFFF4D97);
-  static const Color accentPink = Color(0xFFCC3A7A);
   static const Color bgColor = Color(0xFFFFF9FB);
-  static const String targetClientLabel = 'Fashion 21';
   static const List<String> _fallbackCategories = [
     'Lipstick',
     'Blush',
@@ -668,8 +666,14 @@ class _ProductFormPageState extends State<ProductFormPage> {
                             ),
                             const Spacer(),
                             TextButton(
-                              onPressed: _showColorPaletteDialog,
-                              child: const Text('Open picker'),
+                              onPressed: _extractingColors
+                                  ? null
+                                  : _showColorPaletteDialog,
+                              child: Text(
+                                _extractingColors
+                                    ? 'Extracting...'
+                                    : 'Open picker',
+                              ),
                             ),
                           ],
                         ),
