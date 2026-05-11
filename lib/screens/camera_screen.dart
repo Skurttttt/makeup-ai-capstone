@@ -11,7 +11,6 @@ import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import '../skin_analyzer.dart';
 import '../look_engine.dart';
 import '../look_picker.dart';
-import '../painters/makeup_overlay_painter.dart';
 import '../instructions_page.dart';
 import '../scan_result_page.dart';
 

@@ -4,7 +4,7 @@ import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 import '../painters/eyeshadow_guide_painter.dart';  // ✅ IMPORT PALETTE FROM HERE
 import '../config/makeup_look_config.dart';
-import '../look_engine.dart';  // For LookResult if needed
+// import '../look_engine.dart';  // unused import removed
 
 // ✅ FIXED: EyeshadowGuideCard with correct parameters
 class EyeshadowGuideCard extends StatelessWidget {

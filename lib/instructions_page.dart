@@ -25,6 +25,7 @@ import 'widgets/final_look_guide_card.dart';
 import 'widgets/base_prep_guide_card.dart';
 import 'widgets/eyebrow_guide_card.dart';
 import 'widgets/lip_guide_card.dart';
+import 'config/makeup_look_configs.dart';
 
 class InstructionsPage extends StatefulWidget {
   final LookResult look;
@@ -119,14 +120,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
     }
   }
 
-  void _goToNextPage() {
-    if (_currentPage < 6) {
-      _pageController.nextPage(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-    }
-  }
+  MakeupLookConfig get _config => MakeupLookConfigs.get(widget.selectedPreset);
 
   Future<String> _createGuideImage({
     required String prefix,
@@ -264,7 +258,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
         prefix: 'eyeshadow_guide_',
         painter: EyeshadowGuidePainter(
           face: widget.detectedFace!,
-          preset: widget.selectedPreset,
+          config: _config,
           palette: EyeshadowGuidePalette(
             lidColor: widget.look.eyeshadowColor.withOpacity(0.95),
             creaseColor: widget.look.eyeshadowColor.withOpacity(0.75),
@@ -295,7 +289,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
         prefix: 'eyeliner_guide_',
         painter: EyelinerGuidePainter(
           face: widget.detectedFace!,
-          preset: widget.selectedPreset,
+          config: _config,
           guideColor: const Color(0xFFFF4D97),
         ),
       );

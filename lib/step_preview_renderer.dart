@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 import 'look_engine.dart';
+import 'config/makeup_look_configs.dart';
 import 'painters/makeup_overlay_painter.dart';
 import 'tutorial_step_preview.dart';
 import 'utils.dart';
@@ -29,10 +30,7 @@ class StepPreviewRenderer {
       image.height.toDouble(),
     );
 
-    final lookConfig = LookEngine.configFromPreset(
-      preset,
-      profile: faceProfile,
-    );
+    final lookConfig = MakeupLookConfigs.get(preset);
 
     final painter = MakeupOverlayPainter(
       image: image,
@@ -45,8 +43,10 @@ class StepPreviewRenderer {
       preset: preset,
       debugMode: false,
       isLiveMode: false,
-      eyelinerStyle: lookConfig.eyelinerStyle,
-      lipFinish: lookConfig.glossyLips ? LipFinish.glossy : LipFinish.matte,
+      eyelinerStyle: LookEngine.eyelinerStyleFromPreset(preset),
+      lipFinish: (preset == MakeupLookPreset.softGlam || preset == MakeupLookPreset.dollKBeauty)
+          ? LipFinish.glossy
+          : LipFinish.matte,
       skinColor: faceProfile != null
           ? Color.fromARGB(
               255,
