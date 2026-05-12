@@ -9,8 +9,11 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'auth/login_supabase_page.dart';
 import 'home_screen.dart';
 import 'instructions_page.dart';
+import 'screens/admin_screen_new.dart';
+import 'screens/client_screen.dart';
 import 'look_engine.dart';
 import 'look_picker.dart';
 import 'painters/makeup_overlay_painter.dart';
@@ -60,7 +63,73 @@ class App extends StatelessWidget {
           primary: const Color(0xFFFF4D97),
         ),
       ),
-      home: const HomeScreen(),
+      home: const AuthGate(),
+    );
+  }
+}
+
+class AuthGate extends StatefulWidget {
+  const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  @override
+  void initState() {
+    super.initState();
+    _redirect();
+  }
+
+  Future<void> _redirect() async {
+    await Future.delayed(Duration.zero);
+    if (!mounted) return;
+
+    final session = Supabase.instance.client.auth.currentSession;
+    if (session == null) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const LoginSupabasePage()),
+      );
+      return;
+    }
+
+    String? role;
+    String? accountType;
+    try {
+      final profile = await Supabase.instance.client
+          .from('accounts')
+          .select('role, account_type')
+          .eq('id', session.user.id)
+          .single();
+      role = profile['role'] as String?;
+      accountType = profile['account_type'] as String?;
+    } catch (_) {
+      role = 'user';
+    }
+
+    if (!mounted) return;
+
+    if (role?.toLowerCase() == 'admin') {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const AdminScreenNew()),
+      );
+    } else if (accountType == 'business' || role?.toLowerCase() == 'client') {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const ClientScreen()),
+      );
+    } else {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      backgroundColor: Color(0xFFFFF7FA),
+      body: Center(child: CircularProgressIndicator()),
     );
   }
 }
