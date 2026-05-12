@@ -731,7 +731,7 @@ class _ClientScreenState extends State<ClientScreen> {
             backgroundColor: AppTheme.successColor,
           ),
         );
-        setState(() => _clientDataFuture = _fetchClientData());
+        setState(() { _clientDataFuture = _fetchClientData(); });
       }
     } catch (e) {
       if (mounted) {
@@ -766,7 +766,7 @@ class _ClientScreenState extends State<ClientScreen> {
       builder: (context) => _EditProductDialog(product: product),
     );
     if (saved == true && mounted) {
-      setState(() => _clientDataFuture = _fetchClientData());
+      setState(() { _clientDataFuture = _fetchClientData(); });
     }
   }
 
@@ -809,7 +809,7 @@ class _ClientScreenState extends State<ClientScreen> {
               backgroundColor: AppTheme.successColor,
             ),
           );
-          setState(() => _clientDataFuture = _fetchClientData());
+          setState(() { _clientDataFuture = _fetchClientData(); });
         }
       } catch (e) {
         if (mounted) {

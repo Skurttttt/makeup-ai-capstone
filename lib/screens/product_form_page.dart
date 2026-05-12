@@ -193,13 +193,17 @@ class _ProductFormPageState extends State<ProductFormPage> {
   }
 
   void _setHexColor(Color color) {
-    final hex = '#${color.value.toRadixString(16).substring(2).toUpperCase()}';
-    setState(() => _hexCodeController.text = hex);
+    final r = color.red.toRadixString(16).padLeft(2, '0').toUpperCase();
+    final g = color.green.toRadixString(16).padLeft(2, '0').toUpperCase();
+    final b = color.blue.toRadixString(16).padLeft(2, '0').toUpperCase();
+    setState(() => _hexCodeController.text = '#$r$g$b');
   }
 
   Color get _hexColor {
     try {
-      return Color(int.parse(_hexCodeController.text.replaceFirst('#', '0x')));
+      final hex = _hexCodeController.text.replaceFirst('#', '');
+      if (hex.length != 6) return Colors.pink;
+      return Color(int.parse('FF$hex', radix: 16));
     } catch (e) {
       return Colors.pink;
     }
@@ -279,7 +283,7 @@ class _ProductFormPageState extends State<ProductFormPage> {
         'category': _category,
         'price': double.parse(_priceController.text),
         'currency': _currencyController.text,
-        'stock': int.parse(_stockController.text),
+        'stock_quantity': int.parse(_stockController.text),
         'image_url': imageUrl,
         'shade_name': _shadeNameController.text,
         'hex_code': _hexCodeController.text,
@@ -297,7 +301,7 @@ class _ProductFormPageState extends State<ProductFormPage> {
 
       if (mounted) {
         _showSnackBar('Product saved successfully!');
-        Navigator.pop(context);
+        Navigator.pop(context, true);
       }
     } catch (e) {
       _showSnackBar('Error saving product: $e', isError: true);
@@ -313,12 +317,12 @@ class _ProductFormPageState extends State<ProductFormPage> {
       final fileName = 'product_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final path = 'products/$fileName';
 
-      await Supabase.instance.client.storage.from('product-images').uploadBinary(
+      await Supabase.instance.client.storage.from('products').uploadBinary(
             path,
             _selectedImageBytes!,
           );
 
-      return Supabase.instance.client.storage.from('product-images').getPublicUrl(path);
+      return Supabase.instance.client.storage.from('products').getPublicUrl(path);
     } catch (e) {
       _showSnackBar('Error uploading image: $e', isError: true);
       return '';
