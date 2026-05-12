@@ -28,6 +28,15 @@ import 'widgets/base_prep_guide_card.dart';
 import 'widgets/eyebrow_guide_card.dart';
 import 'widgets/lip_guide_card.dart';
 
+// ========== SKIN TYPE ENUM ==========
+enum SkinType {
+  oily,
+  dry,
+  combination,
+  sensitive,
+  normal,
+}
+
 class InstructionsPage extends StatefulWidget {
   final LookResult look;
   final FaceProfile? faceProfile;
@@ -69,11 +78,15 @@ class _InstructionsPageState extends State<InstructionsPage> {
   String? _eyelinerGuideImagePath;
   String? _lipGuideImagePath;
 
+  // Skin type state
+  SkinType? _selectedSkinType;
+
   @override
   void initState() {
     super.initState();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showSkinTypeSheet();
       _generateAIInstructions();
     });
   }
@@ -82,6 +95,145 @@ class _InstructionsPageState extends State<InstructionsPage> {
   void dispose() {
     _pageController.dispose();
     super.dispose();
+  }
+
+  // Helper method to get skin type label
+  String _skinTypeLabel(SkinType type) {
+    switch (type) {
+      case SkinType.oily:
+        return 'Oily';
+      case SkinType.dry:
+        return 'Dry';
+      case SkinType.combination:
+        return 'Combination';
+      case SkinType.sensitive:
+        return 'Sensitive';
+      case SkinType.normal:
+        return 'Normal';
+    }
+  }
+
+  // Skin type selection modal
+  Future<void> _showSkinTypeSheet() async {
+    await showModalBottomSheet(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: Colors.transparent,
+      builder: (_) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              padding: const EdgeInsets.fromLTRB(22, 20, 22, 28),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(
+                  top: Radius.circular(28),
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '✨ Personalize Your Recommendations',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFFFF3D93),
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  const Text(
+                    'What’s your skin type?',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFF66666E),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+
+                  const SizedBox(height: 18),
+
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: SkinType.values.map((type) {
+                      final selected = _selectedSkinType == type;
+
+                      return GestureDetector(
+                        onTap: () {
+                          setModalState(() {
+                            _selectedSkinType = type;
+                          });
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: selected
+                                ? const Color(0xFFFF3D93)
+                                : const Color(0xFFFFF1F6),
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(
+                              color: selected
+                                  ? const Color(0xFFFF3D93)
+                                  : const Color(0xFFFFD3E5),
+                            ),
+                          ),
+                          child: Text(
+                            _skinTypeLabel(type),
+                            style: TextStyle(
+                              color: selected
+                                  ? Colors.white
+                                  : const Color(0xFFFF3D93),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+
+                  const SizedBox(height: 26),
+
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton(
+                      onPressed: _selectedSkinType == null
+                          ? null
+                          : () {
+                              Navigator.pop(context);
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFFF3D93),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                      ),
+                      child: const Text(
+                        'Continue',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _generateAIInstructions() async {
