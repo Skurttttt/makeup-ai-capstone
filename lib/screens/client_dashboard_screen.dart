@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:math' as math;
+import '../utils/responsive.dart';
 
 class ClientDashboardScreen extends StatefulWidget {
   final Map<String, dynamic> clientData;
@@ -352,38 +353,53 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
     String ordersDelta,
     String unitsDelta,
   ) {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildQuickStat(
-            _formatCompactCurrency(totalRevenue),
-            'Revenue',
-            Icons.trending_up,
-            pinkPrimary,
-            revenueDelta,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildQuickStat(
-            orderCount.toString(),
-            'Orders',
-            Icons.receipt_long,
-            pinkAccent,
-            ordersDelta,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildQuickStat(
-            totalUnitsSold.toString(),
-            'Units Sold',
-            Icons.shopping_bag_outlined,
-            pinkDark,
-            unitsDelta,
-          ),
-        ),
-      ],
+    final cards = [
+      _buildQuickStat(
+        _formatCompactCurrency(totalRevenue),
+        'Revenue',
+        Icons.trending_up,
+        pinkPrimary,
+        revenueDelta,
+      ),
+      _buildQuickStat(
+        orderCount.toString(),
+        'Orders',
+        Icons.receipt_long,
+        pinkAccent,
+        ordersDelta,
+      ),
+      _buildQuickStat(
+        totalUnitsSold.toString(),
+        'Units Sold',
+        Icons.shopping_bag_outlined,
+        pinkDark,
+        unitsDelta,
+      ),
+    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Narrow phones: stack vertically to give each card breathing room.
+        final width = constraints.maxWidth;
+        const spacing = 12.0;
+        if (width < 360) {
+          return Column(
+            children: [
+              for (var i = 0; i < cards.length; i++) ...[
+                if (i > 0) const SizedBox(height: spacing),
+                cards[i],
+              ],
+            ],
+          );
+        }
+        return Row(
+          children: [
+            for (var i = 0; i < cards.length; i++) ...[
+              if (i > 0) const SizedBox(width: spacing),
+              Expanded(child: cards[i]),
+            ],
+          ],
+        );
+      },
     );
   }
 

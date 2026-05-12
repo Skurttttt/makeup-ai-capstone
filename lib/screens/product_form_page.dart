@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../utils/responsive.dart';
 
 class ProductFormPage extends StatefulWidget {
   final String businessId;
@@ -18,6 +19,12 @@ class ProductFormPage extends StatefulWidget {
 class _ProductFormPageState extends State<ProductFormPage> {
   static const Color primaryPink = Color(0xFFFF4D97);
   static const Color bgColor = Color(0xFFFFF9FB);
+
+  static const List<String> _skinTypeOptions = ['Dry', 'Oily', 'Combination', 'Sensitive', 'Normal'];
+  static const List<String> _finishTypeOptions = ['Matte', 'Dewy', 'Natural', 'Glossy', 'Velvet', 'Soft Matte'];
+  static const List<String> _coverageLevelOptions = ['Light', 'Medium', 'Full', 'Buildable'];
+  static const List<String> _lookTagOptions = ['Soft Glam', 'Clean Girl', 'Douyin', 'Latte Makeup', 'Emo', 'Natural', 'Korean', 'Party Glam'];
+
   static const List<String> _fallbackCategories = [
     'Lipstick',
     'Blush',
@@ -39,6 +46,10 @@ class _ProductFormPageState extends State<ProductFormPage> {
   final _imageUrlController = TextEditingController();
   final _shadeNameController = TextEditingController(text: 'Bliss');
   final _hexCodeController = TextEditingController(text: '#D88C9A');
+  final Set<String> _selectedSkinTypes = {};
+  final Set<String> _selectedFinishTypes = {};
+  final Set<String> _selectedCoverageLevels = {};
+  final Set<String> _selectedLookTags = {};
 
   final _imagePicker = ImagePicker();
   Uint8List? _selectedImageBytes;
@@ -274,6 +285,10 @@ class _ProductFormPageState extends State<ProductFormPage> {
         'hex_code': _hexCodeController.text,
         'undertone': _undertone,
         'color_family': _colorFamily,
+        'compatible_looks': _selectedLookTags.join(', '),
+        'compatible_skin_tone': _selectedSkinTypes.join(', '),
+        'finish_type': _selectedFinishTypes.join(', '),
+        'coverage_level': _selectedCoverageLevels.join(', '),
         'morena_friendly': _morenaFriendly,
         'beginner_friendly': _beginnerFriendly,
         'budget_friendly': _budgetFriendly,
@@ -462,6 +477,55 @@ class _ProductFormPageState extends State<ProductFormPage> {
         ),
       );
 
+  Widget _buildChipSelector(
+    String label,
+    List<String> options,
+    Set<String> selected,
+    void Function(String) onToggle,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+            color: Colors.black54,
+            fontSize: 13,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: options.map((option) {
+            final isSelected = selected.contains(option);
+            return FilterChip(
+              label: Text(option),
+              selected: isSelected,
+              onSelected: (_) => onToggle(option),
+              selectedColor: primaryPink.withOpacity(0.15),
+              checkmarkColor: primaryPink,
+              labelStyle: TextStyle(
+                color: isSelected ? primaryPink : Colors.black87,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                fontSize: 13,
+              ),
+              side: BorderSide(
+                color: isSelected ? primaryPink : Colors.grey.shade300,
+              ),
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
   Widget _buildSectionCard(String title, IconData icon, List<Widget> children) => Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
@@ -541,9 +605,10 @@ class _ProductFormPageState extends State<ProductFormPage> {
           icon: const Icon(Icons.arrow_back_ios, color: Colors.black, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          'Add Product • Fashion 21',
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+        title: Text(
+          context.isCompact ? 'Add Product' : 'Add Product • Fashion 21',
+          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+          overflow: TextOverflow.ellipsis,
         ),
         actions: [
           Padding(
@@ -594,7 +659,10 @@ class _ProductFormPageState extends State<ProductFormPage> {
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-                child: Column(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 760),
+                    child: Column(
                   children: [
                     _buildSummaryCard(),
                     const SizedBox(height: 16),
@@ -762,6 +830,58 @@ class _ProductFormPageState extends State<ProductFormPage> {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 16),
+                      _buildChipSelector(
+                        'Skin Type Compatibility',
+                        _skinTypeOptions,
+                        _selectedSkinTypes,
+                        (option) => setState(() {
+                          if (_selectedSkinTypes.contains(option)) {
+                            _selectedSkinTypes.remove(option);
+                          } else {
+                            _selectedSkinTypes.add(option);
+                          }
+                        }),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildChipSelector(
+                        'Finish Type',
+                        _finishTypeOptions,
+                        _selectedFinishTypes,
+                        (option) => setState(() {
+                          if (_selectedFinishTypes.contains(option)) {
+                            _selectedFinishTypes.remove(option);
+                          } else {
+                            _selectedFinishTypes.add(option);
+                          }
+                        }),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildChipSelector(
+                        'Coverage Level',
+                        _coverageLevelOptions,
+                        _selectedCoverageLevels,
+                        (option) => setState(() {
+                          if (_selectedCoverageLevels.contains(option)) {
+                            _selectedCoverageLevels.remove(option);
+                          } else {
+                            _selectedCoverageLevels.add(option);
+                          }
+                        }),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildChipSelector(
+                        'Recommended Look Tags',
+                        _lookTagOptions,
+                        _selectedLookTags,
+                        (option) => setState(() {
+                          if (_selectedLookTags.contains(option)) {
+                            _selectedLookTags.remove(option);
+                          } else {
+                            _selectedLookTags.add(option);
+                          }
+                        }),
+                      ),
                     ]),
                     _buildSectionCard('Pricing', Icons.shopping_bag_outlined, [
                       Row(
@@ -795,6 +915,8 @@ class _ProductFormPageState extends State<ProductFormPage> {
                     ]),
                     const SizedBox(height: 20),
                   ],
+                ),
+                  ),
                 ),
               ),
             ),

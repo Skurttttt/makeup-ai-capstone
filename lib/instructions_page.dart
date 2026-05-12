@@ -8,7 +8,7 @@ import 'package:shimmer/shimmer.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 import 'look_engine.dart';
-import 'config/makeup_look_config.dart' as guide_config;
+import 'config/makeup_look_config.dart';
 import 'config/makeup_look_configs.dart';
 import 'openai_service.dart';
 import 'painters/base_prep_guide_painter.dart';
@@ -27,7 +27,6 @@ import 'widgets/final_look_guide_card.dart';
 import 'widgets/base_prep_guide_card.dart';
 import 'widgets/eyebrow_guide_card.dart';
 import 'widgets/lip_guide_card.dart';
-import 'config/makeup_look_configs.dart';
 
 class InstructionsPage extends StatefulWidget {
   final LookResult look;
@@ -50,8 +49,6 @@ class InstructionsPage extends StatefulWidget {
 }
 
 class _InstructionsPageState extends State<InstructionsPage> {
-  late final guide_config.MakeupLookConfig _config;
-
   // AI-related state
   bool _loadingAI = false;
   String? _aiError;
@@ -75,8 +72,6 @@ class _InstructionsPageState extends State<InstructionsPage> {
   @override
   void initState() {
     super.initState();
-
-    _config = MakeupLookConfigs.get(widget.selectedPreset);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _generateAIInstructions();

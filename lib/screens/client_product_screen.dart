@@ -70,7 +70,13 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
         final name = (product['name'] ?? '').toString().toLowerCase();
         final category = (product['category'] ?? '').toString().toLowerCase();
         final description = (product['description'] ?? '').toString().toLowerCase();
-        return name.contains(query) || category.contains(query) || description.contains(query);
+        final compatibleLooks = (product['compatible_looks'] ?? '').toString().toLowerCase();
+        final compatibleSkinTone = (product['compatible_skin_tone'] ?? '').toString().toLowerCase();
+        return name.contains(query) ||
+            category.contains(query) ||
+            description.contains(query) ||
+            compatibleLooks.contains(query) ||
+            compatibleSkinTone.contains(query);
       }).toList();
     }
 
@@ -386,7 +392,7 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: width > 1200 ? 4 : (width > 800 ? 3 : (width > 500 ? 2 : 1)),
-        childAspectRatio: 0.85,
+        childAspectRatio: width > 1200 ? 0.62 : (width > 800 ? 0.6 : (width > 500 ? 0.58 : 0.95)),
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
       ),
@@ -403,7 +409,21 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
     final price = (product['price'] as num?)?.toDouble() ?? 0;
     final productName = (product['name'] ?? 'Unnamed').toString();
     final category = (product['category'] ?? 'Uncategorized').toString();
+    final description = (product['description'] ?? '').toString();
+    final shadeName = (product['shade_name'] ?? '').toString();
+    final hexCode = (product['hex_code'] ?? '').toString();
+    final undertone = (product['undertone'] ?? '').toString();
+    final colorFamily = (product['color_family'] ?? '').toString();
+    final compatibleLooks = (product['compatible_looks'] ?? '').toString();
+    final compatibleSkinTone = (product['compatible_skin_tone'] ?? '').toString();
     final isActive = product['is_active'] == true;
+    final List<String> tags = [
+      if (product['morena_friendly'] == true) 'Morena Friendly',
+      if (product['beginner_friendly'] == true) 'Beginner Friendly',
+      if (product['budget_friendly'] == true) 'Budget Friendly',
+      if (product['student_friendly'] == true) 'Student Friendly',
+    ];
+    final hexColor = _parseHexColor(hexCode);
 
     return Container(
       decoration: BoxDecoration(
@@ -414,7 +434,6 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
         children: [
           // Product Image
           Stack(
@@ -473,18 +492,17 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
             ],
           ),
           
-          // Product Info - Compact
+          // Product Info
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   productName,
-                  maxLines: 2,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Colors.grey.shade800, height: 1.2),
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Colors.grey.shade800, height: 1.2),
                 ),
                 const SizedBox(height: 3),
                 Row(
@@ -499,13 +517,110 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      _formatCompactCurrency(price),
-                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: pinkPrimary),
+                      _formatPHP(price),
+                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: pinkPrimary),
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
+                if (description.trim().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text(
+                      description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 10.5, color: Colors.grey.shade700, height: 1.25),
+                    ),
+                  ),
+                if (shadeName.trim().isNotEmpty || hexCode.trim().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        if (hexColor != null)
+                          Container(
+                            width: 12,
+                            height: 12,
+                            margin: const EdgeInsets.only(right: 6),
+                            decoration: BoxDecoration(
+                              color: hexColor,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.black12),
+                            ),
+                          ),
+                        Expanded(
+                          child: Text(
+                            [
+                              if (shadeName.trim().isNotEmpty) 'Shade: $shadeName',
+                              if (hexCode.trim().isNotEmpty) hexCode,
+                            ].join(' • '),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 10, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (undertone.trim().isNotEmpty || colorFamily.trim().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text(
+                      [
+                        if (undertone.trim().isNotEmpty) 'Undertone: $undertone',
+                        if (colorFamily.trim().isNotEmpty) 'Family: $colorFamily',
+                      ].join(' • '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
+                    ),
+                  ),
+                if (compatibleLooks.trim().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      'Compatible Looks: $compatibleLooks',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
+                    ),
+                  ),
+                if (compatibleSkinTone.trim().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text(
+                      'Compatible Skin Tone: $compatibleSkinTone',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
+                    ),
+                  ),
+                if (tags.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: tags
+                          .map(
+                            (tag) => Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: pinkSoft,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                tag,
+                                style: TextStyle(fontSize: 9, color: pinkDark, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ),
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
@@ -539,6 +654,14 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
         ],
       ),
     );
+  }
+
+  Color? _parseHexColor(String hex) {
+    final value = hex.trim();
+    if (!RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(value)) {
+      return null;
+    }
+    return Color(int.parse(value.replaceFirst('#', '0xFF')));
   }
 
   Widget _buildMiniActionButton({required IconData icon, required Color color, required VoidCallback onPressed}) {

@@ -97,12 +97,9 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
 
       if (!mounted) return;
 
-      // Send confirmation email (no 4-digit code)
-      try {
-        await VerificationService().sendConfirmationEmail(email);
-      } catch (_) {}
-
       // Navigate to verification page
+      // Note: Supabase already sent the confirmation email during signUp() above.
+      // Calling resend() here is redundant and can hit the free-tier rate limit (2/hr).
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => EmailVerificationPage(email: email)),
       );

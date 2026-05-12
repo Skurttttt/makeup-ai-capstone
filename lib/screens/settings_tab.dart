@@ -2,7 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import '../services/supabase_service.dart';
 import '../utils/logout_util.dart';
+import 'user_subscription_page.dart';
 
 class SettingsTab extends StatefulWidget {
   const SettingsTab({super.key});
@@ -12,11 +14,20 @@ class SettingsTab extends StatefulWidget {
 }
 
 class _SettingsTabState extends State<SettingsTab> {
+  final _supabaseService = SupabaseService();
+
   String _userEmail = '';
   String _userName = '';
   String _userId = '';
   String _userPhone = '';
   String _userAddress = '';
+
+  // Current subscription state
+  bool _subscriptionLoading = true;
+  String _currentPlanName = 'Free Plan';
+  String? _currentPlanBadge;
+  DateTime? _currentPlanRenewsAt;
+  bool _hasActiveSubscription = false;
 
   // Settings state
   bool _notificationsEnabled = true;
@@ -96,6 +107,7 @@ class _SettingsTabState extends State<SettingsTab> {
     super.initState();
     _loadUserData();
     _loadSettings();
+    _loadCurrentSubscription();
   }
 
   void _loadUserData() {
@@ -123,6 +135,68 @@ class _SettingsTabState extends State<SettingsTab> {
 
   void _loadSettings() {
     // Load settings from shared preferences or local storage
+  }
+
+  Future<void> _loadCurrentSubscription() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      if (mounted) setState(() => _subscriptionLoading = false);
+      return;
+    }
+
+    try {
+      final subs = await _supabaseService.getUserSubscriptions(user.id);
+
+      // Find the active subscription with the latest period end
+      Map<String, dynamic>? active;
+      for (final sub in subs) {
+        if ((sub['status']?.toString().toLowerCase()) == 'active') {
+          if (active == null) {
+            active = sub;
+          } else {
+            final aEnd = DateTime.tryParse(
+              active['current_period_end']?.toString() ?? '',
+            );
+            final sEnd = DateTime.tryParse(
+              sub['current_period_end']?.toString() ?? '',
+            );
+            if (sEnd != null && (aEnd == null || sEnd.isAfter(aEnd))) {
+              active = sub;
+            }
+          }
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _subscriptionLoading = false;
+        if (active != null) {
+          _hasActiveSubscription = true;
+          final plan = active['subscription_plans'] as Map<String, dynamic>?;
+          _currentPlanName =
+              (plan?['display_name'] ?? plan?['name'] ?? 'Active Plan')
+                  .toString();
+          _currentPlanBadge = plan?['badge_text']?.toString();
+          _currentPlanRenewsAt = DateTime.tryParse(
+            active['current_period_end']?.toString() ?? '',
+          );
+        } else {
+          _hasActiveSubscription = false;
+          _currentPlanName = 'Free Plan';
+          _currentPlanBadge = null;
+          _currentPlanRenewsAt = null;
+        }
+      });
+    } catch (e) {
+      debugPrint('Settings: failed to load subscription: $e');
+      if (mounted) {
+        setState(() {
+          _subscriptionLoading = false;
+          _hasActiveSubscription = false;
+          _currentPlanName = 'Free Plan';
+        });
+      }
+    }
   }
 
   void _saveSettings() {
@@ -251,6 +325,8 @@ class _SettingsTabState extends State<SettingsTab> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ],
+                            const SizedBox(height: 8),
+                            _buildSubscriptionPill(),
                           ],
                         ),
                       ),
@@ -306,6 +382,17 @@ class _SettingsTabState extends State<SettingsTab> {
                 ]),
 
                 _buildSection('Account Settings', [
+                  _buildSettingItem(
+                    Icons.workspace_premium_outlined,
+                    'My Subscription',
+                    _subscriptionLoading
+                        ? 'Loading…'
+                        : (_hasActiveSubscription
+                            ? _currentPlanName
+                            : 'Free Plan · Tap to upgrade'),
+                    () => _openMySubscription(),
+                    const Color(0xFFEC4899),
+                  ),
                   _buildSettingItem(
                     Icons.person_outline,
                     'Edit Profile',
@@ -449,6 +536,82 @@ class _SettingsTabState extends State<SettingsTab> {
                   style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                 ),
                 const SizedBox(height: 32),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openMySubscription() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const UserSubscriptionPage()),
+    );
+    if (mounted) _loadCurrentSubscription();
+  }
+
+  Widget _buildSubscriptionPill() {
+    final loading = _subscriptionLoading;
+    final hasActive = _hasActiveSubscription;
+    final renewsAt = _currentPlanRenewsAt;
+
+    final IconData icon = hasActive
+        ? Icons.workspace_premium_rounded
+        : Icons.card_membership_outlined;
+
+    String label;
+    if (loading) {
+      label = 'Checking subscription…';
+    } else {
+      label = _currentPlanName;
+      if (_currentPlanBadge != null && _currentPlanBadge!.isNotEmpty) {
+        label = '$label · ${_currentPlanBadge!}';
+      }
+    }
+
+    String? subline;
+    if (!loading && hasActive && renewsAt != null) {
+      subline = 'Renews ${DateFormat('MMM d, yyyy').format(renewsAt)}';
+    } else if (!loading && !hasActive) {
+      subline = 'Tap to upgrade';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.22),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withOpacity(0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: Colors.white),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (subline != null)
+                  Text(
+                    subline,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.85),
+                      fontSize: 10,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -632,48 +795,53 @@ class _SettingsTabState extends State<SettingsTab> {
           'Edit Profile',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: 'Full Name',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.person_outline),
-              ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Full Name',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.person_outline),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: emailController,
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.email_outlined),
+                  ),
+                  keyboardType: TextInputType.emailAddress,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: phoneController,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone Number',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.phone_outlined),
+                  ),
+                  keyboardType: TextInputType.phone,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: addressController,
+                  decoration: const InputDecoration(
+                    labelText: 'Address',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.location_on_outlined),
+                  ),
+                  maxLines: 2,
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: emailController,
-              decoration: const InputDecoration(
-                labelText: 'Email',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.email_outlined),
-              ),
-              keyboardType: TextInputType.emailAddress,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: phoneController,
-              decoration: const InputDecoration(
-                labelText: 'Phone Number',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.phone_outlined),
-              ),
-              keyboardType: TextInputType.phone,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: addressController,
-              decoration: const InputDecoration(
-                labelText: 'Address',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.location_on_outlined),
-              ),
-              maxLines: 2,
-            ),
-          ],
+          ),
         ),
         actions: [
           TextButton(
@@ -898,29 +1066,34 @@ class _SettingsTabState extends State<SettingsTab> {
             'Set New Password',
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: newPasswordController,
-                decoration: const InputDecoration(
-                  labelText: 'New Password',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.lock_outline),
-                ),
-                obscureText: true,
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: newPasswordController,
+                    decoration: const InputDecoration(
+                      labelText: 'New Password',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.lock_outline),
+                    ),
+                    obscureText: true,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: confirmPasswordController,
+                    decoration: const InputDecoration(
+                      labelText: 'Confirm Password',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.lock_outline),
+                    ),
+                    obscureText: true,
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: confirmPasswordController,
-                decoration: const InputDecoration(
-                  labelText: 'Confirm Password',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.lock_outline),
-                ),
-                obscureText: true,
-              ),
-            ],
+            ),
           ),
           actions: [
             TextButton(

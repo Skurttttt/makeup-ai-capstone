@@ -3073,6 +3073,8 @@ class _EditProductDialogState extends State<_EditProductDialog> {
   late TextEditingController _descriptionController;
   late TextEditingController _linkController;
   late TextEditingController _imageUrlController;
+  late TextEditingController _compatibleLooksController;
+  late TextEditingController _compatibleSkinToneController;
   String? _selectedCategory;
   bool _isActive = true;
   bool _isLoading = false;
@@ -3107,6 +3109,12 @@ class _EditProductDialogState extends State<_EditProductDialog> {
     );
     _imageUrlController = TextEditingController(
       text: widget.product['image_url'] ?? '',
+    );
+    _compatibleLooksController = TextEditingController(
+      text: widget.product['compatible_looks'] ?? '',
+    );
+    _compatibleSkinToneController = TextEditingController(
+      text: widget.product['compatible_skin_tone'] ?? '',
     );
     _selectedCategory = widget.product['category'];
     _isActive = widget.product['is_active'] ?? true;
@@ -3156,6 +3164,17 @@ class _EditProductDialogState extends State<_EditProductDialog> {
                 ),
                 const SizedBox(height: 16),
                 _buildTextField(_linkController, 'Product Link'),
+                const SizedBox(height: 16),
+                _buildTextField(
+                  _compatibleLooksController,
+                  'Compatible Looks',
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 16),
+                _buildTextField(
+                  _compatibleSkinToneController,
+                  'Compatible Skin Tone',
+                ),
                 const SizedBox(height: 16),
                 _buildImageField(),
                 const SizedBox(height: 16),
@@ -3270,6 +3289,12 @@ class _EditProductDialogState extends State<_EditProductDialog> {
             'image_url': _imageUrlController.text.trim().isEmpty
                 ? null
                 : _imageUrlController.text.trim(),
+            'compatible_looks': _compatibleLooksController.text.trim().isEmpty
+              ? null
+              : _compatibleLooksController.text.trim(),
+            'compatible_skin_tone': _compatibleSkinToneController.text.trim().isEmpty
+              ? null
+              : _compatibleSkinToneController.text.trim(),
             'is_active': _isActive,
           })
           .eq('id', widget.product['id']);
@@ -3305,6 +3330,8 @@ class _EditProductDialogState extends State<_EditProductDialog> {
     _descriptionController.dispose();
     _linkController.dispose();
     _imageUrlController.dispose();
+    _compatibleLooksController.dispose();
+    _compatibleSkinToneController.dispose();
     super.dispose();
   }
 }

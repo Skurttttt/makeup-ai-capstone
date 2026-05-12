@@ -364,35 +364,48 @@ class _ClientAnalyticsScreenState extends State<ClientAnalyticsScreen>
 
   Widget _buildQuickStatsRow(
       int totalProducts, double totalRevenue, int totalOrders, bool isDesktop) {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildQuickStat(
-            totalProducts.toString(),
-            'Products',
-            Icons.inventory_2,
-            pinkPrimary,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildQuickStat(
-            _formatCompactCurrency(totalRevenue),
-            'Revenue',
-            Icons.trending_up,
-            pinkAccent,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildQuickStat(
-            totalOrders.toString(),
-            'Orders',
-            Icons.receipt_long,
-            pinkDark,
-          ),
-        ),
-      ],
+    final cards = [
+      _buildQuickStat(
+        totalProducts.toString(),
+        'Products',
+        Icons.inventory_2,
+        pinkPrimary,
+      ),
+      _buildQuickStat(
+        _formatCompactCurrency(totalRevenue),
+        'Revenue',
+        Icons.trending_up,
+        pinkAccent,
+      ),
+      _buildQuickStat(
+        totalOrders.toString(),
+        'Orders',
+        Icons.receipt_long,
+        pinkDark,
+      ),
+    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = 12.0;
+        if (constraints.maxWidth < 360) {
+          return Column(
+            children: [
+              for (var i = 0; i < cards.length; i++) ...[
+                if (i > 0) const SizedBox(height: spacing),
+                cards[i],
+              ],
+            ],
+          );
+        }
+        return Row(
+          children: [
+            for (var i = 0; i < cards.length; i++) ...[
+              if (i > 0) const SizedBox(width: spacing),
+              Expanded(child: cards[i]),
+            ],
+          ],
+        );
+      },
     );
   }
 

@@ -1149,13 +1149,17 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                                         ),
                                       ),
                                       const SizedBox(height: 8),
-                                      const Text(
-                                        'Express Your Style',
-                                        style: TextStyle(
-                                          fontSize: 28,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white,
-                                          height: 1.2,
+                                      const FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(
+                                          'Express Your Style',
+                                          style: TextStyle(
+                                            fontSize: 28,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                            height: 1.2,
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -1653,30 +1657,38 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                   child: Icon(_weatherIcon, color: accent, size: 18),
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  _weatherLocation,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w500,
+                Expanded(
+                  child: Text(
+                    _weatherLocation,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            Text(
-              _weatherLoading ? '--' : _weatherTemperature,
-              style: const TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1A1D2E),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                _weatherLoading ? '--' : _weatherTemperature,
+                style: const TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1A1D2E),
+                ),
               ),
             ),
             const SizedBox(height: 4),
             Text(
               _weatherLoading ? 'Refreshing...' : _weatherSummary,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 13, color: Colors.grey[500]),
             ),
             const SizedBox(height: 6),
@@ -1690,6 +1702,8 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                     : _weatherAdviceFor(temp, null);
                 return Text(
                   advice,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 );
               },
