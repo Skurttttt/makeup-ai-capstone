@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../auth/login_supabase_page.dart';
 import '../services/supabase_service.dart';
@@ -42,6 +43,9 @@ Future<void> showLogoutConfirmationDialog(
             }
 
             await Supabase.instance.client.auth.signOut();
+            // Clear remember-me so the next app start shows login
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setBool('remember_me', false);
 
             if (context.mounted) {
               Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(

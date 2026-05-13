@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'auth/login_supabase_page.dart';
@@ -78,6 +79,24 @@ class _AuthGateState extends State<AuthGate> {
     await Future.delayed(Duration.zero);
     if (!mounted) return;
 
+    final prefs = await SharedPreferences.getInstance();
+    final rememberMe = prefs.getBool('remember_me') ?? false;
+
+    if (!mounted) return;
+
+    if (!rememberMe) {
+      // Remember Me was not checked — sign out any saved session
+      try {
+        await Supabase.instance.client.auth.signOut();
+      } catch (_) {}
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const LoginSupabasePage()),
+      );
+      return;
+    }
+
+    // Remember Me was checked — skip login if there is a valid session
     final session = Supabase.instance.client.auth.currentSession;
     if (session == null) {
       Navigator.of(context).pushReplacement(

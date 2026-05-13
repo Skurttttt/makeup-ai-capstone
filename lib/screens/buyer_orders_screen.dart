@@ -11,6 +11,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'chat_screen.dart';
+import '../services/cart_service.dart';
 
 // ─── palette ─────────────────────────────────────────────────────────────────
 const Color _kPink = Color(0xFFFF4D97);
@@ -107,7 +108,6 @@ class _BuyerOrdersScreenState extends State<BuyerOrdersScreen> {
     _FilterDef('active', 'Active', Icons.local_fire_department_rounded),
     _FilterDef('shipped', 'Shipping', Icons.local_shipping_rounded),
     _FilterDef('delivered', 'Delivered', Icons.verified_rounded),
-    _FilterDef('canceled', 'Cancelled', Icons.cancel_outlined),
   ];
 
   String _selectedFilter = 'all';
@@ -147,6 +147,7 @@ class _BuyerOrdersScreenState extends State<BuyerOrdersScreen> {
             'products(name, image_url, business_id))',
           )
           .eq('buyer_id', uid)
+          .neq('status', 'canceled')
           .order('created_at', ascending: false);
 
       if (mounted) {
@@ -835,6 +836,29 @@ class _BuyerOrderCardState extends State<_BuyerOrderCard> {
               ),
             ),
 
+          // ── cancel button (awaiting payment only) ─────────────────────
+          if (status == 'pending')
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+              child: SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => _cancelOrder(context),
+                  icon: const Icon(Icons.cancel_outlined, size: 18),
+                  label: const Text('Cancel Order',
+                      style: TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w700)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFEF4444),
+                    side: const BorderSide(color: Color(0xFFEF4444)),
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            ),
+
           // ── action row ────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
@@ -895,6 +919,80 @@ class _BuyerOrderCardState extends State<_BuyerOrderCard> {
       backgroundColor: Colors.transparent,
       builder: (_) => _OrderDetailsSheet(order: order),
     );
+  }
+
+  Future<void> _cancelOrder(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20)),
+        title: const Text('Cancel Order',
+            style: TextStyle(fontWeight: FontWeight.w800)),
+        content: const Text(
+          'Are you sure you want to cancel this order? This action cannot be undone.',
+          style: TextStyle(fontSize: 13.5, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Keep Order',
+                style: TextStyle(color: Colors.grey.shade600)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Yes, Cancel'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    try {
+      final client = Supabase.instance.client;
+      await client.from('orders').update({
+        'status': 'canceled',
+      }).eq('id', widget.order['id']);
+
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Order cancelled'),
+          backgroundColor: Color(0xFFEF4444),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      // Re-add cancelled order items back to the cart
+      final items = List<Map<String, dynamic>>.from(
+          widget.order['order_items'] as List? ?? []);
+      for (final item in items) {
+        final productId = item['product_id']?.toString();
+        if (productId == null) continue;
+        final qty = (item['quantity'] as num?)?.toInt() ?? 1;
+        final variationName = item['variation_name']?.toString();
+        await CartService.instance.addItem(
+          productId: productId,
+          quantity: qty,
+          variation: variationName != null ? {'color_name': variationName} : null,
+        );
+      }
+
+      await widget.onRefresh();
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Could not cancel: $e'),
+            backgroundColor: Colors.red),
+      );
+    }
   }
 
   Future<void> _confirmReceived(BuildContext context) async {

@@ -1,5 +1,6 @@
 // lib/auth/login_supabase_page.dart
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../home_screen.dart';
 import '../screens/admin_screen_new.dart';
@@ -92,6 +93,12 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
       } catch (e) {
         debugPrint('Failed to log login audit: $e');
       }
+
+      // Persist remember-me preference
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('remember_me', _rememberMe);
+
+      if (!mounted) return;
 
       // Route based on role
       if (role?.toLowerCase() == 'admin') {
