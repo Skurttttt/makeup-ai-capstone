@@ -55,6 +55,12 @@ class _SettingsTabState extends State<SettingsTab> {
   String _selectedLanguage = 'English';
   bool _faceRecognitionEnabled = true;
   bool _autoSaveLooks = true;
+  bool _shareUsageData = true;
+  bool _personalizedRecommendations = true;
+
+  // Support contact info (centralized)
+  static const String _supportEmail = 'support@beautyshop.com';
+  static const String _appPackageId = 'com.example.flutter_application_1';
 
   int _savedLooksCount = 0;
 
@@ -501,7 +507,14 @@ class _SettingsTabState extends State<SettingsTab> {
                     Icons.notifications_outlined,
                     'Notifications',
                     _notificationsEnabled,
-                    (value) => setState(() => _notificationsEnabled = value),
+                    (value) {
+                      setState(() => _notificationsEnabled = value);
+                      _showSettingsMessage(
+                        value
+                            ? 'Notifications enabled'
+                            : 'Notifications muted',
+                      );
+                    },
                     const Color(0xFF6366F1),
                   ),
                   _buildSettingItem(
@@ -1984,35 +1997,106 @@ class _SettingsTabState extends State<SettingsTab> {
   void _showPrivacyDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          'Privacy Settings',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SwitchListTile(
-              title: const Text('Share Usage Data'),
-              subtitle: const Text('Help us improve the app'),
-              value: true,
-              onChanged: (value) {},
-              activeThumbColor: const Color(0xFFFF4D97),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => Dialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: SizedBox(
+            width: 480,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _gradientDialogHeader(
+                  context: dialogContext,
+                  icon: Icons.privacy_tip_outlined,
+                  title: 'Privacy Settings',
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SwitchListTile(
+                        title: const Text('Share Usage Data',
+                            style: TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: const Text('Help us improve the app'),
+                        value: _shareUsageData,
+                        onChanged: (value) {
+                          setDialogState(() => _shareUsageData = value);
+                          setState(() => _shareUsageData = value);
+                        },
+                        activeThumbColor: const Color(0xFFFF4D97),
+                      ),
+                      SwitchListTile(
+                        title: const Text('Personalized Recommendations',
+                            style: TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle:
+                            const Text('Get better product suggestions'),
+                        value: _personalizedRecommendations,
+                        onChanged: (value) {
+                          setDialogState(
+                              () => _personalizedRecommendations = value);
+                          setState(
+                              () => _personalizedRecommendations = value);
+                        },
+                        activeThumbColor: const Color(0xFFFF4D97),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(dialogContext),
+                        child: const Text('Done'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            SwitchListTile(
-              title: const Text('Personalized Recommendations'),
-              subtitle: const Text('Get better product suggestions'),
-              value: true,
-              onChanged: (value) {},
-              activeThumbColor: const Color(0xFFFF4D97),
-            ),
-          ],
+          ),
         ),
-        actions: [
-          TextButton(
+      ),
+    );
+  }
+
+  // Reusable gradient header for dialogs (matches Contact Support style).
+  Widget _gradientDialogHeader({
+    required BuildContext context,
+    required IconData icon,
+    required String title,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFFFF4D97), Color(0xFFCC3A7A)],
+        ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.white),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, color: Colors.white),
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
           ),
         ],
       ),
@@ -2135,45 +2219,107 @@ class _SettingsTabState extends State<SettingsTab> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          'Send Feedback',
-          style: TextStyle(fontWeight: FontWeight.bold),
+        child: SizedBox(
+          width: 480,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _gradientDialogHeader(
+                context: dialogContext,
+                icon: Icons.feedback_outlined,
+                title: 'Send Feedback',
+              ),
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'We\'d love to hear what you think.',
+                      style: TextStyle(color: Colors.black54, fontSize: 13),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: feedbackController,
+                      maxLines: 5,
+                      decoration: InputDecoration(
+                        hintText: 'Share your thoughts...',
+                        filled: true,
+                        fillColor: const Color(0xFFFFF9FB),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(dialogContext),
+                            child: const Text('Cancel'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFFF4D97),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            onPressed: () async {
+                              final feedback =
+                                  feedbackController.text.trim();
+                              if (feedback.isEmpty) {
+                                _showSettingsMessage(
+                                  'Please enter your feedback first',
+                                );
+                                return;
+                              }
+                              final uri = Uri.parse(
+                                'mailto:$_supportEmail'
+                                '?subject=${Uri.encodeComponent('App Feedback')}'
+                                '&body=${Uri.encodeComponent(feedback)}',
+                              );
+                              Navigator.pop(dialogContext);
+                              if (await canLaunchUrl(uri)) {
+                                await launchUrl(uri);
+                              } else {
+                                _showSettingsMessage(
+                                  'Thanks! Email us at $_supportEmail',
+                                );
+                              }
+                            },
+                            icon: const Icon(Icons.send),
+                            label: const Text('Submit'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-        content: TextField(
-          controller: feedbackController,
-          decoration: const InputDecoration(
-            hintText: 'Share your thoughts...',
-            border: OutlineInputBorder(),
-          ),
-          maxLines: 5,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final feedback = feedbackController.text.trim();
-              if (feedback.isNotEmpty) {
-                _showSettingsMessage('Thank you for your feedback!');
-                Navigator.pop(context);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF4D97),
-            ),
-            child: const Text('Submit'),
-          ),
-        ],
       ),
     );
   }
 
-  void _rateUs() {
-    _showSettingsMessage('Rate us on the App Store');
+  Future<void> _rateUs() async {
+    final playStore = Uri.parse(
+      'https://play.google.com/store/apps/details?id=$_appPackageId',
+    );
+    if (await canLaunchUrl(playStore)) {
+      await launchUrl(playStore, mode: LaunchMode.externalApplication);
+    } else {
+      _showSettingsMessage('Thanks! Please rate us on the Play Store.');
+    }
   }
 
   void _showAboutDialog() {
@@ -2207,14 +2353,31 @@ class _SettingsTabState extends State<SettingsTab> {
             ListTile(
               leading: const Icon(Icons.web, color: Color(0xFFFF4D97)),
               title: const Text('Website'),
+              subtitle: const Text('www.beautyshop.com'),
               trailing: const Icon(Icons.open_in_new, size: 16),
-              onTap: () => _showSettingsMessage('www.beautyshop.com'),
+              onTap: () async {
+                final uri = Uri.parse('https://www.beautyshop.com');
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri,
+                      mode: LaunchMode.externalApplication);
+                } else {
+                  _showSettingsMessage('Visit www.beautyshop.com');
+                }
+              },
             ),
             ListTile(
               leading: const Icon(Icons.email, color: Color(0xFFFF4D97)),
               title: const Text('Email'),
+              subtitle: const Text(_supportEmail),
               trailing: const Icon(Icons.open_in_new, size: 16),
-              onTap: () => _showSettingsMessage('info@beautyshop.com'),
+              onTap: () async {
+                final uri = Uri.parse('mailto:$_supportEmail');
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri);
+                } else {
+                  _showSettingsMessage('Email: $_supportEmail');
+                }
+              },
             ),
           ],
         ),

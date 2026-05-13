@@ -1120,7 +1120,7 @@ class _MarketTabState extends State<MarketTab>
                     top: Radius.circular(12),
                   ),
                   child: Container(
-                    height: 140,
+                    height: 120,
                     width: double.infinity,
                     color: Colors.grey.shade100,
                     child: imageUrl == null || imageUrl.isEmpty

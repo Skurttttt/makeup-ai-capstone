@@ -2,10 +2,13 @@
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/services.dart';
+import '../look_engine.dart';
 import 'camera_screen.dart'; // Import the new file
 
 class ScanTab extends StatefulWidget {
-  const ScanTab({super.key});
+  final MakeupLookPreset? preselectedLook;
+
+  const ScanTab({super.key, this.preselectedLook});
 
   @override
   State<ScanTab> createState() => _ScanTabState();
@@ -88,7 +91,11 @@ class _ScanTabState extends State<ScanTab> {
           ? const Center(
               child: CircularProgressIndicator(color: Color(0xFFFF4D97)),
             )
-          : CameraScreen(camera: _frontCamera!, scannedItem: null),
+          : CameraScreen(
+              camera: _frontCamera!,
+              scannedItem: null,
+              preselectedLook: widget.preselectedLook,
+            ),
     );
   }
 }

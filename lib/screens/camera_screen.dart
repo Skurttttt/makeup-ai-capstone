@@ -19,8 +19,14 @@ import 'user_subscription_page.dart';
 class CameraScreen extends StatefulWidget {
   final CameraDescription camera;
   final String? scannedItem;
+  final MakeupLookPreset? preselectedLook;
 
-  const CameraScreen({super.key, required this.camera, this.scannedItem});
+  const CameraScreen({
+    super.key,
+    required this.camera,
+    this.scannedItem,
+    this.preselectedLook,
+  });
 
   @override
   State<CameraScreen> createState() => _CameraScreenState();
@@ -29,15 +35,25 @@ class CameraScreen extends StatefulWidget {
 class _CameraScreenState extends State<CameraScreen> {
   @override
   Widget build(BuildContext context) {
-    return FaceScanPage(camera: widget.camera, scannedItem: widget.scannedItem);
+    return FaceScanPage(
+      camera: widget.camera,
+      scannedItem: widget.scannedItem,
+      preselectedLook: widget.preselectedLook,
+    );
   }
 }
 
 class FaceScanPage extends StatefulWidget {
   final CameraDescription camera;
   final String? scannedItem;
+  final MakeupLookPreset? preselectedLook;
 
-  const FaceScanPage({super.key, required this.camera, this.scannedItem});
+  const FaceScanPage({
+    super.key,
+    required this.camera,
+    this.scannedItem,
+    this.preselectedLook,
+  });
 
   @override
   State<FaceScanPage> createState() => _FaceScanPageState();
@@ -99,6 +115,9 @@ class _FaceScanPageState extends State<FaceScanPage> {
   @override
   void initState() {
     super.initState();
+    if (widget.preselectedLook != null) {
+      _selectedLook = widget.preselectedLook!;
+    }
     _initCamera();
   }
 

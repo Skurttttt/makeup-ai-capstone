@@ -4,8 +4,11 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart' as geocoding;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../look_engine.dart';
 import '../scan_result_page.dart';
 import 'market_tab.dart';
 import 'scan_tab.dart';
@@ -118,33 +121,55 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     }
 
     try {
-      final locationResponse = await http.get(
-        Uri.parse('https://ipapi.co/json/'),
-      );
-      if (locationResponse.statusCode != 200) {
-        throw Exception('Location lookup failed');
+      double? latitude;
+      double? longitude;
+      String locationLabel = '';
+
+      // 1) Try device GPS first (most reliable on phones).
+      try {
+        final pos = await _resolveDeviceLocation();
+        if (pos != null) {
+          latitude = pos.latitude;
+          longitude = pos.longitude;
+          locationLabel = await _reverseGeocode(latitude, longitude);
+        }
+      } catch (e) {
+        debugPrint('GPS lookup failed: $e');
       }
 
-      final locationData =
-          jsonDecode(locationResponse.body) as Map<String, dynamic>;
-      final latitude = (locationData['latitude'] ?? locationData['lat'])
-          ?.toString();
-      final longitude = (locationData['longitude'] ?? locationData['lon'])
-          ?.toString();
+      // 2) Fall back to IP geolocation if GPS unavailable.
       if (latitude == null || longitude == null) {
-        throw Exception('Missing coordinates');
+        final ipResp = await http
+            .get(Uri.parse('https://ipapi.co/json/'))
+            .timeout(const Duration(seconds: 8));
+        if (ipResp.statusCode == 200) {
+          final data = jsonDecode(ipResp.body) as Map<String, dynamic>;
+          latitude =
+              (data['latitude'] ?? data['lat']) is num
+              ? ((data['latitude'] ?? data['lat']) as num).toDouble()
+              : double.tryParse(
+                  (data['latitude'] ?? data['lat'] ?? '').toString());
+          longitude =
+              (data['longitude'] ?? data['lon']) is num
+              ? ((data['longitude'] ?? data['lon']) as num).toDouble()
+              : double.tryParse(
+                  (data['longitude'] ?? data['lon'] ?? '').toString());
+          locationLabel = [data['city'], data['region']]
+              .whereType<String>()
+              .where((v) => v.trim().isNotEmpty)
+              .join(', ');
+        }
       }
 
-      final locationLabel = [locationData['city'], locationData['region']]
-          .whereType<String>()
-          .where((value) => value.trim().isNotEmpty)
-          .join(', ');
+      if (latitude == null || longitude == null) {
+        throw Exception('Unable to determine location');
+      }
 
       final weatherResponse = await http.get(
         Uri.parse(
           'https://api.open-meteo.com/v1/forecast?latitude=$latitude&longitude=$longitude&current_weather=true&timezone=auto',
         ),
-      );
+      ).timeout(const Duration(seconds: 10));
       if (weatherResponse.statusCode != 200) {
         throw Exception('Weather lookup failed');
       }
@@ -168,11 +193,11 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
         _weatherTemperature = temperature == null
             ? '--'
             : '${temperature.round()}°C';
-        // _weatherAdvice = _weatherAdviceFor(temperature, weatherCode);
         _weatherIcon = _weatherIconFor(weatherCode, isDay: isDay);
         _weatherLoading = false;
       });
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Weather error: $e');
       if (!mounted) return;
       setState(() {
         _weatherLoading = false;
@@ -180,9 +205,49 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
         _weatherLocation = 'Weather';
         _weatherSummary = 'Tap to retry';
         _weatherTemperature = '--';
-        // _weatherAdvice = 'Weather could not be refreshed right now.';
         _weatherIcon = Icons.cloud_off_outlined;
       });
+    }
+  }
+
+  /// Get current device coordinates, prompting for permission if needed.
+  /// Returns null if location services are disabled or permission denied.
+  Future<Position?> _resolveDeviceLocation() async {
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) return null;
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      return null;
+    }
+
+    try {
+      return await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.low,
+          timeLimit: Duration(seconds: 10),
+        ),
+      );
+    } catch (_) {
+      return await Geolocator.getLastKnownPosition();
+    }
+  }
+
+  Future<String> _reverseGeocode(double lat, double lon) async {
+    try {
+      final placemarks = await geocoding.placemarkFromCoordinates(lat, lon);
+      if (placemarks.isEmpty) return '';
+      final p = placemarks.first;
+      return [p.locality, p.administrativeArea]
+          .whereType<String>()
+          .where((v) => v.trim().isNotEmpty)
+          .join(', ');
+    } catch (_) {
+      return '';
     }
   }
 
@@ -202,6 +267,67 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
         items.sort((a, b) => _personalScore(b).compareTo(_personalScore(a)));
         return items.take(6).toList();
     }
+  }
+
+  /// Recommend a makeup look preset based on the current weather.
+  /// - Hot / sunny  → Bronzed Goddess (luminous summer vibe)
+  /// - Cold         → Bold Editorial (richer, warmer tones)
+  /// - Rainy/snowy  → Soft Glam (clean, smudge-friendly)
+  /// - Night/clear  → Doll / K-Beauty (soft, flattering at night)
+  /// - Default      → Soft Glam
+  MakeupLookPreset _recommendedLookForWeather() {
+    final temp = double.tryParse(_weatherTemperature.replaceAll('°C', ''));
+    final summary = _weatherSummary.toLowerCase();
+
+    if (summary.contains('rain') ||
+        summary.contains('drizzle') ||
+        summary.contains('snow') ||
+        summary.contains('shower')) {
+      return MakeupLookPreset.softGlam;
+    }
+    if (temp != null) {
+      if (temp >= 28) return MakeupLookPreset.bronzedGoddess;
+      if (temp <= 15) return MakeupLookPreset.boldEditorial;
+    }
+    if (summary.contains('clear') || summary.contains('night')) {
+      return MakeupLookPreset.dollKBeauty;
+    }
+    return MakeupLookPreset.softGlam;
+  }
+
+  /// Map a quick-look display name ("Natural", "Glam", ...) to a preset.
+  MakeupLookPreset _presetForLookName(String name) {
+    switch (name.toLowerCase()) {
+      case 'natural':
+      case 'everyday':
+        return MakeupLookPreset.dollKBeauty;
+      case 'glam':
+        return MakeupLookPreset.softGlam;
+      case 'bold':
+        return MakeupLookPreset.boldEditorial;
+      case 'bronzed':
+      case 'sunny':
+        return MakeupLookPreset.bronzedGoddess;
+      case 'emo':
+        return MakeupLookPreset.emo;
+      default:
+        return MakeupLookPreset.softGlam;
+    }
+  }
+
+  String _weatherReasonFor(MakeupLookPreset preset) {
+    final temp = double.tryParse(_weatherTemperature.replaceAll('°C', ''));
+    final summary = _weatherSummary.toLowerCase();
+    if (summary.contains('rain') || summary.contains('snow')) {
+      return 'Smudge-friendly look for wet weather';
+    }
+    if (temp != null && temp >= 28) {
+      return 'Bronzed glow for warm $_weatherTemperature weather';
+    }
+    if (temp != null && temp <= 15) {
+      return 'Rich tones for cool $_weatherTemperature weather';
+    }
+    return "Picked for today's $_weatherSummary";
   }
 
   double _personalScore(Map<String, dynamic> product) {
@@ -283,10 +409,12 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     return '$symbol${price.toStringAsFixed(2)}';
   }
 
-  void _openScanTab() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const ScanTab()));
+  void _openScanTab({MakeupLookPreset? preselectedLook}) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ScanTab(preselectedLook: preselectedLook),
+      ),
+    );
   }
 
   void _openMarketTab() {
@@ -863,14 +991,21 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   }
 
   Widget _buildLatestLookCard(BuildContext context) {
+    final recommendedPreset = _recommendedLookForWeather();
+    final recommendedLabel = recommendedPreset.label;
+    final reason = _weatherReasonFor(recommendedPreset);
+
     return DragTarget<Map<String, dynamic>>(
       onAcceptWithDetails: (details) => _showProductPreview(details.data),
       builder: (context, candidateData, rejectedData) {
         final isActive = candidateData.isNotEmpty;
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          height: 200,
-          decoration: BoxDecoration(
+        return GestureDetector(
+          onTap: isActive
+              ? null
+              : () => _openScanTab(preselectedLook: recommendedPreset),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            decoration: BoxDecoration(
             gradient: const LinearGradient(
               colors: [Color(0xFFFF4D97), Color(0xFFFF6B9D)],
               begin: Alignment.topLeft,
@@ -934,13 +1069,13 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
-                                Icons.auto_awesome,
+                                Icons.wb_sunny_outlined,
                                 color: Colors.white,
                                 size: 14,
                               ),
                               SizedBox(width: 6),
                               Text(
-                                'AI Generated',
+                                'Weather Pick',
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 12,
@@ -952,17 +1087,28 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                         ),
                       ],
                     ),
-                    const Spacer(),
-                    const Text(
-                      'Your Perfect Look',
-                      style: TextStyle(
+                    const SizedBox(height: 12),
+                    Text(
+                      recommendedLabel,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 26,
                         fontWeight: FontWeight.bold,
                         letterSpacing: -0.5,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 4),
+                    Text(
+                      reason,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.9),
+                        fontSize: 12,
+                        height: 1.3,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
@@ -976,7 +1122,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            isActive ? 'Drop product here' : 'View Details',
+                            isActive ? 'Drop product here' : 'Try this look',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 14,
@@ -987,7 +1133,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                           Icon(
                             isActive
                                 ? Icons.add_circle_outline
-                                : Icons.arrow_forward,
+                                : Icons.camera_alt_outlined,
                             color: Colors.white,
                             size: 18,
                           ),
@@ -999,14 +1145,15 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
               ),
             ],
           ),
-        );
+        ),
+      );
       },
     );
   }
 
   Widget _buildLookCard(String name, IconData icon, Gradient gradient) {
     return GestureDetector(
-      onTap: () => _openLookResult(name),
+      onTap: () => _openScanTab(preselectedLook: _presetForLookName(name)),
       child: Container(
         width: 120,
         margin: const EdgeInsets.only(right: 12),
@@ -1240,46 +1387,6 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                 ),
                 const SizedBox(height: 24),
 
-                // Quick Looks
-                SizedBox(
-                  height: 140,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    children: [
-                      _buildLookCard(
-                        'Natural',
-                        Icons.face,
-                        const LinearGradient(
-                          colors: [Color(0xFFFF9A9E), Color(0xFFFAD0C4)],
-                        ),
-                      ),
-                      _buildLookCard(
-                        'Glam',
-                        Icons.auto_awesome,
-                        const LinearGradient(
-                          colors: [Color(0xFFA18CD1), Color(0xFFFBC2EB)],
-                        ),
-                      ),
-                      _buildLookCard(
-                        'Everyday',
-                        Icons.wb_sunny,
-                        const LinearGradient(
-                          colors: [Color(0xFFFFD1FF), Color(0xFFFF9A9E)],
-                        ),
-                      ),
-                      _buildLookCard(
-                        'Bold',
-                        Icons.favorite,
-                        const LinearGradient(
-                          colors: [Color(0xFFFF0844), Color(0xFFFFB199)],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-
                 // Recommended Products
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1467,7 +1574,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
 
   Widget _buildQuickScanCard(BuildContext context) {
     return GestureDetector(
-      onTap: _openScanTab,
+      onTap: () => _openScanTab(),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
