@@ -23,9 +23,10 @@ class _ProductFormPageState extends State<ProductFormPage> {
   static const List<String> _skinTypeOptions = ['Dry', 'Oily', 'Combination', 'Sensitive', 'Normal'];
   static const List<String> _finishTypeOptions = ['Matte', 'Dewy', 'Natural', 'Glossy', 'Velvet', 'Soft Matte'];
   static const List<String> _coverageLevelOptions = ['Light', 'Medium', 'Full', 'Buildable'];
-  static const List<String> _lookTagOptions = ['Soft Glam', 'Clean Girl', 'Douyin', 'Latte Makeup', 'Emo', 'Natural', 'Korean', 'Party Glam'];
+  static const List<String> _undertoneOptions = ['Warm', 'Cool', 'Neutral'];
 
   static const List<String> _fallbackCategories = [
+    'Primer',
     'Lipstick',
     'Blush',
     'Contour',
@@ -49,7 +50,7 @@ class _ProductFormPageState extends State<ProductFormPage> {
   final Set<String> _selectedSkinTypes = {};
   final Set<String> _selectedFinishTypes = {};
   final Set<String> _selectedCoverageLevels = {};
-  final Set<String> _selectedLookTags = {};
+  final Set<String> _selectedUndertones = {};
 
   final _imagePicker = ImagePicker();
   Uint8List? _selectedImageBytes;
@@ -60,12 +61,7 @@ class _ProductFormPageState extends State<ProductFormPage> {
   String _category = '';
   List<String> _categoryOptions = [];
   bool _loadingCategories = true;
-  String _undertone = 'Cool';
   String _colorFamily = 'Rosy Pink';
-  bool _morenaFriendly = true;
-  bool _beginnerFriendly = true;
-  bool _budgetFriendly = false;
-  bool _studentFriendly = true;
   bool _saving = false;
 
   int _channelTo255(num channel) {
@@ -127,6 +123,98 @@ class _ProductFormPageState extends State<ProductFormPage> {
         });
       }
     }
+  }
+
+  // Helper method to auto-generate compatible looks
+  String _generateCompatibleLooks() {
+    final category = _category.toLowerCase();
+    final undertones = _selectedUndertones.map((e) => e.toLowerCase()).toList();
+    final colorFamily = _colorFamily.toLowerCase();
+    final finishTypes = _selectedFinishTypes.map((e) => e.toLowerCase()).toList();
+
+    final looks = <String>{};
+
+    final isGlossy = finishTypes.contains('glossy') || finishTypes.contains('dewy');
+    final isMatte = finishTypes.contains('matte') || finishTypes.contains('soft matte');
+
+    if (category.contains('lip') || category.contains('tint') || category.contains('gloss')) {
+      if (colorFamily.contains('pink') || colorFamily.contains('rose') || colorFamily.contains('mauve')) {
+        looks.addAll(['K-Beauty', 'Douyin', 'Clean Girl', 'Soft Glam']);
+      }
+
+      if (colorFamily.contains('berry') || colorFamily.contains('plum')) {
+        looks.addAll(['Emo', 'E-Girl', 'Cherry Cola', 'Bold Editorial']);
+      }
+
+      if (colorFamily.contains('nude') || colorFamily.contains('beige') || colorFamily.contains('brown')) {
+        looks.addAll(['Soft Glam', 'Natural Nude', 'Old Money', 'Latte Makeup']);
+      }
+
+      if (colorFamily.contains('red')) {
+        looks.addAll(['Party Glam', 'Arab Glam', 'Bold Editorial', 'Cherry Cola']);
+      }
+    }
+
+    if (category.contains('blush')) {
+      if (colorFamily.contains('pink') || colorFamily.contains('rose')) {
+        looks.addAll(['K-Beauty', 'Douyin', 'Coquette', 'Strawberry Makeup']);
+      }
+
+      if (colorFamily.contains('peach') || colorFamily.contains('coral')) {
+        looks.addAll(['Peach Girl', 'Clean Girl', 'Soft Glam', 'Bronzed Goddess']);
+      }
+
+      if (colorFamily.contains('brown') || colorFamily.contains('terracotta')) {
+        looks.addAll(['Latte Makeup', 'Old Money', 'Bronzed Goddess']);
+      }
+    }
+
+    if (category.contains('eyeshadow') || category.contains('eyeliner')) {
+      if (colorFamily.contains('brown') || colorFamily.contains('nude') || colorFamily.contains('beige')) {
+        looks.addAll(['Soft Glam', 'Latte Makeup', 'Old Money', 'Bronzed Goddess']);
+      }
+
+      if (colorFamily.contains('black') || colorFamily.contains('plum') || colorFamily.contains('berry')) {
+        looks.addAll(['Emo', 'Smokey Eyes', 'E-Girl', 'Bold Editorial']);
+      }
+
+      if (colorFamily.contains('gold') || colorFamily.contains('bronze')) {
+        looks.addAll(['Golden Goddess', 'Party Glam', 'Bronzed Goddess']);
+      }
+    }
+
+    if (category.contains('foundation') ||
+        category.contains('concealer') ||
+        category.contains('primer') ||
+        category.contains('setting spray')) {
+      if (isGlossy) {
+        looks.addAll(['Glass Skin', 'K-Beauty', 'Clean Girl']);
+      }
+
+      if (isMatte) {
+        looks.addAll(['Soft Glam', 'Old Money', 'Party Glam']);
+      }
+
+      looks.addAll(['Natural Nude', 'No Makeup Makeup']);
+    }
+
+    if (undertones.contains('warm')) {
+      looks.addAll(['Bronzed Goddess', 'Latte Makeup', 'Golden Goddess', 'Peach Girl']);
+    }
+
+    if (undertones.contains('cool')) {
+      looks.addAll(['K-Beauty', 'Douyin', 'Cold Girl Makeup', 'Monochrome Pink']);
+    }
+
+    if (undertones.contains('neutral')) {
+      looks.addAll(['Soft Glam', 'Clean Girl', 'Natural Nude', 'Old Money']);
+    }
+
+    if (looks.isEmpty) {
+      looks.addAll(['Soft Glam', 'Clean Girl', 'Natural Nude']);
+    }
+
+    return looks.take(6).join(', ');
   }
 
   Future<void> _pickImage() async {
@@ -251,23 +339,6 @@ class _ProductFormPageState extends State<ProductFormPage> {
     );
   }
 
-  void _copyHexToClipboard() {
-    Clipboard.setData(ClipboardData(text: _hexCodeController.text));
-    _showSnackBar('Hex copied to clipboard!');
-  }
-
-  Future<void> _pasteHexFromClipboard() async {
-    final data = await Clipboard.getData('text/plain');
-    if (data != null && data.text != null) {
-      if (data.text!.startsWith('#') && data.text!.length == 7) {
-        setState(() => _hexCodeController.text = data.text!);
-        _showSnackBar('Hex pasted!');
-      } else {
-        _showSnackBar('Invalid hex format', isError: true);
-      }
-    }
-  }
-
   Future<void> _saveProduct() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -287,16 +358,13 @@ class _ProductFormPageState extends State<ProductFormPage> {
         'image_url': imageUrl,
         'shade_name': _shadeNameController.text,
         'hex_code': _hexCodeController.text,
-        'undertone': _undertone,
+        'undertone': _selectedUndertones.join(', '),
         'color_family': _colorFamily,
-        'compatible_looks': _selectedLookTags.join(', '),
-        'compatible_skin_tone': _selectedSkinTypes.join(', '),
+        'compatible_looks': _generateCompatibleLooks(),
+        'auto_generated_looks': true,
+        'compatible_skin_type': _selectedSkinTypes.join(', '),
         'finish_type': _selectedFinishTypes.join(', '),
         'coverage_level': _selectedCoverageLevels.join(', '),
-        'morena_friendly': _morenaFriendly,
-        'beginner_friendly': _beginnerFriendly,
-        'budget_friendly': _budgetFriendly,
-        'student_friendly': _studentFriendly,
       });
 
       if (mounted) {
@@ -368,8 +436,6 @@ class _ProductFormPageState extends State<ProductFormPage> {
     TextInputType? keyboardType,
     List<TextInputFormatter>? inputFormatters,
     int? maxLines,
-    bool readOnly = false,
-    VoidCallback? onTap,
     Widget? suffix,
   }) {
     return TextFormField(
@@ -378,8 +444,6 @@ class _ProductFormPageState extends State<ProductFormPage> {
       keyboardType: keyboardType,
       inputFormatters: inputFormatters,
       maxLines: maxLines ?? 1,
-      readOnly: readOnly,
-      onTap: onTap,
       decoration: InputDecoration(
         labelText: label,
         labelStyle: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w600),
@@ -392,15 +456,6 @@ class _ProductFormPageState extends State<ProductFormPage> {
       ),
     );
   }
-
-  Widget _buildColorSquare(Color color) => Padding(
-        padding: const EdgeInsets.all(8),
-        child: Container(
-          width: 24,
-          height: 24,
-          decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.black12)),
-        ),
-      );
 
   Widget _buildCategoryField() {
     if (_loadingCategories) {
@@ -421,18 +476,58 @@ class _ProductFormPageState extends State<ProductFormPage> {
     );
   }
 
-  Widget _buildDropdown(String label, String value, List<String> items, Function(String?) onChanged) {
-    return DropdownButtonFormField<String>(
-      value: value.isNotEmpty ? value : null,
-      items: items.map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
-      onChanged: onChanged,
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w600),
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-      ),
+  Widget _buildUndertoneSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Undertone',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: _undertoneOptions.map((undertone) {
+            final isSelected = _selectedUndertones.contains(undertone);
+            return GestureDetector(
+              onTap: () {
+                setState(() {
+                  if (isSelected) {
+                    _selectedUndertones.remove(undertone);
+                  } else {
+                    _selectedUndertones.add(undertone);
+                  }
+                });
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: isSelected ? const Color(0xFFFF4FA3) : Colors.white,
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(
+                    color: isSelected ? const Color(0xFFFF4FA3) : Colors.grey.shade300,
+                  ),
+                ),
+                child: Text(
+                  undertone,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: isSelected ? Colors.white : Colors.black87,
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 
@@ -553,21 +648,6 @@ class _ProductFormPageState extends State<ProductFormPage> {
         ),
       );
 
-  Widget _buildSwitchRow(String label, bool value, Function(bool) onChanged) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-            Switch(
-              value: value,
-              onChanged: onChanged,
-              activeColor: primaryPink,
-            ),
-          ],
-        ),
-      );
-
   Widget _buildSummaryCard() => Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -600,6 +680,19 @@ class _ProductFormPageState extends State<ProductFormPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Determine if coverage level should be shown based on category
+    final supportsCoverage = [
+      'Foundation',
+      'Concealer',
+      'Skin Tint',
+      'Cushion',
+      'Powder',
+      'Blush',
+      'Lipstick',
+      'Lip Tint',
+      'Lip Gloss',
+    ].contains(_category);
+
     return Scaffold(
       backgroundColor: bgColor,
       appBar: AppBar(
@@ -765,55 +858,40 @@ class _ProductFormPageState extends State<ProductFormPage> {
                               'Hex Code *',
                               _hexCodeController,
                               validator: _hexValidator,
-                              readOnly: true,
-                              onTap: _showColorPaletteDialog,
-                              suffix: _buildColorSquare(_hexColor),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: _copyHexToClipboard,
-                              icon: const Icon(Icons.copy, size: 16),
-                              label: const Text('Copy Hex'),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: primaryPink,
-                                side: BorderSide(color: primaryPink.withOpacity(0.4)),
-                                padding: const EdgeInsets.symmetric(vertical: 10),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: _pasteHexFromClipboard,
-                              icon: const Icon(Icons.content_paste, size: 16),
-                              label: const Text('Paste Hex'),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: primaryPink,
-                                side: BorderSide(color: primaryPink.withOpacity(0.4)),
-                                padding: const EdgeInsets.symmetric(vertical: 10),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              suffix: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  GestureDetector(
+                                    onTap: _showColorPaletteDialog,
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(8),
+                                      child: Container(
+                                        width: 24,
+                                        height: 24,
+                                        decoration: BoxDecoration(
+                                          color: _hexColor,
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: Border.all(color: Colors.black12),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 16),
+                      _buildUndertoneSelector(),
+                      const SizedBox(height: 16),
                       Row(
                         children: [
-                          Expanded(child: _buildDropdown('Undertone', _undertone, const ['Cool', 'Warm', 'Neutral'], (value) => setState(() => _undertone = value!))),
-                          const SizedBox(width: 12),
                           Expanded(
-                            child: _buildDropdown(
-                              'Color Family',
-                              _colorFamily,
-                              const [
+                            child: _buildDropdownField(
+                              label: 'Color Family',
+                              value: _colorFamily,
+                              items: const [
                                 'Rosy Pink',
                                 'Nude',
                                 'Beige',
@@ -829,7 +907,7 @@ class _ProductFormPageState extends State<ProductFormPage> {
                                 'Terracotta',
                                 'Orange',
                               ],
-                              (value) => setState(() => _colorFamily = value!),
+                              onChanged: (value) => setState(() => _colorFamily = value!),
                             ),
                           ),
                         ],
@@ -860,31 +938,40 @@ class _ProductFormPageState extends State<ProductFormPage> {
                           }
                         }),
                       ),
+                      if (supportsCoverage) ...[
+                        const SizedBox(height: 16),
+                        _buildChipSelector(
+                          'Coverage Level',
+                          _coverageLevelOptions,
+                          _selectedCoverageLevels,
+                          (option) => setState(() {
+                            if (_selectedCoverageLevels.contains(option)) {
+                              _selectedCoverageLevels.remove(option);
+                            } else {
+                              _selectedCoverageLevels.add(option);
+                            }
+                          }),
+                        ),
+                      ],
                       const SizedBox(height: 16),
-                      _buildChipSelector(
-                        'Coverage Level',
-                        _coverageLevelOptions,
-                        _selectedCoverageLevels,
-                        (option) => setState(() {
-                          if (_selectedCoverageLevels.contains(option)) {
-                            _selectedCoverageLevels.remove(option);
-                          } else {
-                            _selectedCoverageLevels.add(option);
-                          }
-                        }),
-                      ),
-                      const SizedBox(height: 16),
-                      _buildChipSelector(
-                        'Recommended Look Tags',
-                        _lookTagOptions,
-                        _selectedLookTags,
-                        (option) => setState(() {
-                          if (_selectedLookTags.contains(option)) {
-                            _selectedLookTags.remove(option);
-                          } else {
-                            _selectedLookTags.add(option);
-                          }
-                        }),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF1F6),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: primaryPink.withOpacity(0.2),
+                          ),
+                        ),
+                        child: const Text(
+                          'AI will automatically match this product to looks based on category, shade, undertone, and finish.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
+                        ),
                       ),
                     ]),
                     _buildSectionCard('Pricing', Icons.shopping_bag_outlined, [
@@ -901,21 +988,15 @@ class _ProductFormPageState extends State<ProductFormPage> {
                           ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: _buildDropdown(
-                              'Currency *',
-                              _currencyController.text,
-                              const ['PHP'],
-                              (value) => setState(() => _currencyController.text = value!),
+                            child: _buildDropdownField(
+                              label: 'Currency *',
+                              value: _currencyController.text,
+                              items: const ['PHP'],
+                              onChanged: (value) => setState(() => _currencyController.text = value!),
                             ),
                           ),
                         ],
                       ),
-                    ]),
-                    _buildSectionCard('Filipino Market Tags', Icons.local_offer_outlined, [
-                      _buildSwitchRow('Morena Friendly', _morenaFriendly, (value) => setState(() => _morenaFriendly = value)),
-                      _buildSwitchRow('Beginner Friendly', _beginnerFriendly, (value) => setState(() => _beginnerFriendly = value)),
-                      _buildSwitchRow('Budget Friendly', _budgetFriendly, (value) => setState(() => _budgetFriendly = value)),
-                      _buildSwitchRow('Student Friendly', _studentFriendly, (value) => setState(() => _studentFriendly = value)),
                     ]),
                     const SizedBox(height: 20),
                   ],
@@ -956,6 +1037,26 @@ class _ProductFormPageState extends State<ProductFormPage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildDropdownField({
+    required String label,
+    required String value,
+    required List<String> items,
+    required Function(String?) onChanged,
+  }) {
+    return DropdownButtonFormField<String>(
+      value: value.isNotEmpty ? value : null,
+      items: items.map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
+      onChanged: onChanged,
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w600),
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
       ),
     );
   }

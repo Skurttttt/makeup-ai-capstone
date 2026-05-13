@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'look_engine.dart';
 import 'config/makeup_look_config.dart';
@@ -111,6 +112,119 @@ class _InstructionsPageState extends State<InstructionsPage> {
       case SkinType.normal:
         return 'Normal';
     }
+  }
+
+  String _categoryForTargetArea(String targetArea) {
+    switch (targetArea) {
+      case 'full_face':
+        return 'Primer';
+      case 'brows':
+        return 'Eyebrow';
+      case 'eyeshadow':
+        return 'Eyeshadow';
+      case 'eyeliner':
+        return 'Eyeliner';
+      case 'blush_contour':
+        return 'Blush';
+      case 'lips':
+        return 'Lipstick';
+      case 'full_makeup':
+        return 'Setting Spray';
+      default:
+        return '';
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchRecommendedProducts(
+    String targetArea,
+  ) async {
+    final category = _categoryForTargetArea(targetArea);
+    final selectedLook = widget.look.lookName.toLowerCase();
+    final selectedSkinType = _selectedSkinType == null
+        ? ''
+        : _skinTypeLabel(_selectedSkinType!).toLowerCase();
+
+    final detectedUndertone =
+        widget.faceProfile?.undertone.name.toLowerCase() ?? '';
+
+    final response = await Supabase.instance.client
+        .from('products')
+        .select()
+        .eq('is_active', true);
+
+    final products = List<Map<String, dynamic>>.from(response);
+
+    final categoryFilteredProducts = products.where((product) {
+      final productCategory =
+          (product['category'] ?? '').toString().toLowerCase();
+
+      final requiredCategory = category.toLowerCase();
+
+      if (targetArea == 'full_face') {
+        return productCategory.contains('primer') ||
+            productCategory.contains('foundation') ||
+            productCategory.contains('concealer') ||
+            productCategory.contains('cushion') ||
+            productCategory.contains('skin tint');
+      }
+
+      if (targetArea == 'eyeshadow') {
+        return productCategory.contains('eyeshadow') ||
+            productCategory.contains('palette');
+      }
+
+      if (targetArea == 'blush_contour') {
+        return productCategory.contains('blush') ||
+            productCategory.contains('contour');
+      }
+
+      if (targetArea == 'lips') {
+        return productCategory.contains('lipstick') ||
+            productCategory.contains('lip tint') ||
+            productCategory.contains('lip gloss') ||
+            productCategory.contains('lip');
+      }
+
+      return productCategory.contains(requiredCategory);
+    }).toList();
+
+    final scoredProducts = categoryFilteredProducts.map((product) {
+      int score = 0;
+
+      final compatibleLooks =
+          (product['compatible_looks'] ?? '').toString().toLowerCase();
+
+      final compatibleSkinType =
+          (product['compatible_skin_type'] ?? '').toString().toLowerCase();
+
+      final undertone =
+          (product['undertone'] ?? '').toString().toLowerCase();
+
+      score += 10; // category match is required and strongest
+
+      if (compatibleLooks.contains(selectedLook)) score += 4;
+
+      if (selectedSkinType.isNotEmpty &&
+          compatibleSkinType.contains(selectedSkinType)) {
+        score += 3;
+      }
+
+      if (detectedUndertone.isNotEmpty &&
+          undertone.contains(detectedUndertone)) {
+        score += 2;
+      }
+
+      return {
+        ...product,
+        '_match_score': score,
+      };
+    }).toList();
+
+    scoredProducts.sort((a, b) {
+      return (b['_match_score'] as int).compareTo(a['_match_score'] as int);
+    });
+
+    return scoredProducts.take(2).toList();
   }
 
   // Skin type selection modal
@@ -562,88 +676,178 @@ class _InstructionsPageState extends State<InstructionsPage> {
     );
   }
 
-  void _showProductRecommendationSheet() {
+  void _showProductRecommendationSheet(String targetArea) {
+    final skinTypeText = _selectedSkinType == null
+        ? 'your selected skin type'
+        : _skinTypeLabel(_selectedSkinType!);
+
+    final undertoneText =
+        widget.faceProfile?.undertone.name ?? 'your detected undertone';
+
+    final lookText = widget.look.lookName;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (_) {
-        return Container(
-          padding: const EdgeInsets.fromLTRB(22, 20, 22, 28),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(
-              top: Radius.circular(28),
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFE5F0),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Icon(
-                  Icons.shopping_bag_outlined,
-                  color: Color(0xFFFF3D93),
-                  size: 34,
+        return FutureBuilder<List<Map<String, dynamic>>>(
+          future: _fetchRecommendedProducts(targetArea),
+          builder: (context, snapshot) {
+            final loading = snapshot.connectionState == ConnectionState.waiting;
+            final products = snapshot.data ?? [];
+
+            return Container(
+              padding: const EdgeInsets.fromLTRB(22, 20, 22, 28),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(
+                  top: Radius.circular(28),
                 ),
               ),
-
-              const SizedBox(width: 14),
-
-              const Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'RECOMMENDED FOR THIS STEP',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFFFF3D93),
-                        letterSpacing: 0.5,
+              child: loading
+                  ? const SizedBox(
+                      height: 180,
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFFFF3D93),
+                        ),
                       ),
-                    ),
-                    SizedBox(height: 6),
-                    Text(
-                      'Lumē Hydrating Glow Primer',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF171725),
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'Best for warm undertones',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFFFF3D93),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+                    )
+                  : products.isEmpty
+                      ? const Text(
+                          'No matching products found yet.',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        )
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'AI Recommended Product',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF171725),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Matched to your $undertoneText undertone, $skinTypeText skin, and $lookText look.',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF777780),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
 
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFF3D93),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Icon(
-                  Icons.chevron_right_rounded,
-                  color: Colors.white,
-                  size: 32,
-                ),
-              ),
-            ],
-          ),
+                            ...products.asMap().entries.map((entry) {
+                              final index = entry.key;
+                              final product = entry.value;
+                              final name = product['name']?.toString() ?? 'Product';
+                              final shade = product['shade_name']?.toString() ?? '';
+                              final price = product['price']?.toString() ?? '';
+                              final imageUrl = product['image_url']?.toString() ?? '';
+                              final matchScore = product['_match_score']?.toString() ?? '';
+                              final matchLabel = index == 0 ? 'BEST MATCH' : 'ALTERNATIVE';
+
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFFF7FA),
+                                  borderRadius: BorderRadius.circular(18),
+                                  border: Border.all(
+                                    color: const Color(0xFFFFD8E8),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(14),
+                                      child: imageUrl.isNotEmpty
+                                          ? Image.network(
+                                              imageUrl,
+                                              width: 58,
+                                              height: 58,
+                                              fit: BoxFit.cover,
+                                            )
+                                          : Container(
+                                              width: 58,
+                                              height: 58,
+                                              color: const Color(0xFFFFE5F0),
+                                              child: const Icon(
+                                                Icons.shopping_bag_outlined,
+                                                color: Color(0xFFFF3D93),
+                                              ),
+                                            ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            matchLabel,
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w900,
+                                              color: index == 0
+                                                  ? const Color(0xFFFF3D93)
+                                                  : const Color(0xFF777780),
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            name,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w900,
+                                            ),
+                                          ),
+                                          if (shade.isNotEmpty)
+                                            Text(
+                                              'Shade: $shade',
+                                              style: const TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                                color: Color(0xFF777780),
+                                              ),
+                                            ),
+                                          const Text(
+                                            'AI match based on your look, skin type, and undertone',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              color: Color(0xFFFF3D93),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Text(
+                                      price.isEmpty ? '' : '₱$price',
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w900,
+                                        color: Color(0xFFFF3D93),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }),
+                          ],
+                        ),
+            );
+          },
         );
       },
     );
@@ -947,7 +1151,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
                                       _FloatingMiniButton(
                                         icon: Icons.shopping_bag_outlined,
                                         onTap: () {
-                                          _showProductRecommendationSheet();
+                                          _showProductRecommendationSheet(targetArea);
                                         },
                                       ),
                                     ],

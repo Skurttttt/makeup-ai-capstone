@@ -71,12 +71,12 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
         final category = (product['category'] ?? '').toString().toLowerCase();
         final description = (product['description'] ?? '').toString().toLowerCase();
         final compatibleLooks = (product['compatible_looks'] ?? '').toString().toLowerCase();
-        final compatibleSkinTone = (product['compatible_skin_tone'] ?? '').toString().toLowerCase();
+        final compatibleSkinType = (product['compatible_skin_type'] ?? '').toString().toLowerCase(); // Updated field name
         return name.contains(query) ||
             category.contains(query) ||
             description.contains(query) ||
             compatibleLooks.contains(query) ||
-            compatibleSkinTone.contains(query);
+            compatibleSkinType.contains(query); // Updated variable name
       }).toList();
     }
 
@@ -415,7 +415,7 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
     final undertone = (product['undertone'] ?? '').toString();
     final colorFamily = (product['color_family'] ?? '').toString();
     final compatibleLooks = (product['compatible_looks'] ?? '').toString();
-    final compatibleSkinTone = (product['compatible_skin_tone'] ?? '').toString();
+    final compatibleSkinType = (product['compatible_skin_type'] ?? '').toString(); // Updated field name
     final isActive = product['is_active'] == true;
     final List<String> tags = [
       if (product['morena_friendly'] == true) 'Morena Friendly',
@@ -580,17 +580,17 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
                   Padding(
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Text(
-                      'Compatible Looks: $compatibleLooks',
+                      'AI-Matched Looks: $compatibleLooks', // Updated label
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
                     ),
                   ),
-                if (compatibleSkinTone.trim().isNotEmpty)
+                if (compatibleSkinType.trim().isNotEmpty) // Updated variable name
                   Padding(
                     padding: const EdgeInsets.only(bottom: 6),
                     child: Text(
-                      'Compatible Skin Tone: $compatibleSkinTone',
+                      'Compatible Skin Type: $compatibleSkinType', // Updated label and variable
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
