@@ -1,24 +1,11 @@
-import 'dart:io';
-import 'dart:ui' as ui;
-
-import 'package:camera/camera.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'auth/login_supabase_page.dart';
 import 'home_screen.dart';
-import 'instructions_page.dart';
 import 'screens/admin_screen_new.dart';
 import 'screens/client_screen.dart';
-import 'look_engine.dart';
-import 'look_picker.dart';
-import 'painters/makeup_overlay_painter.dart';
-import 'scan_result_page.dart';
-import 'skin_analyzer.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

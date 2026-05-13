@@ -313,7 +313,7 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(gradient: LinearGradient(colors: [pinkSoft, pinkLight.withOpacity(0.3)]), borderRadius: BorderRadius.circular(6)),
-                child: Text('${resultCount} result${resultCount == 1 ? '' : 's'}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: pinkPrimary)),
+                child: Text('$resultCount result${resultCount == 1 ? '' : 's'}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: pinkPrimary)),
               ),
             ],
           ),
@@ -454,7 +454,7 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
                       ? Image.network(
                           product['image_url'],
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Center(child: Icon(Icons.image_not_supported_outlined, color: Colors.grey.shade300, size: 32)),
+                          errorBuilder: (_, _, _) => Center(child: Icon(Icons.image_not_supported_outlined, color: Colors.grey.shade300, size: 32)),
                         )
                       : Center(child: Icon(Icons.inventory_2_rounded, color: pinkPrimary.withOpacity(0.3), size: 32)),
                 ),
@@ -711,6 +711,7 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
     );
   }
 
+  // ignore: unused_element
   String _formatCompactCurrency(double amount) {
     if (amount >= 1000000) {
       return '₱${(amount / 1000000).toStringAsFixed(1)}M';

@@ -335,13 +335,17 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
     final billingPeriod = _selectedPlan!['billing_period'] ?? '';
     final description = _selectedPlan!['description'] ?? '';
     final dailyScans = _selectedPlan!['daily_scan_limit'] ?? 0;
-    final availableLooks = _selectedPlan!['available_looks'] ?? 0;
+    final rawLooks = _selectedPlan!['available_looks'];
+    final int looksCount = rawLooks is List
+        ? rawLooks.length
+        : (rawLooks is int ? rawLooks : 0);
     final canSave = _selectedPlan!['can_save_results'] ?? false;
     final canExportHd = _selectedPlan!['can_export_hd'] ?? false;
     final removeWatermark = _selectedPlan!['remove_watermark'] ?? false;
     final lowerPlanName = planName.toLowerCase();
     final isPremium =
         lowerPlanName.contains('premium') || lowerPlanName.contains('lifetime');
+    final isPro = lowerPlanName.contains('pro') && !isPremium;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -433,34 +437,54 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
           const SizedBox(height: 12),
 
           _buildFeatureItem(
-            icon: Icons.camera_alt,
-            title: 'Daily Scans',
-            value: dailyScans == -1 ? 'Unlimited' : '$dailyScans scans/day',
+            icon: Icons.bolt_rounded,
+            title: 'Daily Face Scans',
+            value: dailyScans == -1
+                ? 'Unlimited — scan as many times as you like'
+                : '$dailyScans scans per day (resets at midnight)',
             included: true,
           ),
           _buildFeatureItem(
-            icon: Icons.face_retouching_natural,
+            icon: Icons.palette_outlined,
             title: 'Makeup Looks',
-            value: availableLooks == -1 ? 'All looks' : '$availableLooks looks',
+            value: looksCount > 0
+                ? 'All $looksCount looks unlocked'
+                : 'All looks unlocked',
             included: true,
           ),
           _buildFeatureItem(
-            icon: Icons.save,
-            title: 'Save Results',
-            value: canSave ? 'Yes' : 'No',
+            icon: Icons.cloud_done_outlined,
+            title: 'Auto-Save Looks to Cloud',
+            value: canSave
+                ? 'Synced across your devices'
+                : 'Local only',
             included: canSave,
           ),
           _buildFeatureItem(
-            icon: Icons.high_quality,
+            icon: Icons.high_quality_outlined,
             title: 'HD Export',
-            value: canExportHd ? 'Yes' : 'No',
+            value: canExportHd
+                ? 'Download looks in high resolution'
+                : 'Premium only',
             included: canExportHd,
           ),
           _buildFeatureItem(
-            icon: Icons.check_circle,
-            title: 'Remove Watermark',
-            value: removeWatermark ? 'Yes' : 'No',
+            icon: Icons.water_drop_outlined,
+            title: 'No Watermark',
+            value: removeWatermark
+                ? 'Clean exports without branding'
+                : 'Watermark on exports',
             included: removeWatermark,
+          ),
+          _buildFeatureItem(
+            icon: Icons.support_agent,
+            title: 'Priority Support',
+            value: isPremium
+                ? 'Top priority responses from our team'
+                : (isPro
+                    ? 'Faster support replies'
+                    : 'Standard support'),
+            included: isPro || isPremium,
           ),
 
           const SizedBox(height: 20),
@@ -623,7 +647,7 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
                         'https://paymongo.com/favicon.ico',
                         height: 24,
                         width: 24,
-                        errorBuilder: (_, __, ___) =>
+                        errorBuilder: (_, _, _) =>
                             const Icon(Icons.credit_card),
                       ),
                       const SizedBox(width: 12),

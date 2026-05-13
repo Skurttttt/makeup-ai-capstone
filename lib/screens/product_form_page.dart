@@ -9,8 +9,15 @@ import '../utils/responsive.dart';
 
 class ProductFormPage extends StatefulWidget {
   final String businessId;
+  final Map<String, dynamic>? existingProduct;
 
-  const ProductFormPage({super.key, required this.businessId});
+  const ProductFormPage({
+    super.key,
+    required this.businessId,
+    this.existingProduct,
+  });
+
+  bool get isEditing => existingProduct != null;
 
   @override
   State<ProductFormPage> createState() => _ProductFormPageState();
@@ -75,6 +82,54 @@ class _ProductFormPageState extends State<ProductFormPage> {
   void initState() {
     super.initState();
     _loadCategoryOptions();
+    if (widget.isEditing) _populateFromExisting();
+  }
+
+  void _populateFromExisting() {
+    final p = widget.existingProduct!;
+    _nameController.text = (p['name'] ?? '').toString();
+    _descriptionController.text = (p['description'] ?? '').toString();
+    final price = p['price'];
+    if (price != null) _priceController.text = price.toString();
+    final currency = (p['currency'] ?? '').toString();
+    if (currency.isNotEmpty) _currencyController.text = currency;
+    final stock = p['stock_quantity'];
+    if (stock != null) _stockController.text = stock.toString();
+    _imageUrlController.text = (p['image_url'] ?? '').toString();
+    final shade = (p['shade_name'] ?? '').toString();
+    if (shade.isNotEmpty) _shadeNameController.text = shade;
+    final hex = (p['hex_code'] ?? '').toString();
+    if (hex.isNotEmpty) _hexCodeController.text = hex;
+    final undertone = (p['undertone'] ?? '').toString();
+    if (undertone.isNotEmpty) _undertone = undertone;
+    final family = (p['color_family'] ?? '').toString();
+    if (family.isNotEmpty) _colorFamily = family;
+    _morenaFriendly = p['morena_friendly'] == true;
+    _beginnerFriendly = p['beginner_friendly'] == true;
+    _budgetFriendly = p['budget_friendly'] == true;
+    _studentFriendly = p['student_friendly'] == true;
+
+    _selectedSkinTypes
+      ..clear()
+      ..addAll(_splitCsv(p['compatible_skin_tone']));
+    _selectedFinishTypes
+      ..clear()
+      ..addAll(_splitCsv(p['finish_type']));
+    _selectedCoverageLevels
+      ..clear()
+      ..addAll(_splitCsv(p['coverage_level']));
+    _selectedLookTags
+      ..clear()
+      ..addAll(_splitCsv(p['compatible_looks']));
+  }
+
+  Iterable<String> _splitCsv(dynamic value) {
+    if (value == null) return const [];
+    return value
+        .toString()
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty);
   }
 
   @override
@@ -104,13 +159,18 @@ class _ProductFormPageState extends State<ProductFormPage> {
           merged.add(category);
         }
       }
+      final existingCategory =
+          (widget.existingProduct?['category'] ?? '').toString().trim();
+      if (existingCategory.isNotEmpty) merged.add(existingCategory);
       final categories = merged.toList();
       categories.sort();
 
       if (mounted) {
         setState(() {
           _categoryOptions = categories;
-          _category = _categoryOptions.isNotEmpty ? _categoryOptions.first : '';
+          _category = existingCategory.isNotEmpty
+              ? existingCategory
+              : (_categoryOptions.isNotEmpty ? _categoryOptions.first : '');
           _loadingCategories = false;
         });
       }
@@ -345,9 +405,11 @@ class _ProductFormPageState extends State<ProductFormPage> {
     setState(() => _saving = true);
 
     try {
-      final imageUrl = _selectedImageBytes != null ? await _uploadProductImage() : _imageUrlController.text;
+      final imageUrl = _selectedImageBytes != null
+          ? await _uploadProductImage()
+          : _imageUrlController.text;
 
-      await Supabase.instance.client.from('products').insert({
+      final payload = <String, dynamic>{
         'business_id': widget.businessId,
         'name': _nameController.text,
         'description': _descriptionController.text,
@@ -365,10 +427,26 @@ class _ProductFormPageState extends State<ProductFormPage> {
         'compatible_skin_type': _selectedSkinTypes.join(', '),
         'finish_type': _selectedFinishTypes.join(', '),
         'coverage_level': _selectedCoverageLevels.join(', '),
-      });
+        'morena_friendly': _morenaFriendly,
+        'beginner_friendly': _beginnerFriendly,
+        'budget_friendly': _budgetFriendly,
+        'student_friendly': _studentFriendly,
+      };
+
+      if (widget.isEditing) {
+        final id = widget.existingProduct!['id'];
+        await Supabase.instance.client
+            .from('products')
+            .update(payload)
+            .eq('id', id);
+      } else {
+        await Supabase.instance.client.from('products').insert(payload);
+      }
 
       if (mounted) {
-        _showSnackBar('Product saved successfully!');
+        _showSnackBar(widget.isEditing
+            ? 'Product updated successfully!'
+            : 'Product saved successfully!');
         Navigator.pop(context, true);
       }
     } catch (e) {
@@ -462,7 +540,7 @@ class _ProductFormPageState extends State<ProductFormPage> {
       return const Center(child: CircularProgressIndicator());
     }
     return DropdownButtonFormField<String>(
-      value: _category.isNotEmpty ? _category : null,
+      initialValue: _category.isNotEmpty ? _category : null,
       items: _categoryOptions.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))).toList(),
       onChanged: (value) => setState(() => _category = value ?? ''),
       decoration: InputDecoration(
@@ -528,6 +606,21 @@ class _ProductFormPageState extends State<ProductFormPage> {
           }).toList(),
         ),
       ],
+    );
+  }
+
+  Widget _buildDropdown(String label, String value, List<String> items, Function(String?) onChanged) {
+    return DropdownButtonFormField<String>(
+      initialValue: value.isNotEmpty ? value : null,
+      items: items.map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
+      onChanged: onChanged,
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w600),
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+      ),
     );
   }
 
@@ -648,6 +741,21 @@ class _ProductFormPageState extends State<ProductFormPage> {
         ),
       );
 
+  Widget _buildSwitchRow(String label, bool value, Function(bool) onChanged) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+            Switch(
+              value: value,
+              onChanged: onChanged,
+              activeThumbColor: primaryPink,
+            ),
+          ],
+        ),
+      );
+
   Widget _buildSummaryCard() => Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -703,7 +811,9 @@ class _ProductFormPageState extends State<ProductFormPage> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          context.isCompact ? 'Add Product' : 'Add Product • Fashion 21',
+          widget.isEditing
+              ? (context.isCompact ? 'Edit Product' : 'Edit Product • Fashion 21')
+              : (context.isCompact ? 'Add Product' : 'Add Product • Fashion 21'),
           style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
           overflow: TextOverflow.ellipsis,
         ),
@@ -1024,7 +1134,9 @@ class _ProductFormPageState extends State<ProductFormPage> {
                   onPressed: _saving ? null : _saveProduct,
                   icon: const Icon(Icons.save, color: Colors.white),
                   label: Text(
-                    _saving ? 'Saving...' : 'Save Product',
+                    _saving
+                        ? 'Saving...'
+                        : (widget.isEditing ? 'Update Product' : 'Save Product'),
                     style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   style: ElevatedButton.styleFrom(

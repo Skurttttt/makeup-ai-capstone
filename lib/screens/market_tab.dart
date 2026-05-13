@@ -1,8 +1,10 @@
 // lib/screens/market_tab_enhanced.dart - Enhanced market with Shopee/Lazada-like UI
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../services/supabase_service.dart';
+import 'checkout_screen.dart';
+import 'chat_screen.dart';
+import '../services/cart_service.dart';
+import '../services/chat_service.dart';
 
 class MarketTab extends StatefulWidget {
   const MarketTab({super.key});
@@ -17,8 +19,8 @@ class _MarketTabState extends State<MarketTab>
   String _searchQuery = '';
   String? _loadingProductId;
 
-  // Cart state
-  final List<Map<String, dynamic>> _cartItems = [];
+  // Cart state (loaded from CartService so it persists across logout)
+  List<Map<String, dynamic>> _cartItems = [];
   bool _showCart = false;
   int _cartItemCount = 0;
 
@@ -47,7 +49,6 @@ class _MarketTabState extends State<MarketTab>
   ];
 
   // Featured products
-  List<Map<String, dynamic>> _featuredProducts = [];
 
   // Animation
   late AnimationController _cartAnimationController;
@@ -60,6 +61,23 @@ class _MarketTabState extends State<MarketTab>
       vsync: this,
     );
     _fetchProducts();
+    _loadCartFromDb();
+  }
+
+  Future<void> _loadCartFromDb() async {
+    try {
+      final items = await CartService.instance.loadCart();
+      if (!mounted) return;
+      setState(() {
+        _cartItems = items;
+        _cartItemCount = _cartItems.fold(
+          0,
+          (sum, item) => sum + (item['quantity'] as int? ?? 0),
+        );
+      });
+    } catch (e) {
+      debugPrint('Failed to load cart: $e');
+    }
   }
 
   @override
@@ -99,12 +117,6 @@ class _MarketTabState extends State<MarketTab>
 
       products = _applyFiltersAndSort(products);
       _calculateCategoryMaxPrices(products);
-
-      if (_featuredProducts.isEmpty && products.isNotEmpty) {
-        _featuredProducts = products
-            .take(products.length > 5 ? 5 : products.length)
-            .toList();
-      }
 
       setState(() {
         _allProducts = products;
@@ -212,45 +224,42 @@ class _MarketTabState extends State<MarketTab>
     }
   }
 
-  void _addToCart(
+  Future<void> _addToCart(
     Map<String, dynamic> product, {
     Map<String, dynamic>? variation,
-  }) {
-    setState(() {
-      final cartItem = {
-        'id': product['id'],
-        'name': product['name'],
-        'price': product['price'],
-        'image_url': product['image_url'],
-        'business_id': product['business_id'],
-        'quantity': 1,
-        'variation': variation,
-      };
-
-      final existingIndex = _cartItems.indexWhere(
-        (item) =>
-            item['id'] == cartItem['id'] &&
-            (variation == null
-                ? true
-                : item['variation']?['color_name'] == variation['color_name']),
+  }) async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please log in to add items to your cart.'),
+          backgroundColor: Colors.orange,
+        ),
       );
+      return;
+    }
 
-      if (existingIndex != -1) {
-        _cartItems[existingIndex]['quantity'] =
-            (_cartItems[existingIndex]['quantity'] as int) + 1;
-      } else {
-        _cartItems.add(cartItem);
-      }
-
-      _cartItemCount = _cartItems.fold(
-        0,
-        (sum, item) => sum + (item['quantity'] as int),
+    try {
+      await CartService.instance.addItem(
+        productId: product['id'].toString(),
+        quantity: 1,
+        variation: variation,
       );
-
+      await _loadCartFromDb();
       _cartAnimationController.forward();
       _cartAnimationController.reverse();
-    });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to add to cart: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -292,31 +301,87 @@ class _MarketTabState extends State<MarketTab>
     );
   }
 
-  void _removeFromCart(int index) {
-    setState(() {
-      _cartItems.removeAt(index);
-      _cartItemCount = _cartItems.fold(
-        0,
-        (sum, item) => sum + (item['quantity'] as int),
+  Future<void> _openChatWithSeller(Map<String, dynamic> product) async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please log in to chat with the seller.'),
+          backgroundColor: Colors.orange,
+        ),
       );
-      if (_cartItems.isEmpty) {
-        _showCart = false;
-      }
-    });
+      return;
+    }
+    final sellerId = product['business_id']?.toString() ??
+        await ChatService.instance.getDefaultSellerId();
+    if (sellerId == null || sellerId.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No seller is available right now.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    if (sellerId == user.id) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("You can't chat with yourself."),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    try {
+      final conv = await ChatService.instance.getOrCreateConversation(
+        sellerId: sellerId,
+        productId: product['id']?.toString(),
+      );
+      if (conv == null || !mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatScreen(
+            conversationId: conv['id'].toString(),
+            otherDisplayName: 'Seller',
+            productName: product['name']?.toString(),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not open chat: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
-  void _updateCartQuantity(int index, int newQuantity) {
-    if (newQuantity <= 0) {
-      _removeFromCart(index);
-    } else {
-      setState(() {
-        _cartItems[index]['quantity'] = newQuantity;
-        _cartItemCount = _cartItems.fold(
-          0,
-          (sum, item) => sum + (item['quantity'] as int),
-        );
-      });
+  Future<void> _removeFromCart(int index) async {
+    if (index < 0 || index >= _cartItems.length) return;
+    final cartId = _cartItems[index]['cart_id']?.toString();
+    if (cartId != null) {
+      await CartService.instance.removeItem(cartId);
     }
+    await _loadCartFromDb();
+    if (mounted && _cartItems.isEmpty) {
+      setState(() => _showCart = false);
+    }
+  }
+
+  Future<void> _updateCartQuantity(int index, int newQuantity) async {
+    if (index < 0 || index >= _cartItems.length) return;
+    final cartId = _cartItems[index]['cart_id']?.toString();
+    if (cartId == null) return;
+    if (newQuantity <= 0) {
+      await _removeFromCart(index);
+      return;
+    }
+    await CartService.instance.updateQuantity(cartId, newQuantity);
+    await _loadCartFromDb();
   }
 
   double get _cartTotal {
@@ -343,9 +408,11 @@ class _MarketTabState extends State<MarketTab>
       MaterialPageRoute(
         builder: (context) => CheckoutScreen(
           cartItems: _cartItems,
-          onCheckoutComplete: () {
+          onCheckoutComplete: () async {
+            await CartService.instance.clearCart();
+            if (!mounted) return;
             setState(() {
-              _cartItems.clear();
+              _cartItems = [];
               _cartItemCount = 0;
               _showCart = false;
             });
@@ -371,87 +438,81 @@ class _MarketTabState extends State<MarketTab>
             slivers: [
               // Shopee-style App Bar
               SliverAppBar(
-                expandedHeight: 120,
                 pinned: true,
                 backgroundColor: const Color(0xFFFF4D97),
                 elevation: 0,
-                flexibleSpace: FlexibleSpaceBar(
-                  background: Container(
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Color(0xFFFF4D97), Color(0xFFFF6B9D)],
+                automaticallyImplyLeading: false,
+                titleSpacing: 16,
+                title: Row(
+                  children: const [
+                    Icon(Icons.store, color: Colors.white, size: 26),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Fashion21 Marketplace',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 17,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            'Official Fashion21 products',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    child: SafeArea(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 60, 16, 16),
-                        child: Column(
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(
-                                  Icons.store,
-                                  color: Colors.white,
-                                  size: 28,
-                                ),
-                                const SizedBox(width: 12),
-                                const Expanded(
-                                  child: Text(
-                                    'Beauty Shop',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                // Cart Button
-                                Stack(
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.shopping_bag_outlined,
-                                        color: Colors.white,
-                                        size: 26,
-                                      ),
-                                      onPressed: () => setState(
-                                        () => _showCart = !_showCart,
-                                      ),
-                                    ),
-                                    if (_cartItemCount > 0)
-                                      Positioned(
-                                        right: 8,
-                                        top: 8,
-                                        child: Container(
-                                          padding: const EdgeInsets.all(2),
-                                          decoration: const BoxDecoration(
-                                            color: Colors.white,
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: Text(
-                                            _cartItemCount > 9
-                                                ? '9+'
-                                                : '$_cartItemCount',
-                                            style: const TextStyle(
-                                              color: Color(0xFFFF4D97),
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ],
+                  ],
+                ),
+                actions: [
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Stack(
+                      children: [
+                        IconButton(
+                          icon: const Icon(
+                            Icons.shopping_bag_outlined,
+                            color: Colors.white,
+                            size: 26,
+                          ),
+                          onPressed: () =>
+                              setState(() => _showCart = !_showCart),
                         ),
-                      ),
+                        if (_cartItemCount > 0)
+                          Positioned(
+                            right: 8,
+                            top: 8,
+                            child: Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Text(
+                                _cartItemCount > 9
+                                    ? '9+'
+                                    : '$_cartItemCount',
+                                style: const TextStyle(
+                                  color: Color(0xFFFF4D97),
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
-                ),
+                ],
                 bottom: PreferredSize(
                   preferredSize: const Size.fromHeight(56),
                   child: Container(
@@ -601,11 +662,6 @@ class _MarketTabState extends State<MarketTab>
                     ),
 
                     const SizedBox(height: 8),
-
-                    // Flash Sale Banner
-                    if (_featuredProducts.isNotEmpty) _buildFlashSaleBanner(),
-
-                    const SizedBox(height: 16),
 
                     // Filter Row
                     Container(
@@ -886,6 +942,24 @@ class _MarketTabState extends State<MarketTab>
 
           // Cart Drawer
           if (_showCart) _buildCartDrawer(),
+
+          // Floating chat-with-seller bubble
+          if (!_showCart)
+            Positioned(
+              right: 16,
+              bottom: 24,
+              child: FloatingActionButton.extended(
+                heroTag: 'market_chat_fab',
+                backgroundColor: const Color(0xFFFF4D97),
+                foregroundColor: Colors.white,
+                icon: const Icon(Icons.chat_bubble_outline),
+                label: const Text(
+                  'Chat with Seller',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                onPressed: () => _openChatWithSeller(const {}),
+              ),
+            ),
         ],
       ),
     );
@@ -991,119 +1065,6 @@ class _MarketTabState extends State<MarketTab>
     );
   }
 
-  Widget _buildFlashSaleBanner() {
-    return GestureDetector(
-      onTap: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Flash sale products coming soon!'),
-            backgroundColor: Color(0xFFFF4D97),
-          ),
-        );
-      },
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16),
-        height: 140,
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFFFF4D97), Color(0xFFFF8DC7)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFFFF4D97).withOpacity(0.3),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              right: -20,
-              top: -20,
-              child: Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.1),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Text(
-                            'FLASH SALE',
-                            style: TextStyle(
-                              color: Color(0xFFFF4D97),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Up to 50% OFF',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const Text(
-                          'Beauty Favorites',
-                          style: TextStyle(color: Colors.white, fontSize: 14),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Center(
-                      child: Text(
-                        '⏰\nLIMITED',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildShopeeStyleCard(
     BuildContext context,
     Map<String, dynamic> product,
@@ -1117,8 +1078,14 @@ class _MarketTabState extends State<MarketTab>
 
     final isOutOfStock = stockQuantity <= 0;
 
-    return GestureDetector(
-      onTap: () => _showProductDetail(context, product),
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _showProductDetail(context, product),
+        splashColor: const Color(0xFFFF4D97).withOpacity(0.08),
+        highlightColor: const Color(0xFFFF4D97).withOpacity(0.04),
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -1151,7 +1118,7 @@ class _MarketTabState extends State<MarketTab>
                             imageUrl,
                             fit: BoxFit.cover,
                             width: double.infinity,
-                            errorBuilder: (_, __, ___) => const Icon(
+                            errorBuilder: (_, _, _) => const Icon(
                               Icons.broken_image,
                               size: 48,
                               color: Colors.grey,
@@ -1310,6 +1277,7 @@ class _MarketTabState extends State<MarketTab>
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -1499,7 +1467,7 @@ class _MarketTabState extends State<MarketTab>
                   ? Image.network(
                       item['image_url'],
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) =>
+                      errorBuilder: (_, _, _) =>
                           const Icon(Icons.image, size: 30),
                     )
                   : const Icon(Icons.image, size: 30, color: Colors.grey),
@@ -1685,7 +1653,7 @@ class _MarketTabState extends State<MarketTab>
                               child: Image.network(
                                 imageUrl,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const Center(
+                                errorBuilder: (_, _, _) => const Center(
                                   child: Icon(
                                     Icons.broken_image,
                                     size: 64,
@@ -1893,8 +1861,9 @@ class _MarketTabState extends State<MarketTab>
                                     IconButton(
                                       icon: const Icon(Icons.remove, size: 18),
                                       onPressed: () => setModalState(() {
-                                        if (selectedQuantity > 1)
+                                        if (selectedQuantity > 1) {
                                           selectedQuantity--;
+                                        }
                                       }),
                                       padding: const EdgeInsets.all(8),
                                       constraints: const BoxConstraints(),
@@ -1919,10 +1888,11 @@ class _MarketTabState extends State<MarketTab>
                                                       as int? ??
                                                   stockQuantity)
                                             : stockQuantity;
-                                        if (selectedQuantity < maxStock)
+                                        if (selectedQuantity < maxStock) {
                                           setModalState(
                                             () => selectedQuantity++,
                                           );
+                                        }
                                       },
                                       padding: const EdgeInsets.all(8),
                                       constraints: const BoxConstraints(),
@@ -1971,6 +1941,34 @@ class _MarketTabState extends State<MarketTab>
                           ),
                           const SizedBox(height: 16),
                         ],
+                        // Chat with Seller row
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              _openChatWithSeller(product);
+                            },
+                            icon: const Icon(Icons.chat_bubble_outline,
+                                size: 18),
+                            label: const Text(
+                              'Chat with Seller',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.deepPurple,
+                              side: const BorderSide(color: Colors.deepPurple),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
                         // Action Buttons - FIXED with explicit foregroundColor
                         Row(
                           children: [
@@ -2070,625 +2068,3 @@ class _MarketTabState extends State<MarketTab>
   }
 }
 
-// ==================== CHECKOUT SCREEN ====================
-class CheckoutScreen extends StatefulWidget {
-  final List<Map<String, dynamic>> cartItems;
-  final VoidCallback onCheckoutComplete;
-
-  const CheckoutScreen({
-    super.key,
-    required this.cartItems,
-    required this.onCheckoutComplete,
-  });
-
-  @override
-  State<CheckoutScreen> createState() => _CheckoutScreenState();
-}
-
-class _CheckoutScreenState extends State<CheckoutScreen> {
-  final _supabaseService = SupabaseService();
-  bool _isProcessing = false;
-  String _selectedPaymentMethod = 'paymongo';
-
-  final _nameController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _addressController = TextEditingController();
-  final _cityController = TextEditingController();
-  final _postalCodeController = TextEditingController();
-
-  double _shippingFee = 99.00;
-  final double _taxRate = 0.12;
-
-  double get _subtotal => widget.cartItems.fold(
-    0.0,
-    (sum, item) =>
-        sum + ((item['price'] as num).toDouble() * (item['quantity'] as int)),
-  );
-  double get _tax => _subtotal * _taxRate;
-  double get _total => _subtotal + _shippingFee + _tax;
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _emailController.dispose();
-    _phoneController.dispose();
-    _addressController.dispose();
-    _cityController.dispose();
-    _postalCodeController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _placeOrder() async {
-    if (_nameController.text.trim().isEmpty ||
-        _emailController.text.trim().isEmpty ||
-        _phoneController.text.trim().isEmpty ||
-        _addressController.text.trim().isEmpty ||
-        _cityController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please fill in all shipping details'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    setState(() => _isProcessing = true);
-
-    try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) {
-        throw 'Please sign in to place an order.';
-      }
-
-      final orderData = {
-        'buyer_id': user.id,
-        'buyer_name': _nameController.text.trim(),
-        'buyer_email': _emailController.text.trim(),
-        'buyer_phone': _phoneController.text.trim(),
-        'shipping_address': _addressController.text.trim(),
-        'shipping_city': _cityController.text.trim(),
-        'shipping_postal_code': _postalCodeController.text.trim(),
-        'subtotal': _subtotal,
-        'shipping': _shippingFee,
-        'tax': _tax,
-        'total': _total,
-        'currency': 'PHP',
-        'payment_provider': _selectedPaymentMethod,
-        'payment_method': _selectedPaymentMethod,
-        'status': 'pending',
-      };
-
-      final orderResponse = await Supabase.instance.client
-          .from('orders')
-          .insert(orderData)
-          .select()
-          .single();
-      final orderId = orderResponse['id'];
-
-      for (final item in widget.cartItems) {
-        final orderItemData = {
-          'order_id': orderId,
-          'product_id': item['id'],
-          'business_id': item['business_id'],
-          'quantity': item['quantity'],
-          'unit_price': item['price'],
-          'total_price':
-              (item['price'] as num).toDouble() * (item['quantity'] as int),
-          'variation_name': item['variation']?['color_name'],
-          'variation_hex':
-              item['variation']?['hex_code'] ?? item['variation']?['hex'],
-        };
-
-        await Supabase.instance.client
-            .from('order_items')
-            .insert(orderItemData);
-        await Supabase.instance.client.rpc(
-          'decrement_stock',
-          params: {'product_id': item['id'], 'quantity': item['quantity']},
-        );
-      }
-
-      if (_selectedPaymentMethod == 'paymongo' || _selectedPaymentMethod == 'gcash') {
-        final paymentResponse = await _supabaseService
-            .createPaymongoCheckoutForOrder(items: widget.cartItems, paymentMethod: _selectedPaymentMethod);
-        final checkoutUrl = paymentResponse['checkout_url']?.toString();
-        if (checkoutUrl != null && checkoutUrl.isNotEmpty) {
-          await launchUrl(
-            Uri.parse(checkoutUrl),
-            mode: LaunchMode.externalApplication,
-          );
-          widget.onCheckoutComplete();
-          if (mounted) Navigator.popUntil(context, (route) => route.isFirst);
-        } else {
-          throw 'Failed to create payment link';
-        }
-      } else {
-        await Supabase.instance.client
-            .from('orders')
-            .update({'status': 'confirmed'})
-            .eq('id', orderId);
-        widget.onCheckoutComplete();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Order placed successfully!'),
-              backgroundColor: Colors.green,
-            ),
-          );
-          Navigator.pop(context);
-        }
-      }
-    } catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to place order: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey.shade100,
-      appBar: AppBar(
-        title: const Text(
-          'Checkout',
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
-        ),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 1,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black87),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFFFF4D97),
-            ),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(
-                color: Color(0xFFFF4D97),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(
-              16,
-              16,
-              16,
-              // Reserve room for the floating Place Order button + keyboard.
-              96 + MediaQuery.of(context).viewInsets.bottom,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Order Summary',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      ...widget.cartItems.map(
-                        (item) => Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 50,
-                                height: 50,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child:
-                                    item['image_url'] != null &&
-                                        item['image_url'].toString().isNotEmpty
-                                    ? ClipRRect(
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: Image.network(
-                                          item['image_url'],
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (_, __, ___) =>
-                                              const Icon(Icons.image),
-                                        ),
-                                      )
-                                    : const Icon(
-                                        Icons.image,
-                                        color: Colors.grey,
-                                      ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      item['name'] ?? 'Product',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 13,
-                                        color: Colors.black87,
-                                      ),
-                                      maxLines: 2,
-                                    ),
-                                    if (item['variation'] != null)
-                                      Text(
-                                        'Variant: ${item['variation']['color_name']}',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.grey.shade600,
-                                        ),
-                                      ),
-                                    Text(
-                                      'Qty: ${item['quantity']}',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.grey.shade600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Text(
-                                '₱${((item['price'] as num).toDouble() * (item['quantity'] as int)).toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                  color: Color(0xFFFF4D97),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const Divider(),
-                      _buildPriceRow(
-                        'Subtotal',
-                        '₱${_subtotal.toStringAsFixed(2)}',
-                      ),
-                      _buildPriceRow(
-                        'Shipping Fee',
-                        '₱${_shippingFee.toStringAsFixed(2)}',
-                      ),
-                      _buildPriceRow(
-                        'Tax (12% VAT)',
-                        '₱${_tax.toStringAsFixed(2)}',
-                      ),
-                      const Divider(),
-                      _buildPriceRow(
-                        'Total',
-                        '₱${_total.toStringAsFixed(2)}',
-                        isTotal: true,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Shipping Details',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildTextField(
-                        _nameController,
-                        'Full Name',
-                        Icons.person_outline,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildTextField(
-                        _emailController,
-                        'Email Address',
-                        Icons.email_outlined,
-                        keyboardType: TextInputType.emailAddress,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildTextField(
-                        _phoneController,
-                        'Phone Number',
-                        Icons.phone_outlined,
-                        keyboardType: TextInputType.phone,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildTextField(
-                        _addressController,
-                        'Street Address',
-                        Icons.home_outlined,
-                        maxLines: 2,
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildTextField(
-                              _cityController,
-                              'City',
-                              null,
-                              hintText: 'City/Municipality',
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildTextField(
-                              _postalCodeController,
-                              'Postal Code',
-                              null,
-                              hintText: 'Postal code',
-                              keyboardType: TextInputType.number,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Payment Method',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      RadioListTile<String>(
-                        value: 'paymongo',
-                        groupValue: _selectedPaymentMethod,
-                        onChanged: (value) =>
-                            setState(() => _selectedPaymentMethod = value!),
-                        title: Row(
-                          children: [
-                            Image.network(
-                              'https://paymongo.com/favicon.ico',
-                              height: 24,
-                              width: 24,
-                              errorBuilder: (_, __, ___) =>
-                                  const Icon(Icons.credit_card),
-                            ),
-                            const SizedBox(width: 12),
-                            const Text(
-                              'Credit / Debit Card',
-                              style: TextStyle(color: Colors.black87),
-                            ),
-                          ],
-                        ),
-                        subtitle: const Text(
-                          'Pay securely with PayMongo',
-                          style: TextStyle(color: Colors.black54),
-                        ),
-                        activeColor: const Color(0xFFFF4D97),
-                      ),
-                      RadioListTile<String>(
-                        value: 'cod',
-                        groupValue: _selectedPaymentMethod,
-                        onChanged: (value) =>
-                            setState(() => _selectedPaymentMethod = value!),
-                        title: const Row(
-                          children: [
-                            Icon(Icons.money, color: Colors.green),
-                            SizedBox(width: 12),
-                            Text(
-                              'Cash on Delivery',
-                              style: TextStyle(color: Colors.black87),
-                            ),
-                          ],
-                        ),
-                        subtitle: const Text(
-                          'Pay when you receive the item',
-                          style: TextStyle(color: Colors.black54),
-                        ),
-                        activeColor: const Color(0xFFFF4D97),
-                      ),
-                      RadioListTile<String>(
-                        value: 'gcash',
-                        groupValue: _selectedPaymentMethod,
-                        onChanged: (value) =>
-                            setState(() => _selectedPaymentMethod = value!),
-                        title: const Row(
-                          children: [
-                            Icon(Icons.mobile_screen_share, color: Color(0xFF00A4EF)),
-                            SizedBox(width: 12),
-                            Text(
-                              'GCash',
-                              style: TextStyle(color: Colors.black87),
-                            ),
-                          ],
-                        ),
-                        subtitle: const Text(
-                          'Pay via GCash app',
-                          style: TextStyle(color: Colors.black54),
-                        ),
-                        activeColor: const Color(0xFFFF4D97),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 80),
-              ],
-            ),
-          ),
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 8,
-                    offset: const Offset(0, -2),
-                  ),
-                ],
-              ),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _isProcessing ? null : _placeOrder,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFF4D97),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: _isProcessing
-                      ? const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            ),
-                            SizedBox(width: 10),
-                            Text(
-                              'Processing...',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        )
-                      : Text(
-                          'Place Order • ₱${_total.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTextField(
-    TextEditingController controller,
-    String label,
-    IconData? icon, {
-    String? hintText,
-    TextInputType? keyboardType,
-    int maxLines = 1,
-  }) {
-    return TextFormField(
-      controller: controller,
-      style: const TextStyle(color: Colors.black87),
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hintText,
-        labelStyle: TextStyle(color: Colors.grey.shade700),
-        hintStyle: TextStyle(color: Colors.grey.shade400),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFFFF4D97)),
-        ),
-        prefixIcon: icon != null
-            ? Icon(icon, size: 20, color: Colors.grey.shade600)
-            : null,
-        filled: true,
-        fillColor: Colors.white,
-      ),
-      keyboardType: keyboardType,
-      maxLines: maxLines,
-    );
-  }
-
-  Widget _buildPriceRow(String label, String amount, {bool isTotal = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
-              fontSize: isTotal ? 16 : 14,
-              color: Colors.black87,
-            ),
-          ),
-          Text(
-            amount,
-            style: TextStyle(
-              fontWeight: isTotal ? FontWeight.bold : FontWeight.w500,
-              fontSize: isTotal ? 18 : 14,
-              color: isTotal ? const Color(0xFFFF4D97) : Colors.black87,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}

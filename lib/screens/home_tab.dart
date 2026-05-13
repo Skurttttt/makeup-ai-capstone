@@ -557,8 +557,9 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   }
 
   String _weatherAdviceFor(double? temperature, int? code) {
-    if (temperature == null)
+    if (temperature == null) {
       return 'Check back for the latest styling weather.';
+    }
 
     if (code != null && code >= 61 && code <= 99) {
       return 'Use waterproof formulas and a long-wear setting spray today.';
@@ -714,25 +715,28 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFF4D97).withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          category,
-                          style: const TextStyle(
-                            color: Color(0xFFFF4D97),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
+                      Flexible(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF4D97).withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            category,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFFFF4D97),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ),
-                      const Spacer(),
+                      const SizedBox(width: 4),
                       Text(
                         _formatPrice(product),
                         style: const TextStyle(

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:math' as math;
-import '../utils/responsive.dart';
 
 class ClientDashboardScreen extends StatefulWidget {
   final Map<String, dynamic> clientData;
@@ -81,7 +80,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
     if (previous == 0) return current == 0 ? '0%' : '+100%';
     final delta = ((current - previous) / previous) * 100;
     final sign = delta >= 0 ? '+' : '';
-    return '${sign}${delta.toStringAsFixed(1)}%';
+    return '$sign${delta.toStringAsFixed(1)}%';
   }
 
   @override
@@ -881,14 +880,16 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
             ],
           ),
           const SizedBox(height: 24),
-          SizedBox(
-            height: 200,
+          // Chart height adapts to screen width to avoid squashed/oversized
+          // proportions on phones vs tablets.
+          AspectRatio(
+            aspectRatio: MediaQuery.of(context).size.width < 600 ? 1.6 : 2.4,
             child: CustomPaint(
               painter: _DashboardChartPainter(
                 data: dailyRevenue,
                 color: pinkPrimary,
               ),
-              size: const Size(double.infinity, 200),
+              size: const Size(double.infinity, double.infinity),
             ),
           ),
           const SizedBox(height: 16),

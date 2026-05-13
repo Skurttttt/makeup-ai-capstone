@@ -30,6 +30,9 @@ class StepPreviewRenderer {
       image.height.toDouble(),
     );
 
+    // lookConfig is computed but currently not passed to MakeupOverlayPainter;
+    // suppress lint until the painter accepts a LookConfig parameter.
+    // ignore: unused_local_variable
     final lookConfig = MakeupLookConfigs.get(preset);
 
     final painter = MakeupOverlayPainter(

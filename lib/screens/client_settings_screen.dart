@@ -656,7 +656,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen>
           child: Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: pinkPrimary,
+            activeThumbColor: pinkPrimary,
             activeTrackColor: pinkPrimary.withOpacity(0.3),
             inactiveThumbColor: Colors.grey.shade400,
             inactiveTrackColor: Colors.grey.shade200,
@@ -737,12 +737,17 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen>
               fontWeight: FontWeight.w500,
             ),
           ),
-          Text(
-            value,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 13,
-              color: pinkDeep,
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              value,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.end,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+                color: pinkDeep,
+              ),
             ),
           ),
         ],

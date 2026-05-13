@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
@@ -16,6 +17,9 @@ import 'product_form_page.dart';
 import 'client_settings_screen.dart';
 import 'client_shop_screen.dart';
 import '../utils/logout_util.dart';
+import 'chat_list_screen.dart';
+import '../services/notification_service.dart';
+import '../widgets/notification_bell.dart';
 
 // Minimal app theme fallback used by this screen when the shared theme
 // import is missing — keeps the file self-contained for analyzer.
@@ -58,7 +62,7 @@ class NumericSpinnerField extends StatefulWidget {
   final ValueChanged<num>? onChanged;
 
   const NumericSpinnerField({
-    Key? key,
+    super.key,
     required this.controller,
     required this.label,
     this.isDecimal = false,
@@ -66,7 +70,7 @@ class NumericSpinnerField extends StatefulWidget {
     this.suffix,
     this.enabled = true,
     this.onChanged,
-  }) : super(key: key);
+  });
 
   @override
   State<NumericSpinnerField> createState() => _NumericSpinnerFieldState();
@@ -210,11 +214,93 @@ class ClientScreen extends StatefulWidget {
 class _ClientScreenState extends State<ClientScreen> {
   int _currentSection = 0;
   late Future<Map<String, dynamic>> _clientDataFuture;
+  StreamSubscription<AppNotification>? _notifSub;
 
   @override
   void initState() {
     super.initState();
-    _clientDataFuture = _fetchClientData();
+    _clientDataFuture = _fetchClientData().then((data) {
+      _initNotifications(data);
+      return data;
+    });
+  }
+
+  void _initNotifications(Map<String, dynamic> data) {
+    final id = data['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    NotificationService.instance.start(id);
+    _notifSub?.cancel();
+    _notifSub =
+        NotificationService.instance.onNewNotification.listen(_pingUser);
+  }
+
+  void _pingUser(AppNotification n) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+    final color = switch (n.type) {
+      AppNotificationType.order => const Color(0xFF22C55E),
+      AppNotificationType.lowStock => const Color(0xFFFF9800),
+      AppNotificationType.message => AppTheme.primaryColor,
+    };
+    final icon = switch (n.type) {
+      AppNotificationType.order => Icons.shopping_bag_rounded,
+      AppNotificationType.lowStock => Icons.inventory_2_rounded,
+      AppNotificationType.message => Icons.chat_bubble_rounded,
+    };
+    HapticFeedback.mediumImpact();
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+        duration: const Duration(seconds: 4),
+        content: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    n.title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    n.body,
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        action: SnackBarAction(
+          label: 'View',
+          textColor: Colors.white,
+          onPressed: () => showNotificationSheet(context),
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _notifSub?.cancel();
+    super.dispose();
   }
 
   Future<Map<String, dynamic>> _fetchClientData() async {
@@ -251,34 +337,6 @@ class _ClientScreenState extends State<ClientScreen> {
     await refreshed;
   }
 
-  void _showNotifications() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Notifications', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.shopping_bag),
-              title: const Text('New order received!'),
-              subtitle: Text('Order #ORD-001 - ${formatPHP(1299)}', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.inventory),
-              title: const Text('Low stock alert'),
-              subtitle: const Text('3 products need restock'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -327,7 +385,10 @@ class _ClientScreenState extends State<ClientScreen> {
         final clientData = snapshot.data!;
         return LayoutBuilder(
           builder: (context, constraints) {
-            final isDesktop = constraints.maxWidth > 900;
+            // Use 600px (Material 3 compact breakpoint) so phones in landscape
+            // and small tablets in portrait still get the mobile bottom-nav
+            // layout, while real tablets/desktops get the sidebar.
+            final isDesktop = constraints.maxWidth >= 900;
             return isDesktop
                 ? _buildDesktopLayout(clientData)
                 : _buildMobileLayout(clientData);
@@ -483,10 +544,8 @@ class _ClientScreenState extends State<ClientScreen> {
                         ),
                         Row(
                           children: [
-                            IconButton(
-                              icon: const Icon(Icons.notifications_none),
-                              onPressed: _showNotifications,
-                              color: AppTheme.textSecondary,
+                            const NotificationBell(
+                              iconColor: AppTheme.textSecondary,
                             ),
                             const SizedBox(width: 8),
                             Container(
@@ -592,6 +651,17 @@ class _ClientScreenState extends State<ClientScreen> {
         elevation: 0,
         centerTitle: true,
         actions: [
+          const NotificationBell(),
+          IconButton(
+            tooltip: 'Customer Messages',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const ChatListScreen(sellerMode: true),
+              ),
+            ),
+            icon: const Icon(Icons.chat_bubble_outline),
+          ),
           IconButton(
             onPressed: _logout,
             icon: const Icon(Icons.logout_rounded),
@@ -761,12 +831,20 @@ class _ClientScreenState extends State<ClientScreen> {
   }
 
   void _showEditProductDialog(Map<String, dynamic> product) async {
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (context) => _EditProductDialog(product: product),
+    final businessId = product['business_id']?.toString() ?? '';
+    if (businessId.isEmpty) return;
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (context) => ProductFormPage(
+          businessId: businessId,
+          existingProduct: product,
+        ),
+      ),
     );
     if (saved == true && mounted) {
-      setState(() { _clientDataFuture = _fetchClientData(); });
+      setState(() {
+        _clientDataFuture = _fetchClientData();
+      });
     }
   }
 
@@ -1128,13 +1206,17 @@ class _AddProductDialogState extends State<_AddProductDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    // Cap dialog width to screen so it never overflows on mobile.
+    final dialogWidth = screenWidth < 532 ? screenWidth - 32 : 500.0;
     return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       title: const Text(
         'Add Product',
         style: TextStyle(fontWeight: FontWeight.bold),
       ),
       content: SizedBox(
-        width: 500,
+        width: dialogWidth,
         child: SingleChildScrollView(
           child: Form(
             key: _formKey,
@@ -1268,7 +1350,7 @@ class _AddProductDialogState extends State<_AddProductDialog> {
 
   Widget _buildCategoryDropdown() {
     return DropdownButtonFormField<String?>(
-      value: _selectedCategory,
+      initialValue: _selectedCategory,
       decoration: const InputDecoration(
         labelText: 'Category',
         border: OutlineInputBorder(
@@ -2260,8 +2342,9 @@ class _AddProductDialogState extends State<_AddProductDialog> {
             if (normalizedShopId == null || normalizedShopId.isEmpty) return;
             if (normalizedItemId == null || normalizedItemId.isEmpty) return;
             final key = '$normalizedShopId:$normalizedItemId';
-            if (candidateIds.any((candidate) => candidate['key'] == key))
+            if (candidateIds.any((candidate) => candidate['key'] == key)) {
               return;
+            }
             candidateIds.add({
               'shopId': normalizedShopId,
               'itemId': normalizedItemId,
@@ -2482,7 +2565,7 @@ class _AddProductDialogState extends State<_AddProductDialog> {
               _selectedCategory =
                   _guessCategory(localTitle) ?? _selectedCategory;
             });
-            if (mounted)
+            if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text(
@@ -2491,6 +2574,7 @@ class _AddProductDialogState extends State<_AddProductDialog> {
                   backgroundColor: Colors.green,
                 ),
               );
+            }
             return;
           }
 
@@ -2606,14 +2690,17 @@ class _AddProductDialogState extends State<_AddProductDialog> {
         dynamic findItemInJson(dynamic payload) {
           if (payload is Map) {
             final map = Map<String, dynamic>.from(payload);
-            if (map.containsKey('item') && map['item'] is Map)
+            if (map.containsKey('item') && map['item'] is Map) {
               return Map<String, dynamic>.from(map['item']);
-            if (map.containsKey('item_basic') && map['item_basic'] is Map)
+            }
+            if (map.containsKey('item_basic') && map['item_basic'] is Map) {
               return Map<String, dynamic>.from(map['item_basic']);
+            }
             if (map.containsKey('name') ||
                 map.containsKey('price') ||
-                map.containsKey('images'))
+                map.containsKey('images')) {
               return map;
+            }
             for (final v in map.values) {
               final found = findItemInJson(v);
               if (found != null) return found;
@@ -2692,17 +2779,21 @@ class _AddProductDialogState extends State<_AddProductDialog> {
             final variationsFromScript = <Map<String, dynamic>>[];
             try {
               final extractedVar = _extractShopeeVariations(scriptFoundItem);
-              if (extractedVar.isNotEmpty)
+              if (extractedVar.isNotEmpty) {
                 variationsFromScript.addAll(extractedVar);
+              }
             } catch (_) {}
 
             setState(() {
-              if (productName != null && productName.isNotEmpty)
+              if (productName != null && productName.isNotEmpty) {
                 _nameController.text = productName.trim();
-              if (price != null && price > 0)
+              }
+              if (price != null && price > 0) {
                 _priceController.text = price.toStringAsFixed(2);
-              if (description != null && description.isNotEmpty)
+              }
+              if (description != null && description.isNotEmpty) {
                 _descriptionController.text = description;
+              }
               if (imageUrl != null && imageUrl.isNotEmpty) {
                 _imagePreviewUrl = imageUrl;
                 _imageUrlController.text = imageUrl;
@@ -3052,286 +3143,6 @@ class _AddProductDialogState extends State<_AddProductDialog> {
     _descriptionController.dispose();
     _linkController.dispose();
     _imageUrlController.dispose();
-    super.dispose();
-  }
-}
-
-// ==================== EDIT PRODUCT DIALOG ====================
-class _EditProductDialog extends StatefulWidget {
-  final Map<String, dynamic> product;
-  const _EditProductDialog({required this.product});
-
-  @override
-  State<_EditProductDialog> createState() => _EditProductDialogState();
-}
-
-class _EditProductDialogState extends State<_EditProductDialog> {
-  final _formKey = GlobalKey<FormState>();
-  late TextEditingController _nameController;
-  late TextEditingController _priceController;
-  late TextEditingController _stockController;
-  late TextEditingController _descriptionController;
-  late TextEditingController _linkController;
-  late TextEditingController _imageUrlController;
-  late TextEditingController _compatibleLooksController;
-  late TextEditingController _compatibleSkinToneController;
-  String? _selectedCategory;
-  bool _isActive = true;
-  bool _isLoading = false;
-
-  final _categories = [
-    'Lipstick',
-    'Blush',
-    'Contour',
-    'Setting Spray',
-    'Eyebrow',
-    'Eyeliner',
-    'Concealer',
-    'Eyeshadow',
-    'Tools & Brushes',
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _nameController = TextEditingController(text: widget.product['name']);
-    _priceController = TextEditingController(
-      text: widget.product['price'].toString(),
-    );
-    _stockController = TextEditingController(
-      text: widget.product['stock_quantity'].toString(),
-    );
-    _descriptionController = TextEditingController(
-      text: widget.product['description'] ?? '',
-    );
-    _linkController = TextEditingController(
-      text: widget.product['product_link'] ?? '',
-    );
-    _imageUrlController = TextEditingController(
-      text: widget.product['image_url'] ?? '',
-    );
-    _compatibleLooksController = TextEditingController(
-      text: widget.product['compatible_looks'] ?? '',
-    );
-    _compatibleSkinToneController = TextEditingController(
-      text: widget.product['compatible_skin_tone'] ?? '',
-    );
-    _selectedCategory = widget.product['category'];
-    _isActive = widget.product['is_active'] ?? true;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text(
-        'Edit Product',
-        style: TextStyle(fontWeight: FontWeight.bold),
-      ),
-      content: SizedBox(
-        width: 450,
-        child: SingleChildScrollView(
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildTextField(
-                  _nameController,
-                  'Product Name',
-                  validator: true,
-                ),
-                const SizedBox(height: 16),
-                NumericSpinnerField(
-                  controller: _priceController,
-                  label: 'Price',
-                  isDecimal: true,
-                  step: 1,
-                  suffix: 'PHP',
-                ),
-                const SizedBox(height: 16),
-                NumericSpinnerField(
-                  controller: _stockController,
-                  label: 'Stock',
-                  step: 1,
-                ),
-                const SizedBox(height: 16),
-                _buildCategoryDropdown(),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  _descriptionController,
-                  'Description',
-                  maxLines: 3,
-                ),
-                const SizedBox(height: 16),
-                _buildTextField(_linkController, 'Product Link'),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  _compatibleLooksController,
-                  'Compatible Looks',
-                  maxLines: 2,
-                ),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  _compatibleSkinToneController,
-                  'Compatible Skin Tone',
-                ),
-                const SizedBox(height: 16),
-                _buildImageField(),
-                const SizedBox(height: 16),
-                SwitchListTile(
-                  title: const Text('Active'),
-                  value: _isActive,
-                  onChanged: (v) => setState(() => _isActive = v),
-                  contentPadding: EdgeInsets.zero,
-                  activeColor: AppTheme.primaryColor,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: _isLoading ? null : _submitForm,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppTheme.primaryColor,
-          ),
-          child: _isLoading
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-              : const Text('Save Changes'),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTextField(
-    TextEditingController controller,
-    String label, {
-    int maxLines = 1,
-    TextInputType? keyboard,
-    bool validator = false,
-  }) {
-    return TextFormField(
-      controller: controller,
-      decoration: InputDecoration(
-        labelText: label,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      maxLines: maxLines,
-      keyboardType: keyboard,
-      validator: validator
-          ? (v) => v == null || v.isEmpty ? 'Required' : null
-          : null,
-    );
-  }
-
-  Widget _buildCategoryDropdown() {
-    final categories = [..._categories];
-    if (_selectedCategory != null && !categories.contains(_selectedCategory)) {
-      categories.add(_selectedCategory!);
-    }
-    categories.sort();
-
-    return DropdownButtonFormField<String?>(
-      value: _selectedCategory,
-      decoration: const InputDecoration(
-        labelText: 'Category',
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.all(Radius.circular(12)),
-        ),
-      ),
-      items: categories
-          .map((c) => DropdownMenuItem<String?>(value: c, child: Text(c)))
-          .toList(),
-      onChanged: (v) => setState(() => _selectedCategory = v),
-    );
-  }
-
-  Widget _buildImageField() {
-    return TextFormField(
-      controller: _imageUrlController,
-      decoration: InputDecoration(
-        labelText: 'Image URL',
-        hintText: 'https://example.com/image.jpg',
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
-  }
-
-  Future<void> _submitForm() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() => _isLoading = true);
-
-    try {
-      await Supabase.instance.client
-          .from('products')
-          .update({
-            'name': _nameController.text.trim(),
-            'price': double.parse(_priceController.text.trim()),
-            'stock_quantity': int.parse(_stockController.text.trim()),
-            'description': _descriptionController.text.trim(),
-            'category': _selectedCategory,
-            'product_link': _linkController.text.trim().isEmpty
-                ? null
-                : _linkController.text.trim(),
-            'image_url': _imageUrlController.text.trim().isEmpty
-                ? null
-                : _imageUrlController.text.trim(),
-            'compatible_looks': _compatibleLooksController.text.trim().isEmpty
-              ? null
-              : _compatibleLooksController.text.trim(),
-            'compatible_skin_tone': _compatibleSkinToneController.text.trim().isEmpty
-              ? null
-              : _compatibleSkinToneController.text.trim(),
-            'is_active': _isActive,
-          })
-          .eq('id', widget.product['id']);
-
-      if (mounted) {
-        Navigator.pop(context, true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Product updated successfully!'),
-            backgroundColor: AppTheme.successColor,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error updating: $e'),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _priceController.dispose();
-    _stockController.dispose();
-    _descriptionController.dispose();
-    _linkController.dispose();
-    _imageUrlController.dispose();
-    _compatibleLooksController.dispose();
-    _compatibleSkinToneController.dispose();
     super.dispose();
   }
 }

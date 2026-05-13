@@ -260,45 +260,52 @@ class _ClientShopScreenState extends State<ClientShopScreen>
             ),
           ),
           const SizedBox(height: 24),
-          Stack(
-            children: [
-              Container(
-                width: 160,
-                height: 160,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [
-                      pinkPrimary.withOpacity(0.2),
-                      pinkAccent.withOpacity(0.1),
-                    ],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: pinkPrimary.withOpacity(0.2),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              // Cap the avatar so it never dominates a small phone screen.
+              final avatarSize = constraints.maxWidth < 320
+                  ? constraints.maxWidth * 0.55
+                  : 160.0;
+              final innerRadius = (avatarSize / 2) - 2;
+              return Stack(
+                children: [
+                  Container(
+                    width: avatarSize,
+                    height: avatarSize,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [
+                          pinkPrimary.withOpacity(0.2),
+                          pinkAccent.withOpacity(0.1),
+                        ],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: pinkPrimary.withOpacity(0.2),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                child: CircleAvatar(
-                  radius: 78,
-                  backgroundColor: Colors.white,
-                  backgroundImage: _shopAvatarBytes != null
-                      ? MemoryImage(_shopAvatarBytes!)
-                      : (_shopAvatarUrl != null
-                          ? NetworkImage(_shopAvatarUrl!)
-                          : null),
-                  child: (_shopAvatarBytes == null && _shopAvatarUrl == null)
-                      ? Icon(
-                          Icons.store_rounded,
-                          size: 60,
-                          color: pinkPrimary.withOpacity(0.5),
-                        )
-                      : null,
-                ),
-              ),
-              Positioned(
+                    child: CircleAvatar(
+                      radius: innerRadius,
+                      backgroundColor: Colors.white,
+                      backgroundImage: _shopAvatarBytes != null
+                          ? MemoryImage(_shopAvatarBytes!)
+                          : (_shopAvatarUrl != null
+                              ? NetworkImage(_shopAvatarUrl!)
+                              : null),
+                      child: (_shopAvatarBytes == null && _shopAvatarUrl == null)
+                          ? Icon(
+                              Icons.store_rounded,
+                              size: avatarSize * 0.38,
+                              color: pinkPrimary.withOpacity(0.5),
+                            )
+                          : null,
+                    ),
+                  ),
+                  Positioned(
                 bottom: 8,
                 right: 8,
                 child: Container(
@@ -341,7 +348,9 @@ class _ClientShopScreenState extends State<ClientShopScreen>
                   ),
                 ),
               ),
-            ],
+                ],
+              );
+            },
           ),
           const SizedBox(height: 16),
           Container(
@@ -607,7 +616,7 @@ class _ClientShopScreenState extends State<ClientShopScreen>
         ),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
-          value: _shopCategoryOptions.any((opt) => opt['value'] == _shopCategory)
+          initialValue: _shopCategoryOptions.any((opt) => opt['value'] == _shopCategory)
               ? _shopCategory
               : null,
           decoration: InputDecoration(

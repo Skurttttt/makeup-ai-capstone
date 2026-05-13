@@ -180,77 +180,84 @@ class _UserSubscriptionPageState extends State<UserSubscriptionPage> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Text(
-                                    displayName.toUpperCase(),
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w700,
-                                      color: Color(0xFFFF4D97),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  if (isFree)
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.blue[100],
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Flexible(
                                       child: Text(
-                                        'FREE',
-                                        style: TextStyle(
-                                          fontSize: 10,
+                                        displayName.toUpperCase(),
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 18,
                                           fontWeight: FontWeight.w700,
-                                          color: Colors.blue[700],
+                                          color: Color(0xFFFF4D97),
                                         ),
                                       ),
                                     ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
+                                    const SizedBox(width: 8),
+                                    if (isFree)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue[100],
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          'FREE',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.blue[700],
+                                          ),
+                                        ),
+                                      ),
+                                  ],
                                 ),
-                                decoration: BoxDecoration(
-                                  color: isActive
-                                      ? Colors.green[100]
-                                      : subscription['status'] == 'expired'
-                                      ? Colors.red[100]
-                                      : Colors.orange[100],
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  subscription['status']?.toUpperCase() ??
-                                      'UNKNOWN',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
+                                const SizedBox(height: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
                                     color: isActive
-                                        ? Colors.green[700]
+                                        ? Colors.green[100]
                                         : subscription['status'] == 'expired'
-                                        ? Colors.red[700]
-                                        : Colors.orange[700],
+                                        ? Colors.red[100]
+                                        : Colors.orange[100],
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    subscription['status']?.toUpperCase() ??
+                                        'UNKNOWN',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: isActive
+                                          ? Colors.green[700]
+                                          : subscription['status'] == 'expired'
+                                          ? Colors.red[700]
+                                          : Colors.orange[700],
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                          if (isActive)
+                          if (isActive) ...[
+                            const SizedBox(width: 8),
                             Icon(
                               Icons.check_circle,
                               color: Colors.green[600],
                               size: 32,
                             ),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 16),

@@ -13,6 +13,8 @@ import '../look_engine.dart';
 import '../look_picker.dart';
 import '../instructions_page.dart';
 import '../scan_result_page.dart';
+import '../services/scan_quota_service.dart';
+import 'user_subscription_page.dart';
 
 class CameraScreen extends StatefulWidget {
   final CameraDescription camera;
@@ -399,6 +401,47 @@ class _FaceScanPageState extends State<FaceScanPage> {
     );
   }
 
+  Future<void> _showQuotaReachedDialog(ScanUsage usage) async {
+    final upgrade = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: const [
+            Icon(Icons.bolt_rounded, color: Color(0xFFFF4D97)),
+            SizedBox(width: 10),
+            Expanded(child: Text('Daily scan limit reached')),
+          ],
+        ),
+        content: Text(
+          "You've used all ${usage.dailyLimit} of today's free scans. "
+          'Upgrade to Pro or Premium for unlimited face scans and '
+          'cloud-saved looks across your devices.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Maybe later'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF4D97),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('See plans'),
+          ),
+        ],
+      ),
+    );
+    if (upgrade == true && mounted) {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const UserSubscriptionPage()),
+      );
+    }
+  }
+
   void _handlePreviewTap() {
     if (_busy) return;
 
@@ -413,6 +456,13 @@ class _FaceScanPageState extends State<FaceScanPage> {
   Future<void> _captureAndScan() async {
     if (!_canCaptureNow()) {
       _showCaptureBlockedMessage();
+      return;
+    }
+
+    // Daily scan-quota gate (5/day for Free, unlimited for Pro/Premium).
+    final usage = await ScanQuotaService.instance.getUsage();
+    if (!usage.hasRemaining) {
+      if (mounted) await _showQuotaReachedDialog(usage);
       return;
     }
 
@@ -503,6 +553,27 @@ class _FaceScanPageState extends State<FaceScanPage> {
         _status = 'Done ✅ Navigating to results…';
       });
 
+      // Count this successful scan against today's quota and, if the
+      // user's plan supports it, auto-save the result to the cloud
+      // `scans` table so it appears under Saved Looks on every device.
+      // This runs in the background — failures must not block the UI.
+      // ignore: discarded_futures
+      ScanQuotaService.instance.consumeScan();
+      // ignore: discarded_futures
+      ScanQuotaService.instance.autoSaveScan(
+        lookName: _selectedLook.name,
+        imagePath: _capturedFile?.path,
+        skinTone: profile.skinTone.name,
+        faceShape: profile.faceShape.name,
+        faceData: {
+          'preset': _selectedLook.name,
+          'undertone': profile.undertone.name,
+          'scene_luminance': _sceneLuminance,
+          'left_cheek_lum': _leftCheekLum,
+          'right_cheek_lum': _rightCheekLum,
+        },
+      );
+
       if (mounted) {
         await Navigator.of(context).push(
           MaterialPageRoute(
@@ -547,6 +618,7 @@ class _FaceScanPageState extends State<FaceScanPage> {
     }
   }
 
+  // ignore: unused_element
   void _openInstructions() {
     final look = _look;
     if (look == null) return;
@@ -793,7 +865,7 @@ class _GoodLightingCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final lower = qualityLabel.toLowerCase();
 
-    final bool isGood =
+    final bool isGood = // ignore: unused_local_variable
         warnings.isEmpty || lower.contains('good') || qualityLabel.contains('✅');
 
     final bool isModerate =

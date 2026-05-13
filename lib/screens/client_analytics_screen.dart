@@ -795,11 +795,11 @@ class _ClientAnalyticsScreenState extends State<ClientAnalyticsScreen>
             ],
           ),
           const SizedBox(height: 24),
-          SizedBox(
-            height: 200,
+          AspectRatio(
+            aspectRatio: MediaQuery.of(context).size.width < 600 ? 1.6 : 2.4,
             child: CustomPaint(
               painter: _ChartPainter(data: data, color: pinkPrimary),
-              size: const Size(double.infinity, 200),
+              size: const Size(double.infinity, double.infinity),
             ),
           ),
           const SizedBox(height: 16),
@@ -997,14 +997,18 @@ class _ClientAnalyticsScreenState extends State<ClientAnalyticsScreen>
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          entry.key,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey.shade700,
-                            fontSize: 13,
+                        Flexible(
+                          child: Text(
+                            entry.key,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade700,
+                              fontSize: 13,
+                            ),
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Text(
                           '${percentage.toStringAsFixed(1)}%',
                           style: TextStyle(

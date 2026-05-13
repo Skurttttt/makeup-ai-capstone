@@ -5,7 +5,6 @@ import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../services/supabase_service.dart';
 import '../utils/export_helper.dart';
-import '../utils/logout_util.dart';
 import '../utils/responsive.dart';
 
 // Format currency to Philippine Peso (PHP)
@@ -682,6 +681,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
           0,
           (sum, s) => sum + ((s['amount_paid'] as num?)?.toDouble() ?? 0),
         );
+        // ignore: unused_local_variable
         final pendingSubscriptions = subscriptions.where((s) => s['status'] == 'pending').length;
         final churnRate = totalUsers > 0 
             ? ((subscriptions.where((s) => s['status'] == 'expired').length / totalUsers) * 100).toStringAsFixed(1)
@@ -1026,7 +1026,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
                 ? const Center(child: Text('No recent activity'))
                 : ListView.separated(
                     itemCount: logs.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (context, index) {
                       final log = logs[index];
                       final action = log['action']?.toString() ?? 'Unknown';
@@ -1929,6 +1929,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
           return Center(child: _buildErrorState(snapshot.error.toString()));
         }
 
+        // ignore: unused_local_variable
         final subscriptions = snapshot.data ?? [];
         
         return SingleChildScrollView(
@@ -2262,7 +2263,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                value: role,
+                initialValue: role,
                 decoration: const InputDecoration(
                   labelText: 'Role',
                   border: OutlineInputBorder(),
@@ -2353,7 +2354,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                value: role,
+                initialValue: role,
                 decoration: const InputDecoration(
                   labelText: 'Role',
                   border: OutlineInputBorder(),

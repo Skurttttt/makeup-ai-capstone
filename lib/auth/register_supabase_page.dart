@@ -1,7 +1,7 @@
 // lib/auth/register_supabase_page.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../services/verification_service.dart';
 import '../services/supabase_service.dart';
 import 'email_verification_page.dart';
 import 'login_supabase_page.dart';
@@ -17,6 +17,7 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _supabaseService = SupabaseService();
@@ -30,6 +31,7 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
+    _phoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -80,15 +82,32 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
       }
 
       // Signup with trigger creating account automatically
-      await Supabase.instance.client.auth.signUp(
+      final authRes = await Supabase.instance.client.auth.signUp(
         email: email,
         password: password,
         data: {
           'full_name': fullName,
+          'phone': _phoneController.text.trim(),
           'account_type': 'individual',
           'client_type': 'individual',
         },
       );
+
+      // Write phone + name into accounts row directly (in case the trigger
+      // didn't pick it up from metadata).
+      try {
+        final newUser = authRes.user;
+        if (newUser != null) {
+          await Supabase.instance.client.from('accounts').upsert({
+            'id': newUser.id,
+            'email': email,
+            'full_name': fullName,
+            'phone': _phoneController.text.trim(),
+          }, onConflict: 'id');
+        }
+      } catch (_) {
+        // Trigger may already have inserted the row \u2014 ignore.
+      }
 
       if (!mounted) return;
 
@@ -294,6 +313,70 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
                         }
                         if (!value.contains('@') || !value.contains('.')) {
                           return 'Please enter a valid email address';
+                        }
+                        return null;
+                      },
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // Phone Number Field
+                    TextFormField(
+                      controller: _phoneController,
+                      keyboardType: TextInputType.phone,
+                      enabled: !_isLoading,
+                      textInputAction: TextInputAction.next,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                            RegExp(r'[0-9+\- ]')),
+                      ],
+                      decoration: InputDecoration(
+                        labelText: 'Phone Number',
+                        hintText: '+63 912 345 6789',
+                        prefixIcon: const Icon(
+                          Icons.phone_outlined,
+                          color: Color(0xFFFF4D97),
+                        ),
+                        prefixIconConstraints: const BoxConstraints(
+                          minWidth: 48,
+                          minHeight: 48,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey[300]!),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey[300]!),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFFF4D97),
+                            width: 2,
+                          ),
+                        ),
+                        errorBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(
+                            color: Colors.red,
+                            width: 1,
+                          ),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
+                        labelStyle: const TextStyle(fontSize: 14),
+                      ),
+                      style: const TextStyle(fontSize: 16),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return null; // optional
+                        }
+                        final digits = value.replaceAll(RegExp(r'\D'), '');
+                        if (digits.length < 7) {
+                          return 'Phone number is too short';
                         }
                         return null;
                       },
