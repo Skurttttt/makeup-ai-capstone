@@ -752,6 +752,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
                               final shade = product['shade_name']?.toString() ?? '';
                               final price = product['price']?.toString() ?? '';
                               final imageUrl = product['image_url']?.toString() ?? '';
+                              // ignore: unused_local_variable
                               final matchScore = product['_match_score']?.toString() ?? '';
                               final matchLabel = index == 0 ? 'BEST MATCH' : 'ALTERNATIVE';
 

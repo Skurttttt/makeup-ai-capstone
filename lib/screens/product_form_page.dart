@@ -69,6 +69,11 @@ class _ProductFormPageState extends State<ProductFormPage> {
   List<String> _categoryOptions = [];
   bool _loadingCategories = true;
   String _colorFamily = 'Rosy Pink';
+  bool _morenaFriendly = false;
+  bool _beginnerFriendly = false;
+  bool _budgetFriendly = false;
+  bool _studentFriendly = false;
+  final Set<String> _selectedLookTags = {};
   bool _saving = false;
 
   int _channelTo255(num channel) {
@@ -101,7 +106,11 @@ class _ProductFormPageState extends State<ProductFormPage> {
     final hex = (p['hex_code'] ?? '').toString();
     if (hex.isNotEmpty) _hexCodeController.text = hex;
     final undertone = (p['undertone'] ?? '').toString();
-    if (undertone.isNotEmpty) _undertone = undertone;
+    if (undertone.isNotEmpty) {
+      _selectedUndertones
+        ..clear()
+        ..addAll(_splitCsv(undertone));
+    }
     final family = (p['color_family'] ?? '').toString();
     if (family.isNotEmpty) _colorFamily = family;
     _morenaFriendly = p['morena_friendly'] == true;
@@ -609,21 +618,6 @@ class _ProductFormPageState extends State<ProductFormPage> {
     );
   }
 
-  Widget _buildDropdown(String label, String value, List<String> items, Function(String?) onChanged) {
-    return DropdownButtonFormField<String>(
-      initialValue: value.isNotEmpty ? value : null,
-      items: items.map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
-      onChanged: onChanged,
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w600),
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-      ),
-    );
-  }
-
   Widget _buildImagePreviewPlaceholder() => GestureDetector(
         onTap: _pickImage,
         child: Container(
@@ -737,21 +731,6 @@ class _ProductFormPageState extends State<ProductFormPage> {
             ),
             const SizedBox(height: 16),
             ...children,
-          ],
-        ),
-      );
-
-  Widget _buildSwitchRow(String label, bool value, Function(bool) onChanged) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-            Switch(
-              value: value,
-              onChanged: onChanged,
-              activeThumbColor: primaryPink,
-            ),
           ],
         ),
       );
