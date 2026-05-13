@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/supabase_service.dart';
 import '../utils/logout_util.dart';
 import 'user_subscription_page.dart';
@@ -22,6 +23,8 @@ class _SettingsTabState extends State<SettingsTab> {
   String _userId = '';
   String _userPhone = '';
   String _userAddress = '';
+  String _userCity = '';
+  String _userPostalCode = '';
 
   // Current subscription state
   bool _subscriptionLoading = true;
@@ -78,6 +81,8 @@ class _SettingsTabState extends State<SettingsTab> {
             (meta['phone_number'] as String? ?? meta['phone'] as String? ?? '')
                 .trim();
         _userAddress = (meta['address'] as String? ?? '').trim();
+        _userCity = (meta['city'] as String? ?? '').trim();
+        _userPostalCode = (meta['postal_code'] as String? ?? '').trim();
         _userName = fullName.trim().isNotEmpty
             ? fullName.trim()
             : name.trim().isNotEmpty
@@ -1183,6 +1188,383 @@ class _SettingsTabState extends State<SettingsTab> {
     );
   }
 
+  void _showFaqDialog() {
+    const faqs = [
+      (
+        q: 'How does the AI skin scan work?',
+        a: 'Open the camera tab and press Scan. The AI analyzes your skin tone, undertone, and features to recommend compatible makeup looks and products.'
+      ),
+      (
+        q: 'How do I try on a makeup look?',
+        a: 'After scanning, tap any recommended look. You can preview the look using AR try-on or follow the step-by-step tutorial.'
+      ),
+      (
+        q: 'How do I purchase products?',
+        a: 'Go to the Market tab, browse or search for products, tap a product to view details, and add it to your cart. Checkout supports GCash and card payments.'
+      ),
+      (
+        q: 'How do I track my orders?',
+        a: 'Go to Settings → My Orders to see all your past and active orders with status updates.'
+      ),
+      (
+        q: 'Can I use the app without creating an account?',
+        a: 'You can browse products as a guest, but scanning, purchasing, and saving looks require a free account.'
+      ),
+      (
+        q: 'How do I cancel or return an order?',
+        a: 'Contact support within 24 hours of placing your order. Returns are accepted within 7 days of delivery.'
+      ),
+      (
+        q: 'Why are some products out of stock?',
+        a: 'Sellers update their stock in real time. Save a product to your wishlist and check back later.'
+      ),
+    ];
+
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: SizedBox(
+          width: 480,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(colors: [Color(0xFFFF4D97), Color(0xFFCC3A7A)]),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.question_answer, color: Colors.white),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text('Frequently Asked Questions',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+              ),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 440),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: faqs.map((faq) => Theme(
+                      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                      child: ExpansionTile(
+                        tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+                        childrenPadding: const EdgeInsets.only(bottom: 12, left: 4, right: 4),
+                        iconColor: const Color(0xFFFF4D97),
+                        collapsedIconColor: Colors.black54,
+                        title: Text(faq.q,
+                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                        children: [
+                          Text(faq.a,
+                              style: const TextStyle(color: Colors.black54, fontSize: 13, height: 1.5)),
+                        ],
+                      ),
+                    )).toList(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showContactSupportDialog() {
+    final messageController = TextEditingController();
+    final subjectController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: SizedBox(
+          width: 480,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(colors: [Color(0xFFFF4D97), Color(0xFFCC3A7A)]),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.contact_support, color: Colors.white),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text('Contact Support',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('We typically reply within 24 hours.',
+                        style: TextStyle(color: Colors.black54, fontSize: 13)),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: subjectController,
+                      decoration: InputDecoration(
+                        labelText: 'Subject',
+                        filled: true,
+                        fillColor: const Color(0xFFFFF9FB),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: messageController,
+                      maxLines: 4,
+                      decoration: InputDecoration(
+                        labelText: 'Message',
+                        alignLabelWithHint: true,
+                        filled: true,
+                        fillColor: const Color(0xFFFFF9FB),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => Navigator.pop(context),
+                            icon: const Icon(Icons.close),
+                            label: const Text('Cancel'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFFF4D97),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            onPressed: () async {
+                              final subject = Uri.encodeComponent(
+                                  subjectController.text.trim().isEmpty
+                                      ? 'App Support Request'
+                                      : subjectController.text.trim());
+                              final body = Uri.encodeComponent(messageController.text.trim());
+                              final uri = Uri.parse(
+                                  'mailto:support@beautyshop.com?subject=$subject&body=$body');
+                              Navigator.pop(context);
+                              if (await canLaunchUrl(uri)) {
+                                await launchUrl(uri);
+                              } else {
+                                _showSettingsMessage('Email: support@beautyshop.com');
+                              }
+                            },
+                            icon: const Icon(Icons.send),
+                            label: const Text('Send Email'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showTutorialsDialog() {
+    const tutorials = [
+      (
+        icon: Icons.face_retouching_natural,
+        title: 'Getting Your First Scan',
+        steps: [
+          'Open the app and go to the Camera tab.',
+          'Make sure you are in good lighting facing the camera.',
+          'Tap the Scan button and hold still for 2–3 seconds.',
+          'Your skin tone, undertone and features will be analyzed.',
+          'Recommended looks and products appear instantly.',
+        ]
+      ),
+      (
+        icon: Icons.auto_fix_high,
+        title: 'Trying On a Look',
+        steps: [
+          'After scanning, scroll through your recommended looks.',
+          'Tap any look card to open the detail view.',
+          'Tap "Try On" to see the look applied in AR.',
+          'Use the sliders to adjust intensity.',
+          'Save the look to your profile or share it.',
+        ]
+      ),
+      (
+        icon: Icons.shopping_bag_outlined,
+        title: 'Buying Products',
+        steps: [
+          'Tap the Market tab at the bottom.',
+          'Browse by category or use the search bar.',
+          'Tap a product to see details, shades, and reviews.',
+          'Tap "Add to Cart" and proceed to Checkout.',
+          'Choose GCash, card, or COD and confirm your order.',
+        ]
+      ),
+      (
+        icon: Icons.notifications_outlined,
+        title: 'Notifications',
+        steps: [
+          'Tap the bell icon at the top of your screen.',
+          'See order updates, new messages, and low-stock alerts.',
+          'Tap a notification to jump to the relevant screen.',
+          'Tap "Mark all read" to clear the badge.',
+        ]
+      ),
+    ];
+
+    int selectedIndex = 0;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: SizedBox(
+            width: 480,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(colors: [Color(0xFFFF4D97), Color(0xFFCC3A7A)]),
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.school, color: Colors.white),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text('Tutorials',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Navigator.pop(context),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: List.generate(tutorials.length, (i) {
+                            final t = tutorials[i];
+                            final selected = i == selectedIndex;
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: GestureDetector(
+                                onTap: () => setDialogState(() => selectedIndex = i),
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 180),
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: selected
+                                        ? const Color(0xFFFF4D97)
+                                        : const Color(0xFFFFF0F5),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(t.icon,
+                                          size: 16,
+                                          color: selected ? Colors.white : const Color(0xFFFF4D97)),
+                                      const SizedBox(width: 6),
+                                      Text(t.title,
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: selected ? Colors.white : const Color(0xFFFF4D97))),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          }),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ...List.generate(
+                        tutorials[selectedIndex].steps.length,
+                        (i) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 24,
+                                height: 24,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFFF4D97),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Center(
+                                  child: Text('${i + 1}',
+                                      style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold)),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(tutorials[selectedIndex].steps[i],
+                                    style: const TextStyle(fontSize: 14, height: 1.5)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showSettingsMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -1198,104 +1580,339 @@ class _SettingsTabState extends State<SettingsTab> {
     final emailController = TextEditingController(text: _userEmail);
     final phoneController = TextEditingController(text: _userPhone);
     final addressController = TextEditingController(text: _userAddress);
+    final cityController = TextEditingController(text: _userCity);
+    final postalController = TextEditingController(text: _userPostalCode);
+    const Color primaryPink = Color(0xFFFF4D97);
+    const Color pinkDeep = Color(0xFFCC3A7A);
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          'Edit Profile',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Full Name',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person_outline),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: emailController,
-                  decoration: const InputDecoration(
-                    labelText: 'Email',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.email_outlined),
-                  ),
-                  keyboardType: TextInputType.emailAddress,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: phoneController,
-                  decoration: const InputDecoration(
-                    labelText: 'Phone Number',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.phone_outlined),
-                  ),
-                  keyboardType: TextInputType.phone,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: addressController,
-                  decoration: const InputDecoration(
-                    labelText: 'Address',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.location_on_outlined),
-                  ),
-                  maxLines: 2,
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        bool saving = false;
+        final initial = _userName.isNotEmpty ? _userName[0].toUpperCase() : 'U';
+
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            Future<void> handleSave() async {
               final newName = nameController.text.trim();
               final newPhone = phoneController.text.trim();
               final newAddress = addressController.text.trim();
-              if (newName.isNotEmpty) {
-                try {
-                  await Supabase.instance.client.auth.updateUser(
-                    UserAttributes(
-                      data: {
-                        'full_name': newName,
-                        'phone_number': newPhone,
-                        'phone': newPhone,
-                        'address': newAddress,
-                      },
-                    ),
-                  );
+              final newCity = cityController.text.trim();
+              final newPostal = postalController.text.trim();
+              if (newName.isEmpty) {
+                ScaffoldMessenger.of(sheetContext).showSnackBar(
+                  const SnackBar(content: Text('Name cannot be empty')),
+                );
+                return;
+              }
+              setSheetState(() => saving = true);
+              try {
+                await Supabase.instance.client.auth.updateUser(
+                  UserAttributes(
+                    data: {
+                      'full_name': newName,
+                      'phone_number': newPhone,
+                      'phone': newPhone,
+                      'address': newAddress,
+                      'city': newCity,
+                      'postal_code': newPostal,
+                    },
+                  ),
+                );
+                if (mounted) {
                   setState(() {
                     _userName = newName;
                     _userPhone = newPhone;
                     _userAddress = newAddress;
+                    _userCity = newCity;
+                    _userPostalCode = newPostal;
                   });
                   _showSettingsMessage('Profile updated');
-                } catch (e) {
-                  _showSettingsMessage('Error: $e');
+                }
+                if (sheetContext.mounted) Navigator.pop(sheetContext);
+              } catch (e) {
+                setSheetState(() => saving = false);
+                if (sheetContext.mounted) {
+                  ScaffoldMessenger.of(sheetContext).showSnackBar(
+                    SnackBar(content: Text('Error: $e')),
+                  );
                 }
               }
-              Navigator.pop(context);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF4D97),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            ),
-            child: const Text('Save'),
-          ),
-        ],
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
+              ),
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFAF7FB),
+                  borderRadius:
+                      BorderRadius.vertical(top: Radius.circular(28)),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Drag handle
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10, bottom: 6),
+                      child: Container(
+                        width: 44,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                    // Gradient header with avatar
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [primaryPink, pinkDeep],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          Stack(
+                            alignment: Alignment.bottomRight,
+                            children: [
+                              Container(
+                                width: 84,
+                                height: 84,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                      color: Colors.white, width: 3),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.15),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    initial,
+                                    style: const TextStyle(
+                                      color: primaryPink,
+                                      fontSize: 36,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Edit Profile',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 20,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Update your personal info',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.85),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Form fields
+                    Flexible(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+                        child: Column(
+                          children: [
+                            _buildEditField(
+                              controller: nameController,
+                              label: 'Full Name',
+                              icon: Icons.person_outline,
+                            ),
+                            const SizedBox(height: 14),
+                            _buildEditField(
+                              controller: emailController,
+                              label: 'Email',
+                              icon: Icons.email_outlined,
+                              enabled: false,
+                            ),
+                            const SizedBox(height: 14),
+                            _buildEditField(
+                              controller: phoneController,
+                              label: 'Phone Number',
+                              icon: Icons.phone_outlined,
+                              keyboardType: TextInputType.phone,
+                            ),
+                            const SizedBox(height: 14),
+                            _buildEditField(
+                              controller: addressController,
+                              label: 'Address',
+                              icon: Icons.location_on_outlined,
+                              maxLines: 2,
+                            ),
+                            const SizedBox(height: 14),
+                            Row(
+                              children: [
+                                Expanded(
+                                  flex: 2,
+                                  child: _buildEditField(
+                                    controller: cityController,
+                                    label: 'City',
+                                    icon: Icons.location_city_outlined,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _buildEditField(
+                                    controller: postalController,
+                                    label: 'Postal',
+                                    icon: Icons.markunread_mailbox_outlined,
+                                    keyboardType: TextInputType.number,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    // Action buttons
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: saving
+                                  ? null
+                                  : () => Navigator.pop(sheetContext),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.grey.shade700,
+                                side:
+                                    BorderSide(color: Colors.grey.shade300),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(14)),
+                              ),
+                              child: const Text(
+                                'Cancel',
+                                style:
+                                    TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            flex: 2,
+                            child: ElevatedButton(
+                              onPressed: saving ? null : handleSave,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: primaryPink,
+                                foregroundColor: Colors.white,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(14)),
+                                elevation: 0,
+                              ),
+                              child: saving
+                                  ? const SizedBox(
+                                      height: 18,
+                                      width: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.check_circle_outline,
+                                            size: 18),
+                                        SizedBox(width: 6),
+                                        Text(
+                                          'Save Changes',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.w700),
+                                        ),
+                                      ],
+                                    ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildEditField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    TextInputType? keyboardType,
+    int maxLines = 1,
+    bool enabled = true,
+  }) {
+    const Color primaryPink = Color(0xFFFF4D97);
+    return TextField(
+      controller: controller,
+      enabled: enabled,
+      keyboardType: keyboardType,
+      maxLines: maxLines,
+      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(
+          color: Colors.grey.shade600,
+          fontWeight: FontWeight.w600,
+          fontSize: 13,
+        ),
+        prefixIcon: Icon(icon, color: primaryPink, size: 20),
+        filled: true,
+        fillColor: enabled ? Colors.white : Colors.grey.shade100,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.grey.shade200),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.grey.shade200),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: primaryPink, width: 1.5),
+        ),
+        disabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.grey.shade200),
+        ),
       ),
     );
   }
@@ -1475,7 +2092,7 @@ class _SettingsTabState extends State<SettingsTab> {
               trailing: const Icon(Icons.arrow_forward_ios, size: 14),
               onTap: () {
                 Navigator.pop(context);
-                _showSettingsMessage('FAQ coming soon');
+                _showFaqDialog();
               },
             ),
             const Divider(),
@@ -1488,7 +2105,7 @@ class _SettingsTabState extends State<SettingsTab> {
               trailing: const Icon(Icons.arrow_forward_ios, size: 14),
               onTap: () {
                 Navigator.pop(context);
-                _showSettingsMessage('support@beautyshop.com');
+                _showContactSupportDialog();
               },
             ),
             const Divider(),
@@ -1498,7 +2115,7 @@ class _SettingsTabState extends State<SettingsTab> {
               trailing: const Icon(Icons.arrow_forward_ios, size: 14),
               onTap: () {
                 Navigator.pop(context);
-                _showSettingsMessage('Tutorials coming soon');
+                _showTutorialsDialog();
               },
             ),
           ],

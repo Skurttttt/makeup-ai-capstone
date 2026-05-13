@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -10,6 +11,10 @@ import 'screens/client_screen.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Suppress the spurious "Attempted to send a key down event when no keys
+  // are in keysPressed" assertion that fires on Windows when Alt/Shift is
+  // held while the window receives focus.
+  RawKeyboard.instance.addListener((_) {});
   await dotenv.load(fileName: 'assets/.env');
 
   try {

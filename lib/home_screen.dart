@@ -5,6 +5,9 @@ import 'screens/scan_tab.dart';
 import 'screens/market_tab.dart';
 import 'screens/subscription_tab.dart';
 import 'screens/settings_tab.dart';
+import 'screens/buyer_orders_screen.dart';
+import 'services/notification_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class HomeScreen extends StatefulWidget {
   final int initialIndex;
@@ -25,6 +28,7 @@ class _HomeScreenState extends State<HomeScreen> {
     HomeTab(),
     ScanTab(),
     MarketTab(),
+    BuyerOrdersScreen(),
     SubscriptionTab(),
     SettingsTab(),
   ];
@@ -33,6 +37,17 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
+    // Start buyer-side notifications (order status changes, chat replies)
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid != null) {
+      NotificationService.instance.startForBuyer(uid);
+    }
+  }
+
+  @override
+  void dispose() {
+    NotificationService.instance.stop();
+    super.dispose();
   }
 
   @override
@@ -69,6 +84,11 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(Icons.shopping_bag_outlined),
             selectedIcon: Icon(Icons.shopping_bag),
             label: 'Market',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.receipt_long_outlined),
+            selectedIcon: Icon(Icons.receipt_long),
+            label: 'Orders',
           ),
           NavigationDestination(
             icon: Icon(Icons.workspace_premium_outlined),

@@ -18,6 +18,7 @@ import 'client_settings_screen.dart';
 import 'client_shop_screen.dart';
 import '../utils/logout_util.dart';
 import 'chat_list_screen.dart';
+import 'client_orders_screen.dart';
 import '../services/notification_service.dart';
 import '../widgets/notification_bell.dart';
 
@@ -471,7 +472,8 @@ class _ClientScreenState extends State<ClientScreen> {
                           2,
                         ),
                         _buildNavItem(Icons.analytics_outlined, 'Analytics', 3),
-                        _buildNavItem(Icons.settings_outlined, 'Settings', 4),
+                        _buildNavItem(Icons.receipt_long_outlined, 'Orders', 4),
+                        _buildNavItem(Icons.settings_outlined, 'Settings', 5),
                       ],
                     ),
                   ),
@@ -719,6 +721,10 @@ class _ClientScreenState extends State<ClientScreen> {
               label: 'Analytics',
             ),
             BottomNavigationBarItem(
+              icon: Icon(Icons.receipt_long_outlined),
+              label: 'Orders',
+            ),
+            BottomNavigationBarItem(
               icon: Icon(Icons.settings_outlined),
               label: 'Settings',
             ),
@@ -756,6 +762,7 @@ class _ClientScreenState extends State<ClientScreen> {
       'My Shop',
       'Products',
       'Analytics',
+      'Orders',
       'Settings',
     ];
     return titles[_currentSection];
@@ -778,6 +785,8 @@ class _ClientScreenState extends State<ClientScreen> {
       case 3:
         return ClientAnalyticsScreen(clientData: clientData);
       case 4:
+        return ClientOrdersScreen(clientData: clientData);
+      case 5:
         return ClientSettingsScreen(clientData: clientData);
       default:
         return const SizedBox();

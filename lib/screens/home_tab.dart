@@ -1623,7 +1623,6 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
               ],
             ),
           ),
-          Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey[400]),
         ],
       ),
     );

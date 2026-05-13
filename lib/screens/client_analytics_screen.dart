@@ -1058,7 +1058,6 @@ class _ClientAnalyticsScreenState extends State<ClientAnalyticsScreen>
         title: 'Stock Alert 🚨',
         description:
             '${lowStockProducts.length} products are running low on stock. Restock soon!',
-        action: 'View Products',
       ));
     }
 
@@ -1068,8 +1067,7 @@ class _ClientAnalyticsScreenState extends State<ClientAnalyticsScreen>
         color: pinkDark,
         title: 'Product Visibility 👀',
         description:
-            'Only ${activePercent.toStringAsFixed(0)}% of your products are active. Activate more!',
-        action: 'Review Inactive',
+            'Only ${activePercent.toStringAsFixed(0)}% of your products are active. Activate more to reach customers!',
       ));
     }
 
@@ -1079,8 +1077,7 @@ class _ClientAnalyticsScreenState extends State<ClientAnalyticsScreen>
         color: pinkPrimary,
         title: 'Top Performer ⭐',
         description:
-            '${topProducts.first['name'] ?? 'Product'} is your highest-priced item. Feature it!',
-        action: 'Promote',
+            '"${topProducts.first['name'] ?? 'Product'}" is your highest-priced item — make sure it is well-stocked and featured.',
       ));
     }
 
@@ -1090,8 +1087,7 @@ class _ClientAnalyticsScreenState extends State<ClientAnalyticsScreen>
         color: pinkAccent,
         title: 'Revenue Opportunity 💡',
         description:
-            'Bundle your top products to increase average order value.',
-        action: 'Create Bundle',
+            'Bundle your top products together to increase your average order value.',
       ));
     }
 
@@ -1131,7 +1127,7 @@ class _ClientAnalyticsScreenState extends State<ClientAnalyticsScreen>
               ),
               const SizedBox(width: 12),
               const Text(
-                'AI-Powered Insights ✨',
+                'Smart Insights ✨',
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
@@ -1187,32 +1183,6 @@ class _ClientAnalyticsScreenState extends State<ClientAnalyticsScreen>
                                 fontSize: 12,
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      TextButton(
-                        onPressed: () {},
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          backgroundColor: Colors.white.withOpacity(0.2),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        child: Row(
-                          children: const [
-                            Text(
-                              'Action',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12,
-                              ),
-                            ),
-                            SizedBox(width: 4),
-                            Icon(Icons.arrow_forward, size: 14),
                           ],
                         ),
                       ),
@@ -1299,14 +1269,12 @@ class _Insight {
   final Color color;
   final String title;
   final String description;
-  final String action;
 
   _Insight({
     required this.icon,
     required this.color,
     required this.title,
     required this.description,
-    required this.action,
   });
 }
 

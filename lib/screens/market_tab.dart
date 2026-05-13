@@ -246,8 +246,13 @@ class _MarketTabState extends State<MarketTab>
         variation: variation,
       );
       await _loadCartFromDb();
-      _cartAnimationController.forward();
-      _cartAnimationController.reverse();
+      if (!mounted) return;
+      // Play a quick bump animation: forward then reverse on completion.
+      _cartAnimationController
+          .forward(from: 0)
+          .then((_) {
+        if (mounted) _cartAnimationController.reverse();
+      });
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -344,8 +349,14 @@ class _MarketTabState extends State<MarketTab>
         MaterialPageRoute(
           builder: (_) => ChatScreen(
             conversationId: conv['id'].toString(),
-            otherDisplayName: 'Seller',
+            otherDisplayName: 'Fashion 21',
+            productId: product['id']?.toString(),
             productName: product['name']?.toString(),
+            productImage: product['image_url']?.toString(),
+            productPrice: product['price'] is num
+                ? (product['price'] as num).toDouble()
+                : double.tryParse(product['price']?.toString() ?? ''),
+            productCurrency: product['currency']?.toString(),
           ),
         ),
       );

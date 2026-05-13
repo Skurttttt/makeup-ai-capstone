@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:math' as math;
+import 'client_orders_screen.dart';
 
 class ClientDashboardScreen extends StatefulWidget {
   final Map<String, dynamic> clientData;
@@ -441,12 +442,19 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: pinkDeep,
+                SizedBox(
+                  width: double.infinity,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      value,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: pinkDeep,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -460,10 +468,12 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
                           color: Colors.grey.shade600,
                           fontWeight: FontWeight.w500,
                         ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    const SizedBox(width: 4),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                       decoration: BoxDecoration(
                         color: isPositive ? Colors.green.shade50 : Colors.red.shade50,
                         borderRadius: BorderRadius.circular(6),
@@ -471,7 +481,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
                       child: Text(
                         delta,
                         style: TextStyle(
-                          fontSize: 10,
+                          fontSize: 9,
                           fontWeight: FontWeight.w600,
                           color: isPositive ? Colors.green.shade700 : Colors.red.shade700,
                         ),
@@ -652,14 +662,18 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Performance Overview 📈',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: pinkDeep,
+              Flexible(
+                child: Text(
+                  'Performance Overview 📈',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: pinkDeep,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
@@ -680,13 +694,22 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
             ],
           ),
           const SizedBox(height: 24),
-          GridView.count(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              // Compute a safe aspect ratio so the card content never clips.
+              // Each card needs at least ~112px of height (icon row 36 +
+              // value/label column 44 + 32px vertical padding).
+              const spacing = 16.0;
+              const minHeight = 112.0;
+              final cellWidth = (constraints.maxWidth - spacing) / 2;
+              final ratio = (cellWidth / minHeight).clamp(0.85, 1.6);
+              return GridView.count(
             crossAxisCount: 2,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
+            crossAxisSpacing: spacing,
+            mainAxisSpacing: spacing,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            childAspectRatio: 1.4,
+            childAspectRatio: ratio,
             children: [
               _buildPerformanceCard(
                 'Total Revenue',
@@ -717,6 +740,8 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
                 '', // No delta for average
               ),
             ],
+          );
+            },
           ),
         ],
       ),
@@ -732,9 +757,9 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
   ) {
     final isPositive = delta.startsWith('+');
     final hasDelta = delta.isNotEmpty;
-    
+
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [color.withOpacity(0.05), color.withOpacity(0.02)],
@@ -748,20 +773,21 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          // Icon + delta badge — Spacer keeps them apart without overflow
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(7),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
+                  color: color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(9),
                 ),
-                child: Icon(icon, color: color, size: 20),
+                child: Icon(icon, color: color, size: 18),
               ),
+              const Spacer(),
               if (hasDelta)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                   decoration: BoxDecoration(
                     color: isPositive ? Colors.green.shade50 : Colors.red.shade50,
                     borderRadius: BorderRadius.circular(6),
@@ -771,14 +797,14 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
                     children: [
                       Icon(
                         isPositive ? Icons.arrow_upward : Icons.arrow_downward,
-                        size: 10,
+                        size: 9,
                         color: isPositive ? Colors.green.shade700 : Colors.red.shade700,
                       ),
                       const SizedBox(width: 2),
                       Text(
                         delta,
                         style: TextStyle(
-                          fontSize: 10,
+                          fontSize: 9,
                           fontWeight: FontWeight.w700,
                           color: isPositive ? Colors.green.shade700 : Colors.red.shade700,
                         ),
@@ -788,25 +814,34 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
                 ),
             ],
           ),
+          // Value + title — full-width so FittedBox can scale down properly
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: pinkDeep,
+              SizedBox(
+                width: double.infinity,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    value,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: pinkDeep,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 2),
               Text(
                 title,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 11,
                   color: Colors.grey.shade600,
                   fontWeight: FontWeight.w500,
                 ),
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
@@ -839,26 +874,30 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Sales Trend',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: pinkDeep,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Sales Trend',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: pinkDeep,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Daily revenue overview',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade500,
+                    const SizedBox(height: 4),
+                    Text(
+                      'Daily revenue overview',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade500,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -936,16 +975,27 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Recent Sales 🛍️',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: pinkDeep,
+              Flexible(
+                child: Text(
+                  'Recent Sales 🛍️',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: pinkDeep,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               TextButton(
-                onPressed: () {},
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ClientOrdersScreen(
+                          clientData: widget.clientData),
+                    ),
+                  );
+                },
                 style: TextButton.styleFrom(
                   foregroundColor: pinkPrimary,
                   padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -1019,11 +1069,14 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
                 const SizedBox(height: 2),
                 Row(
                   children: [
-                    Text(
-                      '$quantity item${quantity == 1 ? '' : 's'}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
+                    Flexible(
+                      child: Text(
+                        '$quantity item${quantity == 1 ? '' : 's'}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     Container(
@@ -1035,12 +1088,15 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
                         shape: BoxShape.circle,
                       ),
                     ),
-                    Text(
-                      _formatCompactCurrency(total),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: pinkPrimary,
+                    Flexible(
+                      child: Text(
+                        _formatCompactCurrency(total),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: pinkPrimary,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],

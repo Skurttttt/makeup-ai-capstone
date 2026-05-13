@@ -110,7 +110,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   (meta['full_name'] ?? meta['name'] ?? '').toString();
             }
             if (_phoneController.text.isEmpty) {
-              _phoneController.text = (meta['phone'] ?? '').toString();
+              _phoneController.text =
+                  (meta['phone_number'] ?? meta['phone'] ?? '').toString();
             }
           });
         }
@@ -118,6 +119,27 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
       // 2. Load saved addresses
       await _loadSavedAddresses(autoSelectDefault: true);
+
+      // 3. Fallback: if no saved addresses, prefill from user metadata
+      if (_savedAddresses.isEmpty) {
+        final meta = user.userMetadata ?? {};
+        final metaAddress = (meta['address'] ?? '').toString().trim();
+        final metaCity = (meta['city'] ?? '').toString().trim();
+        final metaPostal = (meta['postal_code'] ?? '').toString().trim();
+        if (mounted) {
+          setState(() {
+            if (_addressController.text.isEmpty && metaAddress.isNotEmpty) {
+              _addressController.text = metaAddress;
+            }
+            if (_cityController.text.isEmpty && metaCity.isNotEmpty) {
+              _cityController.text = metaCity;
+            }
+            if (_postalCodeController.text.isEmpty && metaPostal.isNotEmpty) {
+              _postalCodeController.text = metaPostal;
+            }
+          });
+        }
+      }
     } catch (_) {
       // Silent fail — user can fill in manually.
     }
@@ -338,6 +360,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           'order_id': orderId,
           'product_id': item['id'],
           'business_id': item['business_id'],
+          'product_name': item['name'],
+          'product_image_url': item['image_url'],
           'quantity': item['quantity'],
           'unit_price': item['price'],
           'total_price':
@@ -373,9 +397,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           throw 'Failed to create payment link';
         }
       } else {
+        // COD / other — mark as paid so seller can process it
         await Supabase.instance.client
             .from('orders')
-            .update({'status': 'confirmed'}).eq('id', orderId);
+            .update({'status': 'paid'}).eq('id', orderId);
         widget.onCheckoutComplete();
         if (mounted) await _showSuccessScreen(orderId.toString());
       }
