@@ -392,7 +392,7 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: width > 1200 ? 4 : (width > 800 ? 3 : (width > 500 ? 2 : 1)),
-        childAspectRatio: width > 1200 ? 0.62 : (width > 800 ? 0.6 : (width > 500 ? 0.58 : 0.95)),
+        childAspectRatio: width > 1200 ? 0.52 : (width > 800 ? 0.5 : (width > 500 ? 0.48 : 0.75)),
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
       ),
@@ -442,7 +442,7 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
                 child: Container(
                   width: double.infinity,
-                  height: 100,
+                  height: 160,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [pinkSoft, pinkLight.withOpacity(0.2)],
