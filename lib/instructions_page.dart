@@ -19,6 +19,7 @@ import 'painters/eyeshadow_guide_painter.dart';
 import 'painters/eyeliner_guide_painter.dart';
 import 'widgets/bottom_beauty_nav.dart';
 import 'home_screen.dart';
+import 'screens/checkout_screen.dart';
 
 // Widgets
 import 'widgets/eyeshadow_guide_card.dart';
@@ -81,6 +82,10 @@ class _InstructionsPageState extends State<InstructionsPage> {
 
   // Skin type state
   SkinType? _selectedSkinType;
+
+  // Recommended kit state
+  bool _buildingRecommendedKit = false;
+  List<Map<String, dynamic>> _recommendedKitItems = [];
 
   @override
   void initState() {
@@ -973,241 +978,694 @@ class _InstructionsPageState extends State<InstructionsPage> {
     return const Center(child: CircularProgressIndicator());
   }
 
-  Widget _buildAIStepsPager() {
-    const fixedStepOrder = [
-      {
-        'stepNumber': 1,
-        'title': 'Base Prep',
-        'targetArea': 'full_face',
-        'fallbackInstruction':
-            'Prep your skin by priming the T-zone, hydrating the cheeks, and brightening the under-eye area.',
-      },
-      {
-        'stepNumber': 2,
-        'title': 'Eyebrows',
-        'targetArea': 'brows',
-        'fallbackInstruction':
-            'Define your brows softly by following your natural brow shape.',
-      },
-      {
-        'stepNumber': 3,
-        'title': 'Eyeshadow',
-        'targetArea': 'eyeshadow',
-        'fallbackInstruction':
-            'Apply the main shade on the lid, blend the crease, then add depth to the outer corner.',
-      },
-      {
-        'stepNumber': 4,
-        'title': 'Eyeliner',
-        'targetArea': 'eyeliner',
-        'fallbackInstruction':
-            'Draw close to the upper lash line, connect the outer edge, then flick outward for the wing.',
-      },
-      {
-        'stepNumber': 5,
-        'title': 'Blush / Contour',
-        'targetArea': 'blush_contour',
-        'fallbackInstruction':
-            'Apply blush on the upper cheek area, then contour lightly below the cheekbone for shape.',
-      },
-      {
-        'stepNumber': 6,
-        'title': 'Lips',
-        'targetArea': 'lips',
-        'fallbackInstruction':
-            'Apply your lip color from the center outward and blend evenly for a polished finish.',
-      },
-      {
-        'stepNumber': 7,
-        'title': 'Final Look',
-        'targetArea': 'full_makeup',
-        'fallbackInstruction':
-            'Set your makeup with a light spray using X and T motion, then check the final blend.',
-      },
-    ];
+  // Recommended kit methods
+  Future<void> _buildFinalRecommendedKit() async {
+    if (_buildingRecommendedKit) return;
 
-    if (_loadingAI && _aiSteps.isEmpty) {
-      return AiTutorialLoadingView(lookName: widget.look.lookName);
-    }
+    setState(() => _buildingRecommendedKit = true);
 
-    if (_aiError != null) {
-      return Center(
-        child: Text(
-          _aiError!,
-          style: const TextStyle(color: Colors.red),
+    try {
+      const targetAreas = [
+        'full_face',
+        'brows',
+        'eyeshadow',
+        'eyeliner',
+        'blush_contour',
+        'lips',
+        'full_makeup',
+      ];
+
+      final Map<String, Map<String, dynamic>> uniqueProducts = {};
+
+      for (final targetArea in targetAreas) {
+        final products = await _fetchRecommendedProducts(targetArea);
+
+        if (products.isEmpty) continue;
+
+        final bestMatch = products.first;
+        final productId = bestMatch['id']?.toString();
+
+        if (productId == null || productId.isEmpty) continue;
+        if (uniqueProducts.containsKey(productId)) continue;
+
+        uniqueProducts[productId] = {
+          ...bestMatch,
+          'quantity': 1,
+          'variation': {
+            'color_name': bestMatch['shade_name'],
+            'hex_code': bestMatch['hex_code'],
+          },
+        };
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _recommendedKitItems = uniqueProducts.values.toList();
+      });
+
+      _showFinalRecommendedKitSheet();
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to build recommended kit: $e'),
+          backgroundColor: Colors.red,
         ),
       );
+    } finally {
+      if (mounted) {
+        setState(() => _buildingRecommendedKit = false);
+      }
     }
+  }
 
-    if (_aiSteps.isEmpty) return const SizedBox.shrink();
+  void _showFinalRecommendedKitSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            double subtotal = _recommendedKitItems.fold(
+              0.0,
+              (sum, item) {
+                final price = (item['price'] as num?)?.toDouble() ?? 0.0;
+                final qty = item['quantity'] as int? ?? 1;
+                return sum + (price * qty);
+              },
+            );
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return SizedBox(
-          height: constraints.maxHeight,
-          child: Column(
-            children: [
-              const SizedBox(height: 4),
+            void updateQty(int index, int change) {
+              final currentQty = _recommendedKitItems[index]['quantity'] as int? ?? 1;
+              final newQty = currentQty + change;
 
-              const Text(
-                '✨ AI Personalized Guide ✨',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFFFF3D93),
-                  letterSpacing: 0.1,
-                ),
+              if (newQty < 0) return;
+              
+              if (newQty == 0) {
+                setModalState(() {
+                  _recommendedKitItems[index]['quantity'] = 0;
+                });
+                setState(() {});
+              } else {
+                setModalState(() {
+                  _recommendedKitItems[index]['quantity'] = newQty;
+                });
+                setState(() {});
+              }
+            }
 
-              ),
+            // Filter out items with quantity 0 for checkout
+            final checkoutItems = _recommendedKitItems
+                .where((item) => (item['quantity'] as int? ?? 0) > 0)
+                .toList();
 
-              const SizedBox(height: 8),
+            return DraggableScrollableSheet(
+              initialChildSize: 0.88,
+              minChildSize: 0.55,
+              maxChildSize: 0.95,
+              builder: (context, scrollController) {
+                return Container(
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(30),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 42,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFD3E5),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
 
-              Expanded(
-                child: PageView.builder(
-                  controller: _pageController,
-                  itemCount: 7,
-                  onPageChanged: (index) {
-                    setState(() => _currentPage = index);
+                      const SizedBox(height: 18),
 
-                    final fixedStep = fixedStepOrder[index];
-                    _ensureGuideForTargetArea(
-                      fixedStep['targetArea'].toString(),
-                    );
-                  },
-                  itemBuilder: (context, index) {
-                    final fixedStep = fixedStepOrder[index];
+                      const Text(
+                        '✨ Your AI Recommended Kit',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 21,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFFFF3D93),
+                        ),
+                      ),
 
-                    final stepNumber = fixedStep['stepNumber'].toString();
-                    final title = fixedStep['title'].toString();
-                    final targetArea = fixedStep['targetArea'].toString();
+                      const SizedBox(height: 6),
 
-                    final aiStep = _getAiStepForFixedStep(index + 1, targetArea);
+                      const Text(
+                        'Best-match products from your full makeup guide.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF777780),
+                        ),
+                      ),
 
-                    final instruction =
-                        aiStep['instruction']?.toString() ??
-                        fixedStep['fallbackInstruction'].toString();
+                      const SizedBox(height: 16),
 
-                    final whyThisColorSuitsYou = _cleanWhyText(
-                      aiStep['whyThisColorSuitsYou']?.toString() ?? '',
-                      targetArea,
-                    );
-
-                    _ensureGuideForTargetArea(targetArea);
-
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Column(
-                        children: [
-                          _InstructionCard(
-                            stepNumber: stepNumber,
-                            title: title,
-                            instruction: instruction,
-                          ),
-
-                          const SizedBox(height: 6),
-
-                          Expanded(
-                            child: Stack(
-                              children: [
-                                Positioned.fill(
-                                  child: _GuideCardShell(
-                                    child: _buildGuideWidgetForTargetArea(
-                                      targetArea: targetArea,
-                                    ),
+                      Expanded(
+                        child: _recommendedKitItems.isEmpty
+                            ? const Center(
+                                child: Text(
+                                  'No recommended products found yet.',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
+                              )
+                            : ListView.separated(
+                                controller: scrollController,
+                                itemCount: _recommendedKitItems.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: 12),
+                                itemBuilder: (context, index) {
+                                  final item = _recommendedKitItems[index];
 
-                                Positioned(
-                                  right: 10,
-                                  top: 10,
-                                  child: Column(
-                                    children: [
-                                      _FloatingMiniButton(
-                                        icon: Icons.lightbulb_rounded,
-                                        onTap: () {
-                                          _showInfoSheet(
-                                            title: 'Tip',
-                                            description:
-                                                'Follow the guide slowly and blend lightly. You can always add more product, but it is harder to remove excess makeup.',
-                                          );
-                                        },
+                                  final name =
+                                      item['name']?.toString() ?? 'Product';
+                                  final shade =
+                                      item['shade_name']?.toString() ?? '';
+                                  final imageUrl =
+                                      item['image_url']?.toString() ?? '';
+                                  final price =
+                                      (item['price'] as num?)?.toDouble() ?? 0.0;
+                                  final qty = item['quantity'] as int? ?? 1;
+
+                                  return Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: qty == 0
+                                          ? const Color(0xFFF5F5F5)
+                                          : const Color(0xFFFFF7FA),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                        color: qty == 0
+                                            ? const Color(0xFFE0E0E0)
+                                            : const Color(0xFFFFD8E8),
                                       ),
-                                      const SizedBox(height: 6),
-                                      _FloatingMiniButton(
-                                        icon: Icons.palette_rounded,
-                                        onTap: () {
-                                          _showInfoSheet(
-                                            title: targetArea == 'full_makeup'
-                                                ? 'Why this look suits you'
-                                                : 'Why this color suits you',
-                                            description:
-                                                whyThisColorSuitsYou.trim().isEmpty
-                                                    ? 'This step is personalized based on your face shape, skin tone, and selected makeup look.'
-                                                    : whyThisColorSuitsYou,
-                                          );
-                                        },
-                                      ),
-                                      const SizedBox(height: 6),
-                                      _FloatingMiniButton(
-                                        icon: Icons.shopping_bag_outlined,
-                                        onTap: () {
-                                          _showProductRecommendationSheet(targetArea);
-                                        },
-                                      ),
-                                    ],
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(16),
+                                          child: imageUrl.isNotEmpty
+                                              ? Image.network(
+                                                  imageUrl,
+                                                  width: 64,
+                                                  height: 64,
+                                                  fit: BoxFit.cover,
+                                                  color: qty == 0
+                                                      ? Colors.black.withOpacity(0.3)
+                                                      : null,
+                                                  colorBlendMode: qty == 0
+                                                      ? BlendMode.darken
+                                                      : null,
+                                                )
+                                              : Container(
+                                                  width: 64,
+                                                  height: 64,
+                                                  color: qty == 0
+                                                      ? const Color(0xFFE0E0E0)
+                                                      : const Color(0xFFFFE5F0),
+                                                  child: Icon(
+                                                    Icons.shopping_bag_outlined,
+                                                    color: qty == 0
+                                                        ? Colors.grey
+                                                        : const Color(0xFFFF3D93),
+                                                  ),
+                                                ),
+                                        ),
+
+                                        const SizedBox(width: 12),
+
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              const Text(
+                                                'BEST MATCH',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w900,
+                                                  color: Color(0xFFFF3D93),
+                                                  letterSpacing: 0.5,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                name,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w900,
+                                                  color: qty == 0
+                                                      ? Colors.grey
+                                                      : const Color(0xFF171725),
+                                                ),
+                                              ),
+                                              if (shade.isNotEmpty)
+                                                Text(
+                                                  'Shade: $shade',
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: qty == 0
+                                                        ? Colors.grey
+                                                        : const Color(0xFF777780),
+                                                  ),
+                                                ),
+                                              const SizedBox(height: 5),
+                                              Text(
+                                                '₱${price.toStringAsFixed(2)}',
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w900,
+                                                  color: qty == 0
+                                                      ? Colors.grey
+                                                      : const Color(0xFFFF3D93),
+                                                ),
+                                              ),
+                                              if (qty == 0)
+                                                const Text(
+                                                  'Removed from checkout',
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: Colors.grey,
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+
+                                        Row(
+                                          children: [
+                                            _KitQtyButton(
+                                              icon: Icons.remove,
+                                              onTap: () => updateQty(index, -1),
+                                              isDisabled: qty == 0,
+                                            ),
+                                            Padding(
+                                              padding: const EdgeInsets.symmetric(
+                                                horizontal: 10,
+                                              ),
+                                              child: Text(
+                                                qty.toString(),
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w900,
+                                                  color: qty == 0
+                                                      ? Colors.grey
+                                                      : const Color(0xFF171725),
+                                                ),
+                                              ),
+                                            ),
+                                            _KitQtyButton(
+                                              icon: Icons.add,
+                                              onTap: () => updateQty(index, 1),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF1F6),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'Subtotal',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF55555F),
+                                  ),
+                                ),
+                                Text(
+                                  '₱${subtotal.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFF171725),
                                   ),
                                 ),
                               ],
                             ),
-                          ),
-                        ],
+
+                            const SizedBox(height: 8),
+
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'Total',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFF171725),
+                                  ),
+                                ),
+                                Text(
+                                  '₱${subtotal.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFFFF3D93),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
-                    );
-                  },
-                ),
-              ),
 
-              const SizedBox(height: 8),
+                      const SizedBox(height: 14),
 
-              Text(
-                'Step ${_currentPage + 1} of 7',
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: Color(0xFF777780),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 54,
+                        child: ElevatedButton.icon(
+                          onPressed: checkoutItems.isEmpty
+                              ? null
+                              : () {
+                                  Navigator.pop(context);
 
-              const SizedBox(height: 8),
-
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(7, (index) {
-                  final isActive = index == _currentPage;
-
-                  return AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    width: isActive ? 26 : 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: isActive
-                          ? const Color(0xFFFF3D93)
-                          : const Color(0xFFFF3D93).withOpacity(0.25),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                  );
-                }),
-              ),
-
-              const SizedBox(height: 4),
-            ],
-          ),
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => CheckoutScreen(
+                                        cartItems: checkoutItems,
+                                        onCheckoutComplete: () {
+                                          setState(() {
+                                            _recommendedKitItems.clear();
+                                          });
+                                        },
+                                      ),
+                                    ),
+                                  );
+                                },
+                          icon: const Icon(Icons.shopping_cart_checkout_rounded),
+                          label: Text(
+                            checkoutItems.isEmpty
+                                ? 'No items selected'
+                                : 'Checkout (${checkoutItems.length} items)',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFF3D93),
+                            foregroundColor: Colors.white,
+                            disabledBackgroundColor:
+                                const Color(0xFFFF3D93).withOpacity(0.35),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            elevation: 0,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
         );
       },
     );
   }
+
+Widget _buildAIStepsPager() {
+  const fixedStepOrder = [
+    {
+      'stepNumber': 1,
+      'title': 'Base Prep',
+      'targetArea': 'full_face',
+      'fallbackInstruction':
+          'Prep your skin by priming the T-zone, hydrating the cheeks, and brightening the under-eye area.',
+    },
+    {
+      'stepNumber': 2,
+      'title': 'Eyebrows',
+      'targetArea': 'brows',
+      'fallbackInstruction':
+          'Define your brows softly by following your natural brow shape.',
+    },
+    {
+      'stepNumber': 3,
+      'title': 'Eyeshadow',
+      'targetArea': 'eyeshadow',
+      'fallbackInstruction':
+          'Apply the main shade on the lid, blend the crease, then add depth to the outer corner.',
+    },
+    {
+      'stepNumber': 4,
+      'title': 'Eyeliner',
+      'targetArea': 'eyeliner',
+      'fallbackInstruction':
+          'Draw close to the upper lash line, connect the outer edge, then flick outward for the wing.',
+    },
+    {
+      'stepNumber': 5,
+      'title': 'Blush / Contour',
+      'targetArea': 'blush_contour',
+      'fallbackInstruction':
+          'Apply blush on the upper cheek area, then contour lightly below the cheekbone for shape.',
+    },
+    {
+      'stepNumber': 6,
+      'title': 'Lips',
+      'targetArea': 'lips',
+      'fallbackInstruction':
+          'Apply your lip color from the center outward and blend evenly for a polished finish.',
+    },
+    {
+      'stepNumber': 7,
+      'title': 'Final Look',
+      'targetArea': 'full_makeup',
+      'fallbackInstruction':
+          'Set your makeup with a light spray using X and T motion, then check the final blend.',
+    },
+  ];
+
+  if (_loadingAI && _aiSteps.isEmpty) {
+    return AiTutorialLoadingView(lookName: widget.look.lookName);
+  }
+
+  if (_aiError != null) {
+    return Center(
+      child: Text(
+        _aiError!,
+        style: const TextStyle(color: Colors.red),
+      ),
+    );
+  }
+
+  if (_aiSteps.isEmpty) return const SizedBox.shrink();
+
+  return LayoutBuilder(
+    builder: (context, constraints) {
+      return SizedBox(
+        height: constraints.maxHeight,
+        child: Column(
+          children: [
+            const SizedBox(height: 4),
+
+            const Text(
+              '✨ AI Personalized Guide ✨',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14.5,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFFFF3D93),
+                letterSpacing: 0.1,
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            Expanded(
+              child: PageView.builder(
+                controller: _pageController,
+                itemCount: 7,
+                onPageChanged: (index) {
+                  setState(() => _currentPage = index);
+
+                  final fixedStep = fixedStepOrder[index];
+                  _ensureGuideForTargetArea(
+                    fixedStep['targetArea'].toString(),
+                  );
+                },
+                itemBuilder: (context, index) {
+                  final fixedStep = fixedStepOrder[index];
+
+                  final stepNumber = fixedStep['stepNumber'].toString();
+                  final title = fixedStep['title'].toString();
+                  final targetArea = fixedStep['targetArea'].toString();
+
+                  final aiStep = _getAiStepForFixedStep(index + 1, targetArea);
+
+                  final instruction =
+                      aiStep['instruction']?.toString() ??
+                      fixedStep['fallbackInstruction'].toString();
+
+                  final whyThisColorSuitsYou = _cleanWhyText(
+                    aiStep['whyThisColorSuitsYou']?.toString() ?? '',
+                    targetArea,
+                  );
+
+                  _ensureGuideForTargetArea(targetArea);
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      children: [
+                        _InstructionCard(
+                          stepNumber: stepNumber,
+                          title: title,
+                          instruction: instruction,
+                        ),
+
+                        const SizedBox(height: 6),
+
+                        Expanded(
+                          child: Stack(
+                            children: [
+                              Positioned.fill(
+                                child: _GuideCardShell(
+                                  child: _buildGuideWidgetForTargetArea(
+                                    targetArea: targetArea,
+                                  ),
+                                ),
+                              ),
+
+                              Positioned(
+                                right: 10,
+                                top: 10,
+                                child: Column(
+                                  children: [
+                                    _FloatingMiniButton(
+                                      icon: Icons.lightbulb_rounded,
+                                      onTap: () {
+                                        _showInfoSheet(
+                                          title: 'Tip',
+                                          description:
+                                              'Follow the guide slowly and blend lightly. You can always add more product, but it is harder to remove excess makeup.',
+                                        );
+                                      },
+                                    ),
+                                    const SizedBox(height: 6),
+                                    _FloatingMiniButton(
+                                      icon: Icons.palette_rounded,
+                                      onTap: () {
+                                        _showInfoSheet(
+                                          title: targetArea == 'full_makeup'
+                                              ? 'Why this look suits you'
+                                              : 'Why this color suits you',
+                                          description:
+                                              whyThisColorSuitsYou.trim().isEmpty
+                                                  ? 'This step is personalized based on your face shape, skin tone, and selected makeup look.'
+                                                  : whyThisColorSuitsYou,
+                                        );
+                                      },
+                                    ),
+                                    const SizedBox(height: 6),
+                                    _FloatingMiniButton(
+                                      icon: Icons.shopping_bag_outlined,
+                                      onTap: () {
+                                        _showProductRecommendationSheet(targetArea);
+                                      },
+                                    ),
+                                    // 4th FAB button - only on Step 7 (full_makeup)
+                                    if (targetArea == 'full_makeup') ...[
+                                      const SizedBox(height: 6),
+                                      _FloatingMiniButton(
+                                        icon: Icons.auto_awesome_rounded,
+                                        onTap: _buildingRecommendedKit ? () {} : _buildFinalRecommendedKit,
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            Text(
+              'Step ${_currentPage + 1} of 7',
+              style: const TextStyle(
+                fontSize: 11,
+                color: Color(0xFF777780),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(7, (index) {
+                final isActive = index == _currentPage;
+
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  width: isActive ? 26 : 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: isActive
+                        ? const Color(0xFFFF3D93)
+                        : const Color(0xFFFF3D93).withOpacity(0.25),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                );
+              }),
+            ),
+
+            SizedBox(height: _currentPage == 6 ? 0 : 12),
+          ],
+        ),
+      );
+    },
+  );
+}
 
   @override
   Widget build(BuildContext context) {
@@ -1316,7 +1774,8 @@ class _GuideCardShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRect(
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
       child: child,
     );
   }
@@ -1349,6 +1808,42 @@ class _FloatingMiniButton extends StatelessWidget {
             color: Colors.white,
             size: 22,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _KitQtyButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool isDisabled;
+
+  const _KitQtyButton({
+    required this.icon,
+    required this.onTap,
+    this.isDisabled = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: isDisabled ? null : onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          color: isDisabled ? const Color(0xFFF0F0F0) : Colors.white,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: isDisabled ? const Color(0xFFE0E0E0) : const Color(0xFFFFD3E5),
+          ),
+        ),
+        child: Icon(
+          icon,
+          size: 16,
+          color: isDisabled ? Colors.grey : const Color(0xFFFF3D93),
         ),
       ),
     );
