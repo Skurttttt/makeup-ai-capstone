@@ -76,6 +76,133 @@ class _ProductFormPageState extends State<ProductFormPage> {
   final Set<String> _selectedLookTags = {};
   bool _saving = false;
 
+  // Auto-detected shade depth (no manual selection needed)
+  String _getAutoDetectedShadeDepth() {
+    return _detectShadeDepthFromHex(_hexCodeController.text);
+  }
+
+  String _detectShadeDepthFromHex(String hexCode) {
+    final cleaned = hexCode.replaceAll('#', '').trim();
+
+    if (cleaned.length != 6) return 'Medium';
+
+    final r = int.parse(cleaned.substring(0, 2), radix: 16);
+    final g = int.parse(cleaned.substring(2, 4), radix: 16);
+    final b = int.parse(cleaned.substring(4, 6), radix: 16);
+
+    final brightness = (0.299 * r) + (0.587 * g) + (0.114 * b);
+
+    if (brightness >= 215) return 'Fair';
+    if (brightness >= 175) return 'Light';
+    if (brightness >= 130) return 'Medium';
+    if (brightness >= 85) return 'Morena';
+
+    return 'Deep Morena';
+  }
+
+  // AI-powered color family detection from hex code
+  String _detectColorFamilyFromHex(String hexCode) {
+    final cleaned = hexCode.replaceAll('#', '').trim();
+
+    if (cleaned.length != 6) return 'Rosy Pink';
+
+    try {
+      final r = int.parse(cleaned.substring(0, 2), radix: 16);
+      final g = int.parse(cleaned.substring(2, 4), radix: 16);
+      final b = int.parse(cleaned.substring(4, 6), radix: 16);
+
+      final maxChannel = [r, g, b].reduce((a, b) => a > b ? a : b);
+      final minChannel = [r, g, b].reduce((a, b) => a < b ? a : b);
+
+      final brightness = (0.299 * r) + (0.587 * g) + (0.114 * b);
+      final saturation = maxChannel - minChannel;
+
+      final redDominant = r > g && r > b;
+      final warm = r >= b;
+      final cool = b > r;
+
+      if (brightness < 65) {
+        if (r > 90 && b > 70) return 'Plum';
+        if (r > 90) return 'Wine Red';
+        return 'Warm Brown';
+      }
+
+      if (r > 150 && g < 95 && b < 110) {
+        if (brightness < 120) return 'Wine Red';
+        return 'Cherry Red';
+      }
+
+      if (r > 120 && b > 100 && g < 115) {
+        if (brightness < 115) return 'Plum';
+        if (cool) return 'Cool Berry';
+        return 'Berry Pink';
+      }
+
+      if (r > 160 && b > 120 && g < 145) {
+        if (saturation < 70) return 'Dusty Mauve';
+        return 'Berry Pink';
+      }
+
+      if (r > 170 && b > 130 && g > 110) {
+        if (cool) return 'Cool Pink';
+        if (saturation < 55) return 'Muted Rose';
+        return 'Rosy Pink';
+      }
+
+      if (r > 180 && g > 120 && b < 130) {
+        if (g > 145) return 'Soft Peach';
+        return 'Warm Coral';
+      }
+
+      if (r > 190 && g > 95 && g < 145 && b < 110) {
+        return 'Orange Coral';
+      }
+
+      if (r > 150 && g > 90 && b < 90) {
+        if (r - g > 55) return 'Terracotta';
+        return 'Warm Coral';
+      }
+
+      if (r > 135 && g > 95 && b > 75 && warm) {
+        if (brightness > 185) return 'Beige Nude';
+        if (r - g < 35 && g - b < 35) return 'Caramel Nude';
+        if (b < 100) return 'Brown Nude';
+        return 'Caramel Nude';
+      }
+
+      if (r > 110 && g > 70 && b < 80) {
+        if (r - g > 45) return 'Terracotta';
+        return 'Warm Brown';
+      }
+
+      if (r > 95 && g > 70 && b > 55 && warm) {
+        return 'Brown Nude';
+      }
+
+      if (redDominant && saturation < 60) {
+        return 'Muted Rose';
+      }
+
+      return 'Rosy Pink';
+    } catch (_) {
+      return 'Rosy Pink';
+    }
+  }
+
+  void _syncColorFamilyFromHex() {
+    final hex = _hexCodeController.text.trim();
+
+    if (!RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(hex)) return;
+
+    final detectedFamily = _detectColorFamilyFromHex(hex);
+
+    if (_colorFamily != detectedFamily) {
+      setState(() {
+        _colorFamily = detectedFamily;
+      });
+    }
+  }
+
   int _channelTo255(num channel) {
     if (channel <= 1) {
       return (channel * 255).round().clamp(0, 255);
@@ -86,8 +213,17 @@ class _ProductFormPageState extends State<ProductFormPage> {
   @override
   void initState() {
     super.initState();
+    _hexCodeController.addListener(_syncColorFamilyFromHex);
     _loadCategoryOptions();
     if (widget.isEditing) _populateFromExisting();
+    
+    // Add listener to auto-detect shade depth when hex code changes
+    _hexCodeController.addListener(_onHexCodeChanged);
+  }
+
+  void _onHexCodeChanged() {
+    // Just trigger a rebuild to update any UI that shows the detected depth
+    if (mounted) setState(() {});
   }
 
   void _populateFromExisting() {
@@ -143,6 +279,8 @@ class _ProductFormPageState extends State<ProductFormPage> {
 
   @override
   void dispose() {
+    _hexCodeController.removeListener(_syncColorFamilyFromHex);
+    _hexCodeController.removeListener(_onHexCodeChanged);
     _nameController.dispose();
     _descriptionController.dispose();
     _priceController.dispose();
@@ -418,6 +556,9 @@ class _ProductFormPageState extends State<ProductFormPage> {
           ? await _uploadProductImage()
           : _imageUrlController.text;
 
+      // Auto-detect shade depth from hex code
+      final autoDetectedShadeDepth = _detectShadeDepthFromHex(_hexCodeController.text);
+
       final payload = <String, dynamic>{
         'business_id': widget.businessId,
         'name': _nameController.text,
@@ -431,6 +572,7 @@ class _ProductFormPageState extends State<ProductFormPage> {
         'hex_code': _hexCodeController.text,
         'undertone': _selectedUndertones.join(', '),
         'color_family': _colorFamily,
+        'shade_depth': autoDetectedShadeDepth,
         'compatible_looks': _generateCompatibleLooks(),
         'auto_generated_looks': true,
         'compatible_skin_type': _selectedSkinTypes.join(', '),
@@ -560,6 +702,98 @@ class _ProductFormPageState extends State<ProductFormPage> {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
       ),
       validator: (value) => (value?.isEmpty ?? true) ? 'Category is required' : null,
+    );
+  }
+
+  Widget _buildAutoDetectedShadeDepthCard() {
+    final detectedDepth = _detectShadeDepthFromHex(_hexCodeController.text);
+    
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F7FF),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: primaryPink.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: primaryPink.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.auto_awesome, color: primaryPink, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'AI-Powered Shade Detection',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF333333),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                RichText(
+                  text: TextSpan(
+                    style: const TextStyle(fontSize: 11, color: Color(0xFF666666)),
+                    children: [
+                      const TextSpan(text: 'Detected depth: '),
+                      TextSpan(
+                        text: detectedDepth,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: primaryPink,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAutoDetectedColorFamilyCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7FA),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: primaryPink.withOpacity(0.18),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.auto_awesome_rounded,
+            color: primaryPink,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'AI detected color family: $_colorFamily',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: Colors.black87,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -971,36 +1205,12 @@ class _ProductFormPageState extends State<ProductFormPage> {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 12),
+                      _buildAutoDetectedShadeDepthCard(),
+                      const SizedBox(height: 16),
+                      _buildAutoDetectedColorFamilyCard(),
                       const SizedBox(height: 16),
                       _buildUndertoneSelector(),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildDropdownField(
-                              label: 'Color Family',
-                              value: _colorFamily,
-                              items: const [
-                                'Rosy Pink',
-                                'Nude',
-                                'Beige',
-                                'Peach',
-                                'Coral',
-                                'Pink',
-                                'Rose',
-                                'Mauve',
-                                'Berry',
-                                'Red',
-                                'Plum',
-                                'Brown',
-                                'Terracotta',
-                                'Orange',
-                              ],
-                              onChanged: (value) => setState(() => _colorFamily = value!),
-                            ),
-                          ),
-                        ],
-                      ),
                       const SizedBox(height: 16),
                       _buildChipSelector(
                         'Skin Type Compatibility',
@@ -1054,7 +1264,7 @@ class _ProductFormPageState extends State<ProductFormPage> {
                           ),
                         ),
                         child: const Text(
-                          'AI will automatically match this product to looks based on category, shade, undertone, and finish.',
+                          '✨ AI automatically detects shade depth and color family from hex code. No manual selection needed.',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,

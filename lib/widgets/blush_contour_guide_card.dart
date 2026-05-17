@@ -9,12 +9,14 @@ class BlushContourGuideCard extends StatelessWidget {
   final Face face;
   final MakeupLookConfig config;
   final ui.Image image;
+  final Color blushColor;
 
   const BlushContourGuideCard({
     super.key,
     required this.face,
     required this.config,
     required this.image,
+    this.blushColor = const Color(0xFFFF4D97),
   });
 
   @override
@@ -72,6 +74,7 @@ class BlushContourGuideCard extends StatelessWidget {
                           image.width.toDouble(),
                           image.height.toDouble(),
                         ),
+                        blushColor: blushColor,
                       ),
                     ),
                   ],

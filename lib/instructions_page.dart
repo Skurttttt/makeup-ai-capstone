@@ -86,6 +86,8 @@ class _InstructionsPageState extends State<InstructionsPage> {
   // Recommended kit state
   bool _buildingRecommendedKit = false;
   List<Map<String, dynamic>> _recommendedKitItems = [];
+  final Map<String, Color> _recommendedStepColors = {};
+  final Set<String> _prefetchedTargetAreas = {};
 
   @override
   void initState() {
@@ -101,6 +103,379 @@ class _InstructionsPageState extends State<InstructionsPage> {
   void dispose() {
     _pageController.dispose();
     super.dispose();
+  }
+
+  // Helper method to check if skin tone matches shade depth
+  bool _skinToneMatchesShadeDepth(String skinTone, String shadeDepth) {
+    final tone = skinTone.toLowerCase();
+    final depth = shadeDepth.toLowerCase();
+
+    if (tone.contains('fair')) {
+      return depth.contains('fair') || depth.contains('light');
+    }
+
+    if (tone.contains('light')) {
+      return depth.contains('light') || depth.contains('fair') || depth.contains('medium');
+    }
+
+    if (tone.contains('medium')) {
+      return depth.contains('medium') || depth.contains('morena') || depth.contains('light');
+    }
+
+    if (tone.contains('morena') || tone.contains('tan')) {
+      return depth.contains('morena') || depth.contains('medium') || depth.contains('deep morena');
+    }
+
+    if (tone.contains('deep') || tone.contains('dark')) {
+      return depth.contains('deep morena') || depth.contains('morena');
+    }
+
+    return false;
+  }
+
+  // Helper method to get dynamic tip for target area
+  String _tipForTargetArea(String targetArea) {
+    switch (targetArea) {
+      case 'full_face':
+        return 'Apply base products in thin layers. Focus on smooth prep before adding color so the makeup blends better.';
+
+      case 'brows':
+        return 'Start lightly on the inner brow, then build definition toward the arch and tail. Avoid making the front too harsh.';
+
+      case 'eyeshadow':
+        return 'Blend the edges first before adding more pigment. Build the color slowly to avoid harsh lines.';
+
+      case 'eyeliner':
+        return 'Keep your hand steady and draw close to the lash line. Start thin, then extend the wing gradually.';
+
+      case 'blush_contour':
+        return 'Apply blush little by little. Blend upward for a lifted look and avoid placing too much product near the nose.';
+
+      case 'lips':
+        return 'Start from the center of the lips, then blend outward. Use the outline as your guide for a cleaner shape.';
+
+      case 'full_makeup':
+        return 'Check the balance of your eyes, cheeks, and lips. Blend any harsh edges for a polished final look.';
+
+      default:
+        return 'Follow the guide slowly and build product gradually.';
+    }
+  }
+
+  // Helper method to show full instruction sheet
+  void _showFullInstructionSheet({
+    required String title,
+    required String instruction,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) {
+        return Container(
+          padding: const EdgeInsets.fromLTRB(22, 20, 22, 28),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(28),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFFFF3D93),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                instruction,
+                style: const TextStyle(
+                  fontSize: 15,
+                  height: 1.45,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF33333A),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // Helper method to score color family against look
+// Helper method to score color family against look
+  int _lookColorFamilyScore({
+    required String lookName,
+    required String targetArea,
+    required String colorFamily,
+  }) {
+    final look = lookName.toLowerCase();
+    final area = targetArea.toLowerCase();
+    final color = colorFamily.toLowerCase().trim();
+
+    if (color.isEmpty) return -4;
+
+    List<String> preferred = [];
+    List<String> acceptable = [];
+    List<String> badMismatch = [];
+
+    if (look.contains('peach')) {
+      preferred = [
+        'soft peach',
+        'warm coral',
+        'orange coral',
+        'beige nude',
+      ];
+      acceptable = [
+        'terracotta',
+        'caramel nude',
+        'rosy pink',
+      ];
+      badMismatch = [
+        'plum',
+        'wine red',
+        'cool berry',
+        'cherry red',
+        'dusty mauve',
+        'cool pink',
+        'warm brown',
+      ];
+    } else if (look.contains('soft glam')) {
+      preferred = [
+        'muted rose',
+        'rosy pink',
+        'dusty mauve',
+        'beige nude',
+        'caramel nude',
+      ];
+      acceptable = [
+        'soft peach',
+        'brown nude',
+      ];
+      badMismatch = [
+        'wine red',
+        'plum',
+        'cherry red',
+        'orange coral',
+      ];
+    } else if (look.contains('latte') || look.contains('old money')) {
+      preferred = [
+        'caramel nude',
+        'brown nude',
+        'warm brown',
+        'terracotta',
+      ];
+      acceptable = [
+        'beige nude',
+        'muted rose',
+      ];
+      badMismatch = [
+        'cool pink',
+        'berry pink',
+        'plum',
+        'wine red',
+        'cherry red',
+      ];
+    } else if (look.contains('emo') || look.contains('e-girl')) {
+      preferred = [
+        'plum',
+        'wine red',
+        'cool berry',
+        'cherry red',
+      ];
+      acceptable = [
+        'berry pink',
+        'dusty mauve',
+      ];
+      badMismatch = [
+        'soft peach',
+        'warm coral',
+        'orange coral',
+        'beige nude',
+        'caramel nude',
+      ];
+    } else if (look.contains('douyin') || look.contains('k-beauty')) {
+      preferred = [
+        'cool pink',
+        'rosy pink',
+        'berry pink',
+        'soft peach',
+      ];
+      acceptable = [
+        'muted rose',
+        'dusty mauve',
+      ];
+      badMismatch = [
+        'warm brown',
+        'brown nude',
+        'terracotta',
+        'wine red',
+      ];
+    } else if (look.contains('cherry cola')) {
+      preferred = [
+        'wine red',
+        'cherry red',
+        'plum',
+        'cool berry',
+      ];
+      acceptable = [
+        'berry pink',
+        'dusty mauve',
+      ];
+      badMismatch = [
+        'soft peach',
+        'warm coral',
+        'orange coral',
+        'beige nude',
+        'caramel nude',
+      ];
+    } else if (look.contains('cold girl') || look.contains('monochrome pink')) {
+      preferred = [
+        'cool pink',
+        'rosy pink',
+        'dusty mauve',
+        'berry pink',
+      ];
+      acceptable = [
+        'muted rose',
+      ];
+      badMismatch = [
+        'warm brown',
+        'terracotta',
+        'orange coral',
+        'brown nude',
+      ];
+    } else if (look.contains('bronzed') || look.contains('golden')) {
+      preferred = [
+        'terracotta',
+        'warm brown',
+        'brown nude',
+        'warm coral',
+        'orange coral',
+      ];
+      acceptable = [
+        'caramel nude',
+        'beige nude',
+      ];
+      badMismatch = [
+        'cool pink',
+        'berry pink',
+        'plum',
+        'cool berry',
+      ];
+    } else if (look.contains('clean girl') || look.contains('glass skin')) {
+      preferred = [
+        'beige nude',
+        'muted rose',
+        'rosy pink',
+        'soft peach',
+      ];
+      acceptable = [
+        'caramel nude',
+        'cool pink',
+      ];
+      badMismatch = [
+        'wine red',
+        'plum',
+        'cherry red',
+        'warm brown',
+      ];
+    } else if (look.contains('bridal')) {
+      preferred = [
+        'muted rose',
+        'rosy pink',
+        'beige nude',
+        'soft peach',
+      ];
+      acceptable = [
+        'dusty mauve',
+        'caramel nude',
+      ];
+      badMismatch = [
+        'plum',
+        'wine red',
+        'warm brown',
+      ];
+    } else if (look.contains('arab') || look.contains('party')) {
+      preferred = [
+        'wine red',
+        'cherry red',
+        'plum',
+        'terracotta',
+        'warm brown',
+      ];
+      acceptable = [
+        'berry pink',
+        'cool berry',
+        'brown nude',
+      ];
+      badMismatch = [
+        'soft peach',
+        'beige nude',
+        'cool pink',
+      ];
+    } else {
+      preferred = [
+        'rosy pink',
+        'muted rose',
+        'beige nude',
+        'dusty mauve',
+      ];
+      acceptable = [
+        'soft peach',
+        'caramel nude',
+      ];
+      badMismatch = [
+        'plum',
+        'wine red',
+        'cherry red',
+      ];
+    }
+
+    final isPreferred = preferred.any((p) => color.contains(p));
+    final isAcceptable = acceptable.any((p) => color.contains(p));
+    final isBadMismatch = badMismatch.any((p) => color.contains(p));
+
+    // Stricter scoring for lips
+    if (area == 'lips') {
+      if (isPreferred) return 18;
+      if (isAcceptable) return 2;
+      if (isBadMismatch) return -30;
+      return -10;
+    }
+
+    // Original scoring for other areas
+    if (isPreferred) return 12;
+    if (isAcceptable) return 5;
+    if (isBadMismatch) return -18;
+
+    // Extra strict rules for color-heavy steps (excluding lips since already handled above)
+    if (area == 'blush_contour' || area == 'eyeshadow') {
+      return -3;
+    }
+
+    return 0;
+  }
+
+  // HEX parser
+  Color? _colorFromHex(String? hex) {
+    if (hex == null || hex.trim().isEmpty) return null;
+
+    final cleaned = hex.replaceAll('#', '').trim();
+
+    if (cleaned.length != 6) return null;
+
+    try {
+      return Color(int.parse('FF$cleaned', radix: 16));
+    } catch (_) {
+      return null;
+    }
   }
 
   // Helper method to get skin type label
@@ -204,6 +579,15 @@ class _InstructionsPageState extends State<InstructionsPage> {
 
       final undertone =
           (product['undertone'] ?? '').toString().toLowerCase();
+      
+      final shadeDepth =
+          (product['shade_depth'] ?? '').toString().toLowerCase();
+      
+      final userSkinTone =
+          widget.faceProfile?.skinTone.name.toLowerCase() ?? '';
+
+      final colorFamily =
+          (product['color_family'] ?? '').toString().toLowerCase();
 
       score += 10; // category match is required and strongest
 
@@ -219,6 +603,18 @@ class _InstructionsPageState extends State<InstructionsPage> {
         score += 2;
       }
 
+      if (userSkinTone.isNotEmpty && shadeDepth.isNotEmpty) {
+        if (_skinToneMatchesShadeDepth(userSkinTone, shadeDepth)) {
+          score += 3;
+        }
+      }
+
+      score += _lookColorFamilyScore(
+        lookName: widget.look.lookName,
+        targetArea: targetArea,
+        colorFamily: colorFamily,
+      );
+
       return {
         ...product,
         '_match_score': score,
@@ -229,7 +625,59 @@ class _InstructionsPageState extends State<InstructionsPage> {
       return (b['_match_score'] as int).compareTo(a['_match_score'] as int);
     });
 
-    return scoredProducts.take(2).toList();
+    final bestProducts = scoredProducts.take(2).toList();
+
+    if (bestProducts.isNotEmpty) {
+      final bestHex = bestProducts.first['hex_code']?.toString();
+      final bestColor = _colorFromHex(bestHex);
+
+      if (bestColor != null) {
+        _recommendedStepColors[targetArea] = bestColor;
+      }
+    }
+
+    return bestProducts;
+  }
+
+  Future<void> _prefetchRecommendedProductColor(String targetArea) async {
+    if (_prefetchedTargetAreas.contains(targetArea)) return;
+
+    _prefetchedTargetAreas.add(targetArea);
+
+    try {
+      final products = await _fetchRecommendedProducts(targetArea);
+
+      if (products.isEmpty) return;
+
+      final bestProduct = products.first;
+      final hex = bestProduct['hex_code']?.toString();
+      final color = _colorFromHex(hex);
+
+      if (color == null) return;
+
+      if (!mounted) return;
+
+      setState(() {
+        _recommendedStepColors[targetArea] = color;
+
+        // Force regenerate guide image if color changed
+        if (targetArea == 'lips') {
+          _lipGuideImagePath = null;
+        }
+
+        if (targetArea == 'eyeshadow') {
+          _eyeshadowGuideImagePath = null;
+        }
+
+        if (targetArea == 'blush_contour') {
+          // Blush contour uses FutureBuilder directly, no cached path here
+        }
+      });
+
+      _ensureGuideForTargetArea(targetArea);
+    } catch (e) {
+      debugPrint('❌ Product color prefetch failed for $targetArea: $e');
+    }
   }
 
   // Skin type selection modal
@@ -503,7 +951,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
         painter: LipGuidePainter(
           face: widget.detectedFace!,
           preset: widget.selectedPreset,
-          lipColor: widget.look.lipstickColor,
+          lipColor: _recommendedStepColors['lips'] ?? widget.look.lipstickColor,
         ),
       );
 
@@ -526,15 +974,17 @@ class _InstructionsPageState extends State<InstructionsPage> {
     setState(() => _generatingEyeshadowGuide = true);
 
     try {
+      final eyeshadowColor = _recommendedStepColors['eyeshadow'] ?? widget.look.eyeshadowColor;
+      
       final path = await _createGuideImage(
         prefix: 'eyeshadow_guide_',
         painter: EyeshadowGuidePainter(
           face: widget.detectedFace!,
           config: _config,
           palette: EyeshadowGuidePalette(
-            lidColor: widget.look.eyeshadowColor.withOpacity(0.95),
-            creaseColor: widget.look.eyeshadowColor.withOpacity(0.75),
-            outerColor: widget.look.eyeshadowColor.withOpacity(1.0),
+            lidColor: eyeshadowColor.withOpacity(0.95),
+            creaseColor: eyeshadowColor.withOpacity(0.75),
+            outerColor: eyeshadowColor.withOpacity(1.0),
             guideColor: const Color(0xFFFF4D97),
           ),
         ),
@@ -621,6 +1071,8 @@ class _InstructionsPageState extends State<InstructionsPage> {
 
   void _ensureGuideForTargetArea(String targetArea) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _prefetchRecommendedProductColor(targetArea);
+
       if (targetArea == 'full_face') _ensureBasePrepGuideGenerated();
       if (targetArea == 'brows') _ensureEyebrowGuideGenerated();
       if (targetArea == 'eyeshadow') _ensureEyeshadowGuideGenerated();
@@ -941,6 +1393,8 @@ class _InstructionsPageState extends State<InstructionsPage> {
               face: widget.detectedFace!,
               config: _config,
               image: snapshot.data!,
+              blushColor: _recommendedStepColors['blush_contour'] ??
+                  widget.look.blushColor,
             );
           },
         );
@@ -1424,248 +1878,253 @@ class _InstructionsPageState extends State<InstructionsPage> {
     );
   }
 
-Widget _buildAIStepsPager() {
-  const fixedStepOrder = [
-    {
-      'stepNumber': 1,
-      'title': 'Base Prep',
-      'targetArea': 'full_face',
-      'fallbackInstruction':
-          'Prep your skin by priming the T-zone, hydrating the cheeks, and brightening the under-eye area.',
-    },
-    {
-      'stepNumber': 2,
-      'title': 'Eyebrows',
-      'targetArea': 'brows',
-      'fallbackInstruction':
-          'Define your brows softly by following your natural brow shape.',
-    },
-    {
-      'stepNumber': 3,
-      'title': 'Eyeshadow',
-      'targetArea': 'eyeshadow',
-      'fallbackInstruction':
-          'Apply the main shade on the lid, blend the crease, then add depth to the outer corner.',
-    },
-    {
-      'stepNumber': 4,
-      'title': 'Eyeliner',
-      'targetArea': 'eyeliner',
-      'fallbackInstruction':
-          'Draw close to the upper lash line, connect the outer edge, then flick outward for the wing.',
-    },
-    {
-      'stepNumber': 5,
-      'title': 'Blush / Contour',
-      'targetArea': 'blush_contour',
-      'fallbackInstruction':
-          'Apply blush on the upper cheek area, then contour lightly below the cheekbone for shape.',
-    },
-    {
-      'stepNumber': 6,
-      'title': 'Lips',
-      'targetArea': 'lips',
-      'fallbackInstruction':
-          'Apply your lip color from the center outward and blend evenly for a polished finish.',
-    },
-    {
-      'stepNumber': 7,
-      'title': 'Final Look',
-      'targetArea': 'full_makeup',
-      'fallbackInstruction':
-          'Set your makeup with a light spray using X and T motion, then check the final blend.',
-    },
-  ];
+  Widget _buildAIStepsPager() {
+    const fixedStepOrder = [
+      {
+        'stepNumber': 1,
+        'title': 'Base Prep',
+        'targetArea': 'full_face',
+        'fallbackInstruction':
+            'Prep your skin by priming the T-zone, hydrating the cheeks, and brightening the under-eye area.',
+      },
+      {
+        'stepNumber': 2,
+        'title': 'Eyebrows',
+        'targetArea': 'brows',
+        'fallbackInstruction':
+            'Define your brows softly by following your natural brow shape.',
+      },
+      {
+        'stepNumber': 3,
+        'title': 'Eyeshadow',
+        'targetArea': 'eyeshadow',
+        'fallbackInstruction':
+            'Apply the main shade on the lid, blend the crease, then add depth to the outer corner.',
+      },
+      {
+        'stepNumber': 4,
+        'title': 'Eyeliner',
+        'targetArea': 'eyeliner',
+        'fallbackInstruction':
+            'Draw close to the upper lash line, connect the outer edge, then flick outward for the wing.',
+      },
+      {
+        'stepNumber': 5,
+        'title': 'Blush / Contour',
+        'targetArea': 'blush_contour',
+        'fallbackInstruction':
+            'Apply blush on the upper cheek area, then contour lightly below the cheekbone for shape.',
+      },
+      {
+        'stepNumber': 6,
+        'title': 'Lips',
+        'targetArea': 'lips',
+        'fallbackInstruction':
+            'Apply your lip color from the center outward and blend evenly for a polished finish.',
+      },
+      {
+        'stepNumber': 7,
+        'title': 'Final Look',
+        'targetArea': 'full_makeup',
+        'fallbackInstruction':
+            'Set your makeup with a light spray using X and T motion, then check the final blend.',
+      },
+    ];
 
-  if (_loadingAI && _aiSteps.isEmpty) {
-    return AiTutorialLoadingView(lookName: widget.look.lookName);
-  }
+    if (_loadingAI && _aiSteps.isEmpty) {
+      return AiTutorialLoadingView(lookName: widget.look.lookName);
+    }
 
-  if (_aiError != null) {
-    return Center(
-      child: Text(
-        _aiError!,
-        style: const TextStyle(color: Colors.red),
-      ),
-    );
-  }
-
-  if (_aiSteps.isEmpty) return const SizedBox.shrink();
-
-  return LayoutBuilder(
-    builder: (context, constraints) {
-      return SizedBox(
-        height: constraints.maxHeight,
-        child: Column(
-          children: [
-            const SizedBox(height: 4),
-
-            const Text(
-              '✨ AI Personalized Guide ✨',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14.5,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFFFF3D93),
-                letterSpacing: 0.1,
-              ),
-            ),
-
-            const SizedBox(height: 8),
-
-            Expanded(
-              child: PageView.builder(
-                controller: _pageController,
-                itemCount: 7,
-                onPageChanged: (index) {
-                  setState(() => _currentPage = index);
-
-                  final fixedStep = fixedStepOrder[index];
-                  _ensureGuideForTargetArea(
-                    fixedStep['targetArea'].toString(),
-                  );
-                },
-                itemBuilder: (context, index) {
-                  final fixedStep = fixedStepOrder[index];
-
-                  final stepNumber = fixedStep['stepNumber'].toString();
-                  final title = fixedStep['title'].toString();
-                  final targetArea = fixedStep['targetArea'].toString();
-
-                  final aiStep = _getAiStepForFixedStep(index + 1, targetArea);
-
-                  final instruction =
-                      aiStep['instruction']?.toString() ??
-                      fixedStep['fallbackInstruction'].toString();
-
-                  final whyThisColorSuitsYou = _cleanWhyText(
-                    aiStep['whyThisColorSuitsYou']?.toString() ?? '',
-                    targetArea,
-                  );
-
-                  _ensureGuideForTargetArea(targetArea);
-
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Column(
-                      children: [
-                        _InstructionCard(
-                          stepNumber: stepNumber,
-                          title: title,
-                          instruction: instruction,
-                        ),
-
-                        const SizedBox(height: 6),
-
-                        Expanded(
-                          child: Stack(
-                            children: [
-                              Positioned.fill(
-                                child: _GuideCardShell(
-                                  child: _buildGuideWidgetForTargetArea(
-                                    targetArea: targetArea,
-                                  ),
-                                ),
-                              ),
-
-                              Positioned(
-                                right: 10,
-                                top: 10,
-                                child: Column(
-                                  children: [
-                                    _FloatingMiniButton(
-                                      icon: Icons.lightbulb_rounded,
-                                      onTap: () {
-                                        _showInfoSheet(
-                                          title: 'Tip',
-                                          description:
-                                              'Follow the guide slowly and blend lightly. You can always add more product, but it is harder to remove excess makeup.',
-                                        );
-                                      },
-                                    ),
-                                    const SizedBox(height: 6),
-                                    _FloatingMiniButton(
-                                      icon: Icons.palette_rounded,
-                                      onTap: () {
-                                        _showInfoSheet(
-                                          title: targetArea == 'full_makeup'
-                                              ? 'Why this look suits you'
-                                              : 'Why this color suits you',
-                                          description:
-                                              whyThisColorSuitsYou.trim().isEmpty
-                                                  ? 'This step is personalized based on your face shape, skin tone, and selected makeup look.'
-                                                  : whyThisColorSuitsYou,
-                                        );
-                                      },
-                                    ),
-                                    const SizedBox(height: 6),
-                                    _FloatingMiniButton(
-                                      icon: Icons.shopping_bag_outlined,
-                                      onTap: () {
-                                        _showProductRecommendationSheet(targetArea);
-                                      },
-                                    ),
-                                    // 4th FAB button - only on Step 7 (full_makeup)
-                                    if (targetArea == 'full_makeup') ...[
-                                      const SizedBox(height: 6),
-                                      _FloatingMiniButton(
-                                        icon: Icons.auto_awesome_rounded,
-                                        onTap: _buildingRecommendedKit ? () {} : _buildFinalRecommendedKit,
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-
-            const SizedBox(height: 8),
-
-            Text(
-              'Step ${_currentPage + 1} of 7',
-              style: const TextStyle(
-                fontSize: 11,
-                color: Color(0xFF777780),
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-
-            const SizedBox(height: 8),
-
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(7, (index) {
-                final isActive = index == _currentPage;
-
-                return AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  width: isActive ? 26 : 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: isActive
-                        ? const Color(0xFFFF3D93)
-                        : const Color(0xFFFF3D93).withOpacity(0.25),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                );
-              }),
-            ),
-
-            SizedBox(height: _currentPage == 6 ? 0 : 12),
-          ],
+    if (_aiError != null) {
+      return Center(
+        child: Text(
+          _aiError!,
+          style: const TextStyle(color: Colors.red),
         ),
       );
-    },
-  );
-}
+    }
+
+    if (_aiSteps.isEmpty) return const SizedBox.shrink();
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SizedBox(
+          height: constraints.maxHeight,
+          child: Column(
+            children: [
+              const SizedBox(height: 4),
+
+              const Text(
+                '✨ AI Personalized Guide ✨',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFFFF3D93),
+                  letterSpacing: 0.1,
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              Expanded(
+                child: PageView.builder(
+                  controller: _pageController,
+                  itemCount: 7,
+                  onPageChanged: (index) {
+                    setState(() => _currentPage = index);
+
+                    final fixedStep = fixedStepOrder[index];
+                    _ensureGuideForTargetArea(
+                      fixedStep['targetArea'].toString(),
+                    );
+                  },
+                  itemBuilder: (context, index) {
+                    final fixedStep = fixedStepOrder[index];
+
+                    final stepNumber = fixedStep['stepNumber'].toString();
+                    final title = fixedStep['title'].toString();
+                    final targetArea = fixedStep['targetArea'].toString();
+
+                    final aiStep = _getAiStepForFixedStep(index + 1, targetArea);
+
+                    final instruction =
+                        aiStep['instruction']?.toString() ??
+                        fixedStep['fallbackInstruction'].toString();
+
+                    final whyThisColorSuitsYou = _cleanWhyText(
+                      aiStep['whyThisColorSuitsYou']?.toString() ?? '',
+                      targetArea,
+                    );
+
+                    _ensureGuideForTargetArea(targetArea);
+
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        children: [
+                          _InstructionCard(
+                            stepNumber: stepNumber,
+                            title: title,
+                            instruction: instruction,
+                            onTap: () {
+                              _showFullInstructionSheet(
+                                title: 'Step $stepNumber • $title',
+                                instruction: instruction,
+                              );
+                            },
+                          ),
+
+                          const SizedBox(height: 3),
+
+                          Expanded(
+                            child: Stack(
+                              children: [
+                                Positioned.fill(
+                                  child: _GuideCardShell(
+                                    child: _buildGuideWidgetForTargetArea(
+                                      targetArea: targetArea,
+                                    ),
+                                  ),
+                                ),
+
+                                Positioned(
+                                  right: 10,
+                                  top: 4,
+                                  child: Column(
+                                    children: [
+                                      _FloatingMiniButton(
+                                        icon: Icons.lightbulb_rounded,
+                                        onTap: () {
+                                          _showInfoSheet(
+                                            title: 'Tip',
+                                            description: _tipForTargetArea(targetArea),
+                                          );
+                                        },
+                                      ),
+                                      const SizedBox(height: 6),
+                                      _FloatingMiniButton(
+                                        icon: Icons.palette_rounded,
+                                        onTap: () {
+                                          _showInfoSheet(
+                                            title: targetArea == 'full_makeup'
+                                                ? 'Why this look suits you'
+                                                : 'Why this color suits you',
+                                            description:
+                                                whyThisColorSuitsYou.trim().isEmpty
+                                                    ? 'This step is personalized based on your selected look, undertone, skin type, and product match.'
+                                                    : whyThisColorSuitsYou,
+                                          );
+                                        },
+                                      ),
+                                      const SizedBox(height: 6),
+                                      _FloatingMiniButton(
+                                        icon: Icons.shopping_bag_outlined,
+                                        onTap: () {
+                                          _showProductRecommendationSheet(targetArea);
+                                        },
+                                      ),
+                                      // 4th FAB button - only on Step 7 (full_makeup)
+                                      if (targetArea == 'full_makeup') ...[
+                                        const SizedBox(height: 6),
+                                        _FloatingMiniButton(
+                                          icon: Icons.shopping_cart_checkout_rounded,
+                                          onTap: _buildingRecommendedKit ? () {} : _buildFinalRecommendedKit,
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              Text(
+                'Step ${_currentPage + 1} of 7',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Color(0xFF777780),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(7, (index) {
+                  final isActive = index == _currentPage;
+
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    width: isActive ? 26 : 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: isActive
+                          ? const Color(0xFFFF3D93)
+                          : const Color(0xFFFF3D93).withOpacity(0.25),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  );
+                }),
+              ),
+
+              SizedBox(height: _currentPage == 6 ? 6 : 10),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1710,56 +2169,72 @@ class _InstructionCard extends StatelessWidget {
   final String stepNumber;
   final String title;
   final String instruction;
+  final VoidCallback? onTap;
 
   const _InstructionCard({
     required this.stepNumber,
     required this.title,
     required this.instruction,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: const Color(0xFFFFD8E8),
-          width: 1,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: const Color(0xFFFFD8E8),
+            width: 1,
+          ),
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'STEP $stepNumber • ${title.toUpperCase()}',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFFFF3D93),
-              letterSpacing: 0.1,
-              height: 1,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'STEP $stepNumber • ${title.toUpperCase()}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12.8,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFFFF3D93),
+                letterSpacing: 0.1,
+                height: 1,
+              ),
             ),
-          ),
 
-          const SizedBox(height: 8),
+            const SizedBox(height: 5),
 
-          Text(
-            instruction,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 10.8,
-              height: 1.45,
-              fontWeight: FontWeight.w500,
-              color: Color(0xFF55555C),
+            Text(
+              instruction,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 10.2,
+                height: 1.45,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF55555C),
+              ),
             ),
-          ),
-        ],
+
+            const SizedBox(height: 6),
+
+            const Text(
+              'Tap to read full guide',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFFFF3D93),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1801,12 +2276,12 @@ class _FloatingMiniButton extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(14),
         child: SizedBox(
-          width: 44,
-          height: 44,
+          width: 40,
+          height: 40,
           child: Icon(
             icon,
             color: Colors.white,
-            size: 22,
+            size: 19,
           ),
         ),
       ),
@@ -1961,7 +2436,7 @@ class AiTutorialLoadingView extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Our AI is analyzing your unique features to craft the perfect $lookName tutorial just for you.',
+                          'Analyzing your skin tone, undertone, selected look, and product matches to create your $lookName guide.',
                           textAlign: TextAlign.center,
                           style: const TextStyle(
                             fontSize: 13,
@@ -2101,18 +2576,18 @@ class _AiProgressCard extends StatelessWidget {
         children: const [
           Expanded(
             child: _ProgressStep(
-              icon: Icons.face_retouching_natural_rounded,
-              title: 'Analyzing',
-              subtitle: 'Face',
+              icon: Icons.palette_rounded,
+              title: 'Selecting',
+              subtitle: 'Look',
               active: false,
               done: true,
             ),
           ),
           Expanded(
             child: _ProgressStep(
-              icon: Icons.palette_rounded,
-              title: 'Selecting',
-              subtitle: 'Look',
+              icon: Icons.face_retouching_natural_rounded,
+              title: 'Analyzing',
+              subtitle: 'Face',
               active: false,
               done: true,
             ),
@@ -2277,7 +2752,7 @@ class _AiInfoCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Analyzing your face shape, skin tone, and features to create your $lookName guide.',
+                  'Analyzing your skin tone, undertone, selected look, and product matches to create your $lookName guide.',
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(

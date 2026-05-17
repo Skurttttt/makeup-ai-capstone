@@ -107,6 +107,16 @@ class EyebrowGuidePainter extends CustomPainter {
           glowWidth: 8.0,
           opacity: 1.0,
         );
+
+      default:
+        return const _BrowStyle(
+          archPosition: 0.56,
+          archLift: 0.05,
+          tailDrop: 0.025,
+          strokeWidth: 2.1,
+          glowWidth: 6.8,
+          opacity: 0.88,
+        );
     }
   }
 
@@ -125,6 +135,8 @@ class EyebrowGuidePainter extends CustomPainter {
     Offset tail;
 
     if (isLeft) {
+      // LEFT eyebrow: note that 'start' is actually the OUTER tail due to mirroring
+      // and 'tail' is actually the INNER brow near the nose
       start = Offset(
         bounds.right - browW * 0.05,
         bounds.center.dy + browH * 0.05,
@@ -144,6 +156,7 @@ class EyebrowGuidePainter extends CustomPainter {
         baseY - browH * style.archLift,
       );
     } else {
+      // RIGHT eyebrow: start is inner, tail is outer (correct orientation)
       start = Offset(
         bounds.left + browW * 0.05,
         bounds.center.dy + browH * 0.05,
@@ -208,15 +221,20 @@ class EyebrowGuidePainter extends CustomPainter {
 
     canvas.drawPath(path, mainPaint);
 
-    // --- Points ---
+    // --- Points with correct numbering order for each brow ---
+    // The curve is drawn from start → arch → tail
+    // But due to mirroring, on LEFT brow, 'start' is outer tail and 'tail' is inner brow
     if (isLeft) {
-      _drawPoint(canvas, start, '3');
-      _drawPoint(canvas, arch, '2');
-      _drawPoint(canvas, tail, '1');
+      // LEFT eyebrow: reverse numbering to show inner (near nose) → arch → tail (outer)
+      // So: tail (inner) = 1, arch = 2, start (outer) = 3
+      _drawPoint(canvas, tail, '1');   // Inner brow (near nose)
+      _drawPoint(canvas, arch, '2');    // Arch (highest point)
+      _drawPoint(canvas, start, '3');   // Tail (outer edge)
     } else {
-      _drawPoint(canvas, start, '1');
-      _drawPoint(canvas, arch, '2');
-      _drawPoint(canvas, tail, '3');
+      // RIGHT eyebrow: normal numbering (start is inner, tail is outer)
+      _drawPoint(canvas, start, '1');   // Inner brow (near nose)
+      _drawPoint(canvas, arch, '2');    // Arch (highest point)
+      _drawPoint(canvas, tail, '3');    // Tail (outer edge)
     }
   }
 
