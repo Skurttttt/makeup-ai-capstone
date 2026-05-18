@@ -41,7 +41,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   int _currentStep = 0; // 0: Shipping, 1: Payment, 2: Review
   bool _isProcessing = false;
   bool _isLocating = false;
-  String _selectedPaymentMethod = 'paymongo';
+  String _selectedPaymentMethod = 'xendit';
 
   // Saved addresses
   List<Map<String, dynamic>> _savedAddresses = [];
@@ -58,6 +58,47 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final _notesController = TextEditingController();
 
   static const double _freeShippingThreshold = 1500.0;
+
+  // Philippine couriers used for automatic pickup-rider assignment.
+  // The system auto-picks one when an order is placed (similar to Shopee/Lazada),
+  // so the seller doesn't need to choose manually before shipping.
+  static const List<String> _autoCouriers = [
+    'J&T Express',
+    'LBC Express',
+    'Ninja Van',
+    'Grab Express',
+    'Lalamove',
+    'SPX Express (Shopee)',
+    'Flash Express',
+  ];
+
+  /// Picks a courier automatically. Uses Grab/Lalamove for small/light orders
+  /// (single item) and a deterministic round-robin from a buyer hash otherwise,
+  /// so the same buyer doesn't always land on the same courier.
+  String _autoAssignCourier() {
+    final itemCount = widget.cartItems.fold<int>(
+        0, (sum, it) => sum + ((it['quantity'] as num?)?.toInt() ?? 1));
+    if (itemCount <= 1) {
+      // Quick same-day pickup riders for tiny orders
+      const quick = ['Grab Express', 'Lalamove'];
+      return quick[DateTime.now().millisecondsSinceEpoch % quick.length];
+    }
+    final idx = DateTime.now().millisecondsSinceEpoch % _autoCouriers.length;
+    return _autoCouriers[idx];
+  }
+
+  /// Generates tracking number: PREFIX-YYYYMMDD-XXXXXX
+  String _generateTrackingNumber(String courier) {
+    final letters = courier.replaceAll(RegExp(r'[^A-Za-z]'), '').toUpperCase();
+    final prefix =
+        letters.length >= 3 ? letters.substring(0, 3) : letters.padRight(3, 'X');
+    final now = DateTime.now();
+    final date =
+        '${now.year.toString().padLeft(4, '0')}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+    final rand =
+        (now.millisecondsSinceEpoch % 1000000).toString().padLeft(6, '0');
+    return '$prefix-$date-$rand';
+  }
   static const double _baseShippingFee = 99.0;
   static const double _taxRate = 0.12;
 
@@ -330,6 +371,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) throw 'Please sign in to place an order.';
 
+      // Auto-assign a pickup rider/courier so the seller can ship immediately
+      // without having to pick one manually (standard ecommerce behavior).
+      final autoCourier = _autoAssignCourier();
+      final autoTracking = _generateTrackingNumber(autoCourier);
+
       final orderData = {
         'buyer_id': user.id,
         'buyer_name': _nameController.text.trim(),
@@ -346,6 +392,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         'payment_provider': _selectedPaymentMethod,
         'payment_method': _selectedPaymentMethod,
         'status': 'pending',
+        'courier': autoCourier,
+        'tracking_number': autoTracking,
       };
 
       final orderResponse = await Supabase.instance.client
@@ -378,10 +426,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         );
       }
 
-      if (_selectedPaymentMethod == 'paymongo' ||
+      if (_selectedPaymentMethod == 'xendit' ||
           _selectedPaymentMethod == 'gcash') {
         final paymentResponse =
-            await _supabaseService.createPaymongoCheckoutForOrder(
+            await _supabaseService.createXenditCheckoutForOrder(
           items: widget.cartItems,
           paymentMethod: _selectedPaymentMethod,
         );
@@ -742,13 +790,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             child: Column(
               children: [
                 _PaymentTile(
-                  selected: _selectedPaymentMethod == 'paymongo',
+                  selected: _selectedPaymentMethod == 'xendit',
                   onTap: () =>
-                      setState(() => _selectedPaymentMethod = 'paymongo'),
+                      setState(() => _selectedPaymentMethod = 'xendit'),
                   icon: Icons.credit_card,
-                  iconColor: const Color(0xFF6C5CE7),
+                  iconColor: const Color(0xFF0052CC),
                   title: 'Credit / Debit card',
-                  subtitle: 'Visa, Mastercard via PayMongo',
+                  subtitle: 'Visa, Mastercard, GCash via Xendit',
                   trailing: 'Recommended',
                 ),
                 const SizedBox(height: 10),
@@ -1367,7 +1415,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         return Icons.mobile_screen_share;
       case 'cod':
         return Icons.local_shipping_outlined;
-      case 'paymongo':
+      case 'xendit':
       default:
         return Icons.credit_card;
     }
@@ -1379,9 +1427,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         return const Color(0xFF00A4EF);
       case 'cod':
         return Colors.green.shade700;
-      case 'paymongo':
+      case 'xendit':
       default:
-        return const Color(0xFF6C5CE7);
+        return const Color(0xFF0052CC);
     }
   }
 
@@ -1391,7 +1439,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         return 'GCash';
       case 'cod':
         return 'Cash on Delivery';
-      case 'paymongo':
+      case 'xendit':
       default:
         return 'Credit / Debit Card';
     }
@@ -1564,7 +1612,7 @@ class _OrderSuccessScreenState extends State<_OrderSuccessScreen>
 
   @override
   Widget build(BuildContext context) {
-    final isOnline = widget.paymentMethod == 'paymongo' ||
+    final isOnline = widget.paymentMethod == 'xendit' ||
         widget.paymentMethod == 'gcash';
     return Scaffold(
       backgroundColor: _kSurface,

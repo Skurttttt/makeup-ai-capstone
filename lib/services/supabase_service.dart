@@ -602,9 +602,9 @@ class SupabaseService {
     }
   }
 
-  // ==================== PAYMENTS (PAYMONGO) ====================
+  // ==================== PAYMENTS (XENDIT) ====================
 
-  Future<Map<String, dynamic>> createPaymongoCheckoutForPlan({
+  Future<Map<String, dynamic>> createXenditCheckoutForPlan({
     required String planId,
     String? paymentMethod,
     String? successUrl,
@@ -612,7 +612,7 @@ class SupabaseService {
   }) async {
     try {
       final response = await client.functions.invoke(
-        'create-paymongo-checkout',
+        'create-xendit-checkout',
         body: {
           'kind': 'subscription',
           'plan_id': planId,
@@ -632,11 +632,11 @@ class SupabaseService {
 
       return Map<String, dynamic>.from(response.data as Map);
     } catch (e) {
-      throw 'Failed to create PayMongo checkout session: $e';
+      throw 'Failed to create Xendit checkout session: $e';
     }
   }
 
-  Future<Map<String, dynamic>> createPaymongoCheckoutForOrder({
+  Future<Map<String, dynamic>> createXenditCheckoutForOrder({
     required List<Map<String, dynamic>> items,
     String? paymentMethod,
     String? successUrl,
@@ -644,7 +644,7 @@ class SupabaseService {
   }) async {
     try {
       final response = await client.functions.invoke(
-        'create-paymongo-checkout',
+        'create-xendit-checkout',
         body: {
           'kind': 'order',
           'items': items,
@@ -664,7 +664,7 @@ class SupabaseService {
 
       return Map<String, dynamic>.from(response.data as Map);
     } catch (e) {
-      throw 'Failed to create PayMongo checkout session: $e';
+      throw 'Failed to create Xendit checkout session: $e';
     }
   }
 
@@ -709,6 +709,91 @@ class SupabaseService {
     } catch (e) {
       throw 'Failed to fetch audit logs: $e';
     }
+  }
+
+  // ==================== SUPPORT REQUESTS ====================
+
+  /// Insert a support request from the client app.
+  Future<void> insertSupportRequest({
+    required String subject,
+    required String message,
+  }) async {
+    try {
+      final userId = client.auth.currentUser?.id;
+      final email = client.auth.currentUser?.email;
+      await client.from('support_requests').insert({
+        if (userId != null) 'user_id': userId,
+        if (email != null) 'email': email,
+        'subject': subject.trim().isEmpty ? 'Support Request' : subject.trim(),
+        'message': message.trim(),
+      });
+    } catch (e) {
+      // Non-fatal: email fallback is still used
+      debugPrint('⚠️ Failed to save support request: $e');
+    }
+  }
+
+  // ==================== ADMIN NOTIFICATIONS ====================
+
+  /// Fetch recent notifications: new subscriptions, orders, support requests.
+  /// Returns a merged+sorted list, each item has a '_type' key.
+  Future<List<Map<String, dynamic>>> getAdminNotifications(
+      {int limit = 30}) async {
+    final since = DateTime.now()
+        .subtract(const Duration(days: 30))
+        .toIso8601String();
+
+    final List<Map<String, dynamic>> all = [];
+
+    // New subscriptions
+    try {
+      final subs = await client
+          .from('user_subscriptions')
+          .select(
+              'id, created_at, status, accounts(full_name, email), subscription_plans(name, display_name)')
+          .gte('created_at', since)
+          .order('created_at', ascending: false)
+          .limit(15);
+      for (final s in subs) {
+        all.add({'_type': 'subscription', ...Map<String, dynamic>.from(s)});
+      }
+    } catch (_) {}
+
+    // Marketplace orders
+    try {
+      final orders = await client
+          .from('orders')
+          .select('id, created_at, status, total, accounts:buyer_id(full_name, email)')
+          .gte('created_at', since)
+          .order('created_at', ascending: false)
+          .limit(15);
+      for (final o in orders) {
+        all.add({'_type': 'order', ...Map<String, dynamic>.from(o)});
+      }
+    } catch (_) {}
+
+    // Support requests
+    try {
+      final reqs = await client
+          .from('support_requests')
+          .select('id, created_at, subject, message, status, accounts(full_name, email)')
+          .gte('created_at', since)
+          .order('created_at', ascending: false)
+          .limit(15);
+      for (final r in reqs) {
+        all.add({'_type': 'support', ...Map<String, dynamic>.from(r)});
+      }
+    } catch (_) {}
+
+    all.sort((a, b) {
+      final aT =
+          DateTime.tryParse(a['created_at'] ?? '') ?? DateTime(2000);
+      final bT =
+          DateTime.tryParse(b['created_at'] ?? '') ?? DateTime(2000);
+      return bT.compareTo(aT);
+    });
+
+    return all.take(limit).toList();
   }
 
   // ==================== REAL-TIME SUBSCRIPTIONS ====================

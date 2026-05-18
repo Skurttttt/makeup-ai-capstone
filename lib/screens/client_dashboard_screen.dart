@@ -31,9 +31,21 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
   static const Color pinkAccent = Color(0xFFFF6B9D);
   static const Color pinkDeep = Color(0xFFC71563);
 
+  // Cached stream — never recreated inside build() to avoid setState
+  // being called during mouse-tracking phase (_debugDuringDeviceUpdate).
+  late final Stream<List<Map<String, dynamic>>> _salesStream;
+
   @override
   void initState() {
     super.initState();
+    final businessId = widget.clientData['id']?.toString() ?? '';
+    // CRITICAL: pipe through Stream.asyncMap so cached/initial emissions hop
+    // to a microtask and never fire synchronously during mouse-tracker phase.
+    _salesStream = Supabase.instance.client
+        .from('order_items')
+        .stream(primaryKey: ['id'])
+        .eq('business_id', businessId)
+        .asyncMap((rows) async => rows);
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 1000),
       vsync: this,
@@ -89,10 +101,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
     final isDesktop = MediaQuery.of(context).size.width > 1200;
 
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: Supabase.instance.client
-          .from('order_items')
-          .stream(primaryKey: ['id'])
-          .eq('business_id', widget.clientData['id']),
+      stream: _salesStream,
       builder: (context, salesSnapshot) {
         final salesItems = salesSnapshot.data ?? [];
         final rangeItems = _filterByRange(salesItems);
@@ -145,7 +154,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
               child: SingleChildScrollView(
                 padding: EdgeInsets.all(isDesktop ? 32 : 20),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     // Welcome Header
                     _buildWelcomeHeader(isDesktop),
@@ -266,6 +275,8 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
                         fontSize: 14,
                         fontWeight: FontWeight.w400,
                       ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
@@ -376,30 +387,26 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
         unitsDelta,
       ),
     ];
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Narrow phones: stack vertically to give each card breathing room.
-        final width = constraints.maxWidth;
-        const spacing = 12.0;
-        if (width < 360) {
-          return Column(
-            children: [
-              for (var i = 0; i < cards.length; i++) ...[
-                if (i > 0) const SizedBox(height: spacing),
-                cards[i],
-              ],
-            ],
-          );
-        }
-        return Row(
-          children: [
-            for (var i = 0; i < cards.length; i++) ...[
-              if (i > 0) const SizedBox(width: spacing),
-              Expanded(child: cards[i]),
-            ],
+    // Use MediaQuery instead of LayoutBuilder to avoid layout re-entrancy.
+    final width = MediaQuery.sizeOf(context).width;
+    const spacing = 12.0;
+    if (width < 360) {
+      return Column(
+        children: [
+          for (var i = 0; i < cards.length; i++) ...[
+            if (i > 0) const SizedBox(height: spacing),
+            cards[i],
           ],
-        );
-      },
+        ],
+      );
+    }
+    return Row(
+      children: [
+        for (var i = 0; i < cards.length; i++) ...[
+          if (i > 0) const SizedBox(width: spacing),
+          Expanded(child: cards[i]),
+        ],
+      ],
     );
   }
 
@@ -442,19 +449,14 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(
-                  width: double.infinity,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      value,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: pinkDeep,
-                      ),
-                    ),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: pinkDeep,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -513,7 +515,6 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
         ],
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [7, 30, 90, 365].map((days) {
           final isSelected = _rangeDays == days;
           return Expanded(
@@ -694,22 +695,16 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
             ],
           ),
           const SizedBox(height: 24),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              // Compute a safe aspect ratio so the card content never clips.
-              // Each card needs at least ~112px of height (icon row 36 +
-              // value/label column 44 + 32px vertical padding).
-              const spacing = 16.0;
-              const minHeight = 112.0;
-              final cellWidth = (constraints.maxWidth - spacing) / 2;
-              final ratio = (cellWidth / minHeight).clamp(0.85, 1.6);
-              return GridView.count(
-            crossAxisCount: 2,
-            crossAxisSpacing: spacing,
-            mainAxisSpacing: spacing,
+          // Fixed-height grid — no LayoutBuilder needed, avoids layout re-entrancy.
+          GridView(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            childAspectRatio: ratio,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+              mainAxisExtent: 110,
+            ),
             children: [
               _buildPerformanceCard(
                 'Total Revenue',
@@ -740,8 +735,6 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
                 '', // No delta for average
               ),
             ],
-          );
-            },
           ),
         ],
       ),
@@ -814,23 +807,18 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen>
                 ),
             ],
           ),
-          // Value + title — full-width so FittedBox can scale down properly
+          // Value + title
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                width: double.infinity,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    value,
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: pinkDeep,
-                    ),
-                  ),
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: pinkDeep,
                 ),
               ),
               const SizedBox(height: 2),
@@ -1199,7 +1187,8 @@ class _DashboardChartPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (data.isEmpty) return;
+    // Guard against zero/invalid canvas sizes (can happen mid-layout).
+    if (data.isEmpty || size.width <= 0 || size.height <= 0) return;
 
     final paint = Paint()
       ..color = color
@@ -1224,7 +1213,11 @@ class _DashboardChartPainter extends CustomPainter {
 
     final maxValue = data.reduce((a, b) => a > b ? a : b);
     final minValue = 0.0; // Start from zero
-    final range = maxValue - minValue;
+    // Avoid divide-by-zero when maxValue is 0 (produces NaN coords that
+    // corrupt the render tree and trigger hit-test/no-size cascades).
+    final range = maxValue <= 0 ? 1.0 : maxValue;
+    // Avoid divide-by-zero when data has a single point.
+    final denom = data.length > 1 ? (data.length - 1) : 1;
 
     final path = Path();
     final fillPath = Path();
@@ -1232,7 +1225,7 @@ class _DashboardChartPainter extends CustomPainter {
     final points = <Offset>[];
 
     for (int i = 0; i < data.length; i++) {
-      final x = (i / (data.length - 1)) * size.width;
+      final x = (i / denom) * size.width;
       final y = size.height - ((data[i] - minValue) / range) * (size.height - 20);
 
       points.add(Offset(x, y));
@@ -1275,7 +1268,8 @@ class _DashboardChartPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _DashboardChartPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.data != data;
 }
 
 String _formatPHP(double amount) {

@@ -9,6 +9,9 @@ class ClientProductsSection extends StatefulWidget {
   final void Function(Map<String, dynamic> product) onEditProduct;
   final void Function(dynamic productId, dynamic productName) onDeleteProduct;
   final Future<void> Function(Map<String, dynamic> product) onToggleProductStatus;
+  // Bumped by the parent to force the products stream to re-subscribe after
+  // an action (toggle/delete) in case realtime hasn't propagated the change.
+  final int refreshTick;
 
   const ClientProductsSection({
     super.key,
@@ -17,6 +20,7 @@ class ClientProductsSection extends StatefulWidget {
     required this.onEditProduct,
     required this.onDeleteProduct,
     required this.onToggleProductStatus,
+    this.refreshTick = 0,
   });
 
   @override
@@ -31,6 +35,43 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
+
+  // Cached products stream so typing in the search bar (which triggers
+  // setState) does NOT recreate the Supabase subscription and flash the
+  // loading spinner over the whole page.
+  Stream<List<Map<String, dynamic>>>? _productsStream;
+  String? _productsStreamBusinessId;
+  int _productsStreamTick = -1;
+
+  Stream<List<Map<String, dynamic>>> _getProductsStream() {
+    final businessId = widget.clientData['id']?.toString() ?? '';
+    if (_productsStream == null ||
+        _productsStreamBusinessId != businessId ||
+        _productsStreamTick != widget.refreshTick) {
+      _productsStreamBusinessId = businessId;
+      _productsStreamTick = widget.refreshTick;
+      _productsStream = Supabase.instance.client
+          .from('products')
+          .stream(primaryKey: ['id'])
+          .eq('business_id', widget.clientData['id']);
+    }
+    return _productsStream!;
+  }
+
+  static int _readStock(Map<String, dynamic> p) {
+    final raw = p['stock_quantity'];
+    if (raw is num) return raw.toInt();
+    if (raw is String) return int.tryParse(raw) ?? 0;
+    return 0;
+  }
+
+  static bool _isActive(Map<String, dynamic> p) {
+    final raw = p['is_active'];
+    if (raw is bool) return raw;
+    if (raw is num) return raw != 0;
+    if (raw is String) return raw.toLowerCase() == 'true' || raw == '1';
+    return false;
+  }
 
   // Pink theme colors
   static const Color pinkPrimary = Color(0xFFFF4D8C);
@@ -82,16 +123,19 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
 
     switch (_statusFilter) {
       case 'Active':
-        filtered = filtered.where((p) => p['is_active'] == true).toList();
+        filtered = filtered.where(_isActive).toList();
         break;
       case 'Inactive':
-        filtered = filtered.where((p) => p['is_active'] != true).toList();
+        filtered = filtered.where((p) => !_isActive(p)).toList();
         break;
       case 'Low Stock':
-        filtered = filtered.where((p) => (p['stock_quantity'] as int? ?? 0) <= 5 && (p['stock_quantity'] as int? ?? 0) > 0).toList();
+        filtered = filtered.where((p) {
+          final s = _readStock(p);
+          return s > 0 && s <= 5;
+        }).toList();
         break;
       case 'Out of Stock':
-        filtered = filtered.where((p) => (p['stock_quantity'] as int? ?? 0) == 0).toList();
+        filtered = filtered.where((p) => _readStock(p) == 0).toList();
         break;
     }
 
@@ -102,7 +146,7 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
         case 'Price':
           return ((b['price'] as num?)?.toDouble() ?? 0).compareTo((a['price'] as num?)?.toDouble() ?? 0);
         case 'Stock':
-          return ((b['stock_quantity'] as num?)?.toInt() ?? 0).compareTo((a['stock_quantity'] as num?)?.toInt() ?? 0);
+          return _readStock(b).compareTo(_readStock(a));
         default:
           return 0;
       }
@@ -114,10 +158,7 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: Supabase.instance.client
-          .from('products')
-          .stream(primaryKey: ['id'])
-          .eq('business_id', widget.clientData['id']),
+      stream: _getProductsStream(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator(color: pinkPrimary));
@@ -138,10 +179,13 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
         }
 
         final products = snapshot.data ?? [];
-        final activeProducts = products.where((p) => p['is_active'] == true).toList();
-        final lowStockProducts = products.where((p) => (p['stock_quantity'] as int? ?? 0) <= 5 && (p['stock_quantity'] as int? ?? 0) > 0).toList();
-        final outOfStockProducts = products.where((p) => (p['stock_quantity'] as int? ?? 0) == 0).toList();
-        final totalValue = products.fold(0.0, (sum, p) => sum + ((p['price'] as num?)?.toDouble() ?? 0) * ((p['stock_quantity'] as num?)?.toDouble() ?? 0));
+        final activeProducts = products.where(_isActive).toList();
+        final lowStockProducts = products.where((p) {
+          final s = _readStock(p);
+          return s > 0 && s <= 5;
+        }).toList();
+        final outOfStockProducts = products.where((p) => _readStock(p) == 0).toList();
+        final totalValue = products.fold(0.0, (sum, p) => sum + ((p['price'] as num?)?.toDouble() ?? 0) * _readStock(p));
         final filteredProducts = _applyFilters(products);
 
         return FadeTransition(
@@ -151,7 +195,7 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _buildHeader(products.length, activeProducts.length),
                   const SizedBox(height: 24),
@@ -162,7 +206,7 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
                   _buildInventoryValueBanner(totalValue),
                   const SizedBox(height: 24),
                   if (filteredProducts.isEmpty)
-                    _buildEmptyState()
+                    _buildEmptyState(hasAnyProducts: products.isNotEmpty)
                   else
                     _buildProductGrid(filteredProducts, context),
                 ],
@@ -392,7 +436,7 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: width > 1200 ? 4 : (width > 800 ? 3 : (width > 500 ? 2 : 1)),
-        childAspectRatio: width > 1200 ? 0.52 : (width > 800 ? 0.5 : (width > 500 ? 0.48 : 0.75)),
+        childAspectRatio: width > 1200 ? 0.58 : (width > 800 ? 0.56 : (width > 500 ? 0.54 : 0.72)),
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
       ),
@@ -403,7 +447,7 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
   }
 
   Widget _buildProductCard(Map<String, dynamic> product, BuildContext context) {
-    final stock = (product['stock_quantity'] as int?) ?? 0;
+    final stock = _readStock(product);
     final isLowStock = stock <= 5 && stock > 0;
     final isOutOfStock = stock == 0;
     final price = (product['price'] as num?)?.toDouble() ?? 0;
@@ -416,7 +460,7 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
     final colorFamily = (product['color_family'] ?? '').toString();
     final compatibleLooks = (product['compatible_looks'] ?? '').toString();
     final compatibleSkinType = (product['compatible_skin_type'] ?? '').toString(); // Updated field name
-    final isActive = product['is_active'] == true;
+    final isActive = _isActive(product);
     final List<String> tags = [
       if (product['morena_friendly'] == true) 'Morena Friendly',
       if (product['beginner_friendly'] == true) 'Beginner Friendly',
@@ -440,23 +484,27 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
             children: [
               ClipRRect(
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                child: Container(
-                  width: double.infinity,
-                  height: 160,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [pinkSoft, pinkLight.withOpacity(0.2)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
+                child: AspectRatio(
+                  aspectRatio: 1,
+                  child: Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [pinkSoft, pinkLight.withOpacity(0.2)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
                     ),
+                    child: product['image_url'] != null && product['image_url'].toString().isNotEmpty
+                        ? Image.network(
+                            product['image_url'],
+                            fit: BoxFit.contain,
+                            width: double.infinity,
+                            height: double.infinity,
+                            errorBuilder: (_, _, _) => Center(child: Icon(Icons.image_not_supported_outlined, color: Colors.grey.shade300, size: 32)),
+                          )
+                        : Center(child: Icon(Icons.inventory_2_rounded, color: pinkPrimary.withOpacity(0.3), size: 32)),
                   ),
-                  child: product['image_url'] != null && product['image_url'].toString().isNotEmpty
-                      ? Image.network(
-                          product['image_url'],
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => Center(child: Icon(Icons.image_not_supported_outlined, color: Colors.grey.shade300, size: 32)),
-                        )
-                      : Center(child: Icon(Icons.inventory_2_rounded, color: pinkPrimary.withOpacity(0.3), size: 32)),
                 ),
               ),
               if (isOutOfStock)
@@ -493,13 +541,16 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
           ),
           
           // Product Info
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  productName,
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              child: SingleChildScrollView(
+                physics: const NeverScrollableScrollPhysics(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      productName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Colors.grey.shade800, height: 1.2),
@@ -516,9 +567,12 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
                       ),
                     ),
                     const SizedBox(width: 6),
-                    Text(
-                      _formatPHP(price),
-                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: pinkPrimary),
+                    Flexible(
+                      child: Text(
+                        _formatPHP(price),
+                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: pinkPrimary),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                 ),
@@ -528,7 +582,7 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
                     padding: const EdgeInsets.only(bottom: 6),
                     child: Text(
                       description,
-                      maxLines: 2,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(fontSize: 10.5, color: Colors.grey.shade700, height: 1.25),
                     ),
@@ -580,20 +634,20 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
                   Padding(
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Text(
-                      'AI-Matched Looks: $compatibleLooks', // Updated label
-                      maxLines: 2,
+                      'AI-Matched Looks: $compatibleLooks',
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
+                      style: TextStyle(fontSize: 10, color: Colors.grey.shade700, height: 1.3),
                     ),
                   ),
-                if (compatibleSkinType.trim().isNotEmpty) // Updated variable name
+                if (compatibleSkinType.trim().isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 6),
                     child: Text(
-                      'Compatible Skin Type: $compatibleSkinType', // Updated label and variable
+                      'Skin Type: $compatibleSkinType',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
+                      style: TextStyle(fontSize: 10, color: Colors.grey.shade700, height: 1.2),
                     ),
                   ),
                 if (tags.isNotEmpty)
@@ -650,6 +704,8 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
                 ),
               ],
             ),
+              ),
+            ),
           ),
         ],
       ),
@@ -679,33 +735,106 @@ class _ClientProductsSectionState extends State<ClientProductsSection>
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState({bool hasAnyProducts = false}) {
+    final query = _searchController.text.trim();
+    final hasSearch = query.isNotEmpty;
+
+    // Default messaging: no products at all.
+    String title = 'No Products Yet ✨';
+    String subtitle = 'Start building your inventory by adding your first product';
+    IconData icon = Icons.inventory_2_rounded;
+    bool showAddButton = true;
+
+    if (hasAnyProducts) {
+      // We DO have products, but the current filter/search excluded them all.
+      showAddButton = false;
+      if (hasSearch) {
+        title = 'No Matches Found';
+        subtitle = 'No products match “$query” in the “$_statusFilter” filter.';
+        icon = Icons.search_off_rounded;
+      } else {
+        switch (_statusFilter) {
+          case 'Active':
+            title = 'No Active Products';
+            subtitle = 'You don\'t have any active products right now.';
+            icon = Icons.check_circle_outline_rounded;
+            break;
+          case 'Inactive':
+            title = 'No Inactive Products';
+            subtitle = 'All of your products are currently active.';
+            icon = Icons.visibility_off_outlined;
+            break;
+          case 'Low Stock':
+            title = 'No Low Stock Products';
+            subtitle = 'None of your products are running low on stock.';
+            icon = Icons.warning_amber_rounded;
+            break;
+          case 'Out of Stock':
+            title = 'No Out of Stock Products';
+            subtitle = 'All of your products are in stock.';
+            icon = Icons.remove_shopping_cart_outlined;
+            break;
+          default:
+            title = 'No Products to Show';
+            subtitle = 'Try a different filter or add a new product.';
+            icon = Icons.inventory_2_outlined;
+        }
+      }
+    }
+
     return Container(
       padding: const EdgeInsets.all(48),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: pinkLight.withOpacity(0.3))),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(padding: const EdgeInsets.all(24), decoration: BoxDecoration(color: pinkSoft, shape: BoxShape.circle), child: Icon(Icons.inventory_2_rounded, size: 64, color: pinkPrimary.withOpacity(0.5))),
+          Container(padding: const EdgeInsets.all(24), decoration: BoxDecoration(color: pinkSoft, shape: BoxShape.circle), child: Icon(icon, size: 64, color: pinkPrimary.withOpacity(0.5))),
           const SizedBox(height: 24),
-          Text('No Products Yet ✨', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.grey.shade700)),
+          Text(title, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.grey.shade700), textAlign: TextAlign.center),
           const SizedBox(height: 8),
-          Text('Start building your inventory by adding your first product', style: TextStyle(fontSize: 14, color: Colors.grey.shade500), textAlign: TextAlign.center),
+          Text(subtitle, style: TextStyle(fontSize: 14, color: Colors.grey.shade500), textAlign: TextAlign.center),
           const SizedBox(height: 24),
-          Material(
-            color: pinkPrimary,
-            borderRadius: BorderRadius.circular(12),
-            elevation: 4,
-            shadowColor: pinkPrimary.withOpacity(0.3),
-            child: InkWell(
-              onTap: () => widget.onAddProduct(widget.clientData['id'].toString()),
+          if (showAddButton)
+            Material(
+              color: pinkPrimary,
               borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                child: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.add_rounded, color: Colors.white, size: 20), SizedBox(width: 8), Text('Add Your First Product', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15))]),
+              elevation: 4,
+              shadowColor: pinkPrimary.withOpacity(0.3),
+              child: InkWell(
+                onTap: () => widget.onAddProduct(widget.clientData['id'].toString()),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                  child: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.add_rounded, color: Colors.white, size: 20), SizedBox(width: 8), Text('Add Your First Product', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15))]),
+                ),
+              ),
+            )
+          else
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => setState(() {
+                  _statusFilter = 'All';
+                  _searchController.clear();
+                }),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: pinkPrimary),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.refresh_rounded, color: pinkPrimary, size: 18),
+                      const SizedBox(width: 8),
+                      Text('Clear filters', style: TextStyle(color: pinkPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
+                    ],
+                  ),
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

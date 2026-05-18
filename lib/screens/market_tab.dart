@@ -1325,38 +1325,39 @@ class _MarketTabState extends State<MarketTab>
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Container(
-                      height: 250,
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        color: Colors.grey[100],
-                      ),
-                      child: imageUrl == null || imageUrl.isEmpty
-                          ? const Center(
-                              child: Icon(
-                                Icons.image,
-                                size: 64,
-                                color: Colors.grey,
-                              ),
-                            )
-                          : ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: Image.network(
-                                imageUrl,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) => const Center(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: AspectRatio(
+                        aspectRatio: 1, // square — like Shopee/Lazada
+                        child: Container(
+                          width: double.infinity,
+                          color: Colors.grey[100],
+                          child: imageUrl == null || imageUrl.isEmpty
+                              ? const Center(
                                   child: Icon(
-                                    Icons.broken_image,
+                                    Icons.image,
                                     size: 64,
                                     color: Colors.grey,
                                   ),
+                                )
+                              : Image.network(
+                                  imageUrl,
+                                  fit: BoxFit.cover,
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                  errorBuilder: (_, _, _) => const Center(
+                                    child: Icon(
+                                      Icons.broken_image,
+                                      size: 64,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),

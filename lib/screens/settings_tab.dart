@@ -1379,11 +1379,18 @@ class _SettingsTabState extends State<SettingsTab> {
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             ),
                             onPressed: () async {
+                              final subjectText = subjectController.text.trim();
+                              final messageText = messageController.text.trim();
+                              // Save to Supabase so admin gets notified
+                              await _supabaseService.insertSupportRequest(
+                                subject: subjectText,
+                                message: messageText,
+                              );
                               final subject = Uri.encodeComponent(
-                                  subjectController.text.trim().isEmpty
+                                  subjectText.isEmpty
                                       ? 'App Support Request'
-                                      : subjectController.text.trim());
-                              final body = Uri.encodeComponent(messageController.text.trim());
+                                      : subjectText);
+                              final body = Uri.encodeComponent(messageText);
                               final uri = Uri.parse(
                                   'mailto:support@beautyshop.com?subject=$subject&body=$body');
                               Navigator.pop(context);

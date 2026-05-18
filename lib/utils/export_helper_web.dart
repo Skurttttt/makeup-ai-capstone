@@ -1,7 +1,7 @@
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:html' as html;
 
-void saveCsvFile(String filename, String content) {
+Future<void> saveCsvFile(String filename, String content) async {
   final bytes = html.Blob([content], 'text/csv;charset=utf-8;');
   final url = html.Url.createObjectUrlFromBlob(bytes);
   html.AnchorElement(href: url)

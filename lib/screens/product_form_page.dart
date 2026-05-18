@@ -413,6 +413,15 @@ class _ProductFormPageState extends State<ProductFormPage> {
 
     setState(() => _saving = true);
 
+    // Categories without a color/shade should not persist color fields.
+    final catLower = _category.toLowerCase();
+    final hasColor = !(catLower.contains('tool') ||
+        catLower.contains('brush') ||
+        catLower.contains('sponge') ||
+        catLower.contains('applicator') ||
+        catLower.contains('accessor') ||
+        catLower == 'setting spray');
+
     try {
       final imageUrl = _selectedImageBytes != null
           ? await _uploadProductImage()
@@ -427,10 +436,10 @@ class _ProductFormPageState extends State<ProductFormPage> {
         'currency': _currencyController.text,
         'stock_quantity': int.parse(_stockController.text),
         'image_url': imageUrl,
-        'shade_name': _shadeNameController.text,
-        'hex_code': _hexCodeController.text,
-        'undertone': _selectedUndertones.join(', '),
-        'color_family': _colorFamily,
+        'shade_name': hasColor ? _shadeNameController.text : '',
+        'hex_code': hasColor ? _hexCodeController.text : '',
+        'undertone': hasColor ? _selectedUndertones.join(', ') : '',
+        'color_family': hasColor ? _colorFamily : '',
         'compatible_looks': _generateCompatibleLooks(),
         'auto_generated_looks': true,
         'compatible_skin_type': _selectedSkinTypes.join(', '),
@@ -780,6 +789,15 @@ class _ProductFormPageState extends State<ProductFormPage> {
       'Lip Gloss',
     ].contains(_category);
 
+    // Categories that don't have a color/shade (tools, accessories, etc.)
+    final categoryLower = _category.toLowerCase();
+    final supportsColor = !(categoryLower.contains('tool') ||
+        categoryLower.contains('brush') ||
+        categoryLower.contains('sponge') ||
+        categoryLower.contains('applicator') ||
+        categoryLower.contains('accessor') ||
+        categoryLower == 'setting spray');
+
     return Scaffold(
       backgroundColor: bgColor,
       appBar: AppBar(
@@ -912,24 +930,9 @@ class _ProductFormPageState extends State<ProductFormPage> {
                       ),
                       const SizedBox(height: 14),
                       if (_selectedImageBytes != null) ...[
-                        Row(
-                          children: [
-                            const Text(
-                              'Tap a color from the image',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-                            ),
-                            const Spacer(),
-                            TextButton(
-                              onPressed: _extractingColors
-                                  ? null
-                                  : _showColorPaletteDialog,
-                              child: Text(
-                                _extractingColors
-                                    ? 'Extracting...'
-                                    : 'Open picker',
-                              ),
-                            ),
-                          ],
+                        const Text(
+                          'Tap a color from the image',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 8),
                         _buildColorPaletteChips(),
@@ -937,7 +940,8 @@ class _ProductFormPageState extends State<ProductFormPage> {
                       const SizedBox(height: 16),
                       _buildTextField('Image URL (optional)', _imageUrlController),
                     ]),
-                    _buildSectionCard('Color & Shade', Icons.water_drop_outlined, [
+                    if (supportsColor)
+                      _buildSectionCard('Color & Shade', Icons.water_drop_outlined, [
                       Row(
                         children: [
                           Expanded(child: _buildTextField('Shade Name *', _shadeNameController, validator: _requiredValidator)),
