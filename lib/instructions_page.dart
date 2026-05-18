@@ -3,8 +3,6 @@ import 'dart:ui' as ui;
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
-import 'package:shimmer/shimmer.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -17,9 +15,10 @@ import 'painters/eyebrow_guide_painter.dart';
 import 'painters/lip_guide_painter.dart';
 import 'painters/eyeshadow_guide_painter.dart';
 import 'painters/eyeliner_guide_painter.dart';
-import 'widgets/bottom_beauty_nav.dart';
 import 'home_screen.dart';
 import 'screens/checkout_screen.dart';
+import 'helpers/instructions_recommendation_helper.dart';
+import 'widgets/instructions_support_widgets.dart';
 
 // Widgets
 import 'widgets/eyeshadow_guide_card.dart';
@@ -93,9 +92,12 @@ class _InstructionsPageState extends State<InstructionsPage> {
   void initState() {
     super.initState();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _showSkinTypeSheet();
-      _generateAIInstructions();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _showSkinTypeSheet();
+
+      await _lockMarketColorsForLook();
+
+      await _generateAIInstructions();
     });
   }
 
@@ -103,63 +105,6 @@ class _InstructionsPageState extends State<InstructionsPage> {
   void dispose() {
     _pageController.dispose();
     super.dispose();
-  }
-
-  // Helper method to check if skin tone matches shade depth
-  bool _skinToneMatchesShadeDepth(String skinTone, String shadeDepth) {
-    final tone = skinTone.toLowerCase();
-    final depth = shadeDepth.toLowerCase();
-
-    if (tone.contains('fair')) {
-      return depth.contains('fair') || depth.contains('light');
-    }
-
-    if (tone.contains('light')) {
-      return depth.contains('light') || depth.contains('fair') || depth.contains('medium');
-    }
-
-    if (tone.contains('medium')) {
-      return depth.contains('medium') || depth.contains('morena') || depth.contains('light');
-    }
-
-    if (tone.contains('morena') || tone.contains('tan')) {
-      return depth.contains('morena') || depth.contains('medium') || depth.contains('deep morena');
-    }
-
-    if (tone.contains('deep') || tone.contains('dark')) {
-      return depth.contains('deep morena') || depth.contains('morena');
-    }
-
-    return false;
-  }
-
-  // Helper method to get dynamic tip for target area
-  String _tipForTargetArea(String targetArea) {
-    switch (targetArea) {
-      case 'full_face':
-        return 'Apply base products in thin layers. Focus on smooth prep before adding color so the makeup blends better.';
-
-      case 'brows':
-        return 'Start lightly on the inner brow, then build definition toward the arch and tail. Avoid making the front too harsh.';
-
-      case 'eyeshadow':
-        return 'Blend the edges first before adding more pigment. Build the color slowly to avoid harsh lines.';
-
-      case 'eyeliner':
-        return 'Keep your hand steady and draw close to the lash line. Start thin, then extend the wing gradually.';
-
-      case 'blush_contour':
-        return 'Apply blush little by little. Blend upward for a lifted look and avoid placing too much product near the nose.';
-
-      case 'lips':
-        return 'Start from the center of the lips, then blend outward. Use the outline as your guide for a cleaner shape.';
-
-      case 'full_makeup':
-        return 'Check the balance of your eyes, cheeks, and lips. Blend any harsh edges for a polished final look.';
-
-      default:
-        return 'Follow the guide slowly and build product gradually.';
-    }
   }
 
   // Helper method to show full instruction sheet
@@ -208,276 +153,6 @@ class _InstructionsPageState extends State<InstructionsPage> {
     );
   }
 
-  // Helper method to score color family against look
-// Helper method to score color family against look
-  int _lookColorFamilyScore({
-    required String lookName,
-    required String targetArea,
-    required String colorFamily,
-  }) {
-    final look = lookName.toLowerCase();
-    final area = targetArea.toLowerCase();
-    final color = colorFamily.toLowerCase().trim();
-
-    if (color.isEmpty) return -4;
-
-    List<String> preferred = [];
-    List<String> acceptable = [];
-    List<String> badMismatch = [];
-
-    if (look.contains('peach')) {
-      preferred = [
-        'soft peach',
-        'warm coral',
-        'orange coral',
-        'beige nude',
-      ];
-      acceptable = [
-        'terracotta',
-        'caramel nude',
-        'rosy pink',
-      ];
-      badMismatch = [
-        'plum',
-        'wine red',
-        'cool berry',
-        'cherry red',
-        'dusty mauve',
-        'cool pink',
-        'warm brown',
-      ];
-    } else if (look.contains('soft glam')) {
-      preferred = [
-        'muted rose',
-        'rosy pink',
-        'dusty mauve',
-        'beige nude',
-        'caramel nude',
-      ];
-      acceptable = [
-        'soft peach',
-        'brown nude',
-      ];
-      badMismatch = [
-        'wine red',
-        'plum',
-        'cherry red',
-        'orange coral',
-      ];
-    } else if (look.contains('latte') || look.contains('old money')) {
-      preferred = [
-        'caramel nude',
-        'brown nude',
-        'warm brown',
-        'terracotta',
-      ];
-      acceptable = [
-        'beige nude',
-        'muted rose',
-      ];
-      badMismatch = [
-        'cool pink',
-        'berry pink',
-        'plum',
-        'wine red',
-        'cherry red',
-      ];
-    } else if (look.contains('emo') || look.contains('e-girl')) {
-      preferred = [
-        'plum',
-        'wine red',
-        'cool berry',
-        'cherry red',
-      ];
-      acceptable = [
-        'berry pink',
-        'dusty mauve',
-      ];
-      badMismatch = [
-        'soft peach',
-        'warm coral',
-        'orange coral',
-        'beige nude',
-        'caramel nude',
-      ];
-    } else if (look.contains('douyin') || look.contains('k-beauty')) {
-      preferred = [
-        'cool pink',
-        'rosy pink',
-        'berry pink',
-        'soft peach',
-      ];
-      acceptable = [
-        'muted rose',
-        'dusty mauve',
-      ];
-      badMismatch = [
-        'warm brown',
-        'brown nude',
-        'terracotta',
-        'wine red',
-      ];
-    } else if (look.contains('cherry cola')) {
-      preferred = [
-        'wine red',
-        'cherry red',
-        'plum',
-        'cool berry',
-      ];
-      acceptable = [
-        'berry pink',
-        'dusty mauve',
-      ];
-      badMismatch = [
-        'soft peach',
-        'warm coral',
-        'orange coral',
-        'beige nude',
-        'caramel nude',
-      ];
-    } else if (look.contains('cold girl') || look.contains('monochrome pink')) {
-      preferred = [
-        'cool pink',
-        'rosy pink',
-        'dusty mauve',
-        'berry pink',
-      ];
-      acceptable = [
-        'muted rose',
-      ];
-      badMismatch = [
-        'warm brown',
-        'terracotta',
-        'orange coral',
-        'brown nude',
-      ];
-    } else if (look.contains('bronzed') || look.contains('golden')) {
-      preferred = [
-        'terracotta',
-        'warm brown',
-        'brown nude',
-        'warm coral',
-        'orange coral',
-      ];
-      acceptable = [
-        'caramel nude',
-        'beige nude',
-      ];
-      badMismatch = [
-        'cool pink',
-        'berry pink',
-        'plum',
-        'cool berry',
-      ];
-    } else if (look.contains('clean girl') || look.contains('glass skin')) {
-      preferred = [
-        'beige nude',
-        'muted rose',
-        'rosy pink',
-        'soft peach',
-      ];
-      acceptable = [
-        'caramel nude',
-        'cool pink',
-      ];
-      badMismatch = [
-        'wine red',
-        'plum',
-        'cherry red',
-        'warm brown',
-      ];
-    } else if (look.contains('bridal')) {
-      preferred = [
-        'muted rose',
-        'rosy pink',
-        'beige nude',
-        'soft peach',
-      ];
-      acceptable = [
-        'dusty mauve',
-        'caramel nude',
-      ];
-      badMismatch = [
-        'plum',
-        'wine red',
-        'warm brown',
-      ];
-    } else if (look.contains('arab') || look.contains('party')) {
-      preferred = [
-        'wine red',
-        'cherry red',
-        'plum',
-        'terracotta',
-        'warm brown',
-      ];
-      acceptable = [
-        'berry pink',
-        'cool berry',
-        'brown nude',
-      ];
-      badMismatch = [
-        'soft peach',
-        'beige nude',
-        'cool pink',
-      ];
-    } else {
-      preferred = [
-        'rosy pink',
-        'muted rose',
-        'beige nude',
-        'dusty mauve',
-      ];
-      acceptable = [
-        'soft peach',
-        'caramel nude',
-      ];
-      badMismatch = [
-        'plum',
-        'wine red',
-        'cherry red',
-      ];
-    }
-
-    final isPreferred = preferred.any((p) => color.contains(p));
-    final isAcceptable = acceptable.any((p) => color.contains(p));
-    final isBadMismatch = badMismatch.any((p) => color.contains(p));
-
-    // Stricter scoring for lips
-    if (area == 'lips') {
-      if (isPreferred) return 18;
-      if (isAcceptable) return 2;
-      if (isBadMismatch) return -30;
-      return -10;
-    }
-
-    // Original scoring for other areas
-    if (isPreferred) return 12;
-    if (isAcceptable) return 5;
-    if (isBadMismatch) return -18;
-
-    // Extra strict rules for color-heavy steps (excluding lips since already handled above)
-    if (area == 'blush_contour' || area == 'eyeshadow') {
-      return -3;
-    }
-
-    return 0;
-  }
-
-  // HEX parser
-  Color? _colorFromHex(String? hex) {
-    if (hex == null || hex.trim().isEmpty) return null;
-
-    final cleaned = hex.replaceAll('#', '').trim();
-
-    if (cleaned.length != 6) return null;
-
-    try {
-      return Color(int.parse('FF$cleaned', radix: 16));
-    } catch (_) {
-      return null;
-    }
-  }
-
   // Helper method to get skin type label
   String _skinTypeLabel(SkinType type) {
     switch (type) {
@@ -494,38 +169,104 @@ class _InstructionsPageState extends State<InstructionsPage> {
     }
   }
 
-  String _categoryForTargetArea(String targetArea) {
-    switch (targetArea) {
-      case 'full_face':
-        return 'Primer';
-      case 'brows':
-        return 'Eyebrow';
-      case 'eyeshadow':
-        return 'Eyeshadow';
-      case 'eyeliner':
-        return 'Eyeliner';
-      case 'blush_contour':
-        return 'Blush';
-      case 'lips':
-        return 'Lipstick';
-      case 'full_makeup':
-        return 'Setting Spray';
-      default:
-        return '';
+  Future<void> _lockMarketColorsForLook() async {
+    const colorTargetAreas = [
+      'eyeshadow',
+      'blush_contour',
+      'lips',
+    ];
+
+    for (final targetArea in colorTargetAreas) {
+      try {
+        final products = await _fetchRecommendedProducts(targetArea);
+
+        if (products.isEmpty) continue;
+
+        final bestProduct = products.first;
+        final hex = bestProduct['hex_code']?.toString();
+        final color = colorFromHex(hex);
+
+        if (color == null) continue;
+
+        _recommendedStepColors[targetArea] = color;
+      } catch (e) {
+        debugPrint('❌ Failed to lock market color for $targetArea: $e');
+      }
     }
+
+    if (!mounted) return;
+
+    setState(() {
+      _lipGuideImagePath = null;
+      _eyeshadowGuideImagePath = null;
+    });
+  }
+
+  String _detectRecommendedLipColorFamilyFromLook(String lookName) {
+    final look = lookName.toLowerCase();
+
+    if (look.contains('peach')) {
+      return 'soft peach';
+    }
+
+    if (look.contains('clean girl') || look.contains('glass skin')) {
+      return 'muted rose';
+    }
+
+    if (look.contains('douyin') || look.contains('k-beauty')) {
+      return 'rosy pink';
+    }
+
+    if (look.contains('soft glam')) {
+      return 'muted rose';
+    }
+
+    if (look.contains('latte') || look.contains('old money')) {
+      return 'brown nude';
+    }
+
+    if (look.contains('bronzed') || look.contains('golden')) {
+      return 'terracotta';
+    }
+
+    if (look.contains('emo') || look.contains('e-girl')) {
+      return 'cool berry';
+    }
+
+    if (look.contains('cherry cola')) {
+      return 'wine red';
+    }
+
+    if (look.contains('cold girl') || look.contains('monochrome pink')) {
+      return 'cool pink';
+    }
+
+    if (look.contains('bridal')) {
+      return 'muted rose';
+    }
+
+    if (look.contains('arab') || look.contains('party')) {
+      return 'wine red';
+    }
+
+    return 'rosy pink';
   }
 
   Future<List<Map<String, dynamic>>> _fetchRecommendedProducts(
     String targetArea,
   ) async {
-    final category = _categoryForTargetArea(targetArea);
+    final category = categoryForTargetArea(targetArea);
     final selectedLook = widget.look.lookName.toLowerCase();
+
     final selectedSkinType = _selectedSkinType == null
         ? ''
         : _skinTypeLabel(_selectedSkinType!).toLowerCase();
 
     final detectedUndertone =
         widget.faceProfile?.undertone.name.toLowerCase() ?? '';
+
+    final userSkinTone =
+        widget.faceProfile?.skinTone.name.toLowerCase() ?? '';
 
     final response = await Supabase.instance.client
         .from('products')
@@ -568,6 +309,11 @@ class _InstructionsPageState extends State<InstructionsPage> {
       return productCategory.contains(requiredCategory);
     }).toList();
 
+    final preferredFamily = preferredColorFamilyForLook(
+      lookName: widget.look.lookName,
+      targetArea: targetArea,
+    );
+
     final scoredProducts = categoryFilteredProducts.map((product) {
       int score = 0;
 
@@ -583,15 +329,33 @@ class _InstructionsPageState extends State<InstructionsPage> {
       final shadeDepth =
           (product['shade_depth'] ?? '').toString().toLowerCase();
 
-      final userSkinTone =
-          widget.faceProfile?.skinTone.name.toLowerCase() ?? '';
-
       final colorFamily =
           (product['color_family'] ?? '').toString().toLowerCase();
 
-      score += 10; // category match is required and strongest
+      final productHex =
+          (product['hex_code'] ?? '').toString().trim();
 
-      if (compatibleLooks.contains(selectedLook)) score += 4;
+      score += 10;
+
+      // Compatible looks is now only secondary.
+      if (targetArea == 'lips') {
+        if (compatibleLooks.contains(selectedLook)) {
+          score += 1;
+        }
+      } else {
+        if (compatibleLooks.contains(selectedLook)) {
+          score += 4;
+        }
+      }
+
+      if (preferredFamily.isNotEmpty) {
+        if (colorFamily.contains(preferredFamily.toLowerCase()) ||
+            preferredFamily.toLowerCase().contains(colorFamily)) {
+          score += 80;
+        } else {
+          score -= 30;
+        }
+      }
 
       if (selectedSkinType.isNotEmpty &&
           compatibleSkinType.contains(selectedSkinType)) {
@@ -604,16 +368,38 @@ class _InstructionsPageState extends State<InstructionsPage> {
       }
 
       if (userSkinTone.isNotEmpty && shadeDepth.isNotEmpty) {
-        if (_skinToneMatchesShadeDepth(userSkinTone, shadeDepth)) {
+        if (skinToneMatchesShadeDepth(userSkinTone, shadeDepth)) {
           score += 3;
         }
       }
 
-      score += _lookColorFamilyScore(
-        lookName: widget.look.lookName,
-        targetArea: targetArea,
-        colorFamily: colorFamily,
-      );
+      if (targetArea == 'lips') {
+        final recommendedLipHex =
+            hexFromColor(widget.look.lipstickColor);
+
+        score += lipstickStrictScore(
+          product: product,
+          lookName: widget.look.lookName,
+          recommendedHex: recommendedLipHex,
+          recommendedColorFamily: preferredFamily,
+          userUndertone: detectedUndertone,
+          userSkinType: selectedSkinType,
+          userShadeDepth: userSkinTone,
+        ).toInt();
+      } else {
+        score += lookColorFamilyScore(
+          lookName: widget.look.lookName,
+          targetArea: targetArea,
+          colorFamily: colorFamily,
+        );
+
+        // Product HEX should exist for color-based areas.
+        if ((targetArea == 'eyeshadow' ||
+                targetArea == 'blush_contour') &&
+            productHex.isEmpty) {
+          score -= 100;
+        }
+      }
 
       return {
         ...product,
@@ -627,9 +413,11 @@ class _InstructionsPageState extends State<InstructionsPage> {
 
     final bestProducts = scoredProducts.take(2).toList();
 
+    // MARKET COLOR LOCKING:
+    // The first/best product HEX becomes the official color.
     if (bestProducts.isNotEmpty) {
       final bestHex = bestProducts.first['hex_code']?.toString();
-      final bestColor = _colorFromHex(bestHex);
+      final bestColor = colorFromHex(bestHex);
 
       if (bestColor != null) {
         _recommendedStepColors[targetArea] = bestColor;
@@ -651,7 +439,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
 
       final bestProduct = products.first;
       final hex = bestProduct['hex_code']?.toString();
-      final color = _colorFromHex(hex);
+      final color = colorFromHex(hex);
 
       if (color == null) return;
 
@@ -951,7 +739,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
         painter: LipGuidePainter(
           face: widget.detectedFace!,
           preset: widget.selectedPreset,
-          lipColor: _recommendedStepColors['lips'] ?? widget.look.lipstickColor,
+          lipColor: _recommendedStepColors['lips']!,
         ),
       );
 
@@ -974,8 +762,8 @@ class _InstructionsPageState extends State<InstructionsPage> {
     setState(() => _generatingEyeshadowGuide = true);
 
     try {
-      final eyeshadowColor = _recommendedStepColors['eyeshadow'] ?? widget.look.eyeshadowColor;
-
+      final eyeshadowColor = _recommendedStepColors['eyeshadow']!;
+      
       final path = await _createGuideImage(
         prefix: 'eyeshadow_guide_',
         painter: EyeshadowGuidePainter(
@@ -1320,7 +1108,9 @@ class _InstructionsPageState extends State<InstructionsPage> {
       }
 
       if (_basePrepGuideImagePath != null) {
-        return BasePrepGuideCard(imagePath: _basePrepGuideImagePath!);
+        return BasePrepGuideCard(
+          imagePath: _basePrepGuideImagePath!,
+        );
       }
     }
 
@@ -1330,7 +1120,9 @@ class _InstructionsPageState extends State<InstructionsPage> {
       }
 
       if (_eyebrowGuideImagePath != null) {
-        return EyebrowGuideCard(imagePath: _eyebrowGuideImagePath!);
+        return EyebrowGuideCard(
+          imagePath: _eyebrowGuideImagePath!,
+        );
       }
     }
 
@@ -1393,8 +1185,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
               face: widget.detectedFace!,
               config: _config,
               image: snapshot.data!,
-              blushColor: _recommendedStepColors['blush_contour'] ??
-                  widget.look.blushColor,
+              blushColor: _recommendedStepColors['blush_contour']!,
             );
           },
         );
@@ -1407,7 +1198,9 @@ class _InstructionsPageState extends State<InstructionsPage> {
       }
 
       if (_lipGuideImagePath != null) {
-        return LipGuideCard(imagePath: _lipGuideImagePath!);
+        return LipGuideCard(
+          imagePath: _lipGuideImagePath!,
+        );
       }
     }
 
@@ -1728,7 +1521,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
 
                                         Row(
                                           children: [
-                                            _KitQtyButton(
+                                            KitQtyButton(
                                               icon: Icons.remove,
                                               onTap: () => updateQty(index, -1),
                                               isDisabled: qty == 0,
@@ -1748,7 +1541,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
                                                 ),
                                               ),
                                             ),
-                                            _KitQtyButton(
+                                            KitQtyButton(
                                               icon: Icons.add,
                                               onTap: () => updateQty(index, 1),
                                             ),
@@ -2003,7 +1796,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Column(
                         children: [
-                          _InstructionCard(
+                          InstructionCard(
                             stepNumber: stepNumber,
                             title: title,
                             instruction: instruction,
@@ -2017,11 +1810,12 @@ class _InstructionsPageState extends State<InstructionsPage> {
 
                           const SizedBox(height: 3),
 
-                          Expanded(
+                          Flexible(
+                            fit: FlexFit.tight,
                             child: Stack(
                               children: [
                                 Positioned.fill(
-                                  child: _GuideCardShell(
+                                  child: GuideCardShell(
                                     child: _buildGuideWidgetForTargetArea(
                                       targetArea: targetArea,
                                     ),
@@ -2029,49 +1823,59 @@ class _InstructionsPageState extends State<InstructionsPage> {
                                 ),
 
                                 Positioned(
-                                  right: 10,
+                                  right: 7,
                                   top: 4,
                                   child: Column(
+                                    mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      _FloatingMiniButton(
+                                      FloatingMiniButton(
                                         icon: Icons.lightbulb_rounded,
+                                        size: 34,
                                         onTap: () {
                                           _showInfoSheet(
                                             title: 'Tip',
-                                            description: _tipForTargetArea(targetArea),
+                                            description: tipForTargetArea(targetArea),
                                           );
                                         },
                                       ),
-                                      const SizedBox(height: 6),
-                                      _FloatingMiniButton(
+
+                                      const SizedBox(height: 4),
+
+                                      FloatingMiniButton(
                                         icon: Icons.palette_rounded,
+                                        size: 34,
                                         onTap: () {
                                           _showInfoSheet(
                                             title: targetArea == 'full_makeup'
                                                 ? 'Why this look suits you'
                                                 : 'Why this color suits you',
-                                            description:
-                                                whyThisColorSuitsYou.trim().isEmpty
-                                                    ? 'This step is personalized based on your selected look, undertone, skin type, and product match.'
-                                                    : whyThisColorSuitsYou,
+                                            description: whyThisColorSuitsYou.trim().isEmpty
+                                                ? 'This step is personalized based on your selected look, undertone, skin type, and product match.'
+                                                : whyThisColorSuitsYou,
                                           );
                                         },
                                       ),
-                                      const SizedBox(height: 6),
-                                      _FloatingMiniButton(
+
+                                      const SizedBox(height: 4),
+
+                                      FloatingMiniButton(
                                         icon: Icons.shopping_bag_outlined,
+                                        size: 34,
                                         onTap: () {
                                           _showProductRecommendationSheet(targetArea);
                                         },
                                       ),
-                                      // 4th FAB button - only on Step 7 (full_makeup)
-                                      if (targetArea == 'full_makeup') ...[
-                                        const SizedBox(height: 6),
-                                        _FloatingMiniButton(
+
+                                      const SizedBox(height: 4),
+
+                                      if (targetArea == 'full_makeup')
+                                        FloatingMiniButton(
                                           icon: Icons.shopping_cart_checkout_rounded,
-                                          onTap: _buildingRecommendedKit ? () {} : _buildFinalRecommendedKit,
+                                          size: 34,
+                                          onTap: _buildingRecommendedKit
+                                              ? () {}
+                                              : _buildFinalRecommendedKit,
                                         ),
-                                      ],
                                     ],
                                   ),
                                 ),
@@ -2085,12 +1889,12 @@ class _InstructionsPageState extends State<InstructionsPage> {
                 ),
               ),
 
-              const SizedBox(height: 8),
+              const SizedBox(height: 3),
 
               Text(
                 'Step ${_currentPage + 1} of 7',
                 style: const TextStyle(
-                  fontSize: 11,
+                  fontSize: 10.5,
                   color: Color(0xFF777780),
                   fontWeight: FontWeight.w700,
                 ),
@@ -2106,8 +1910,8 @@ class _InstructionsPageState extends State<InstructionsPage> {
                   return AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
                     margin: const EdgeInsets.symmetric(horizontal: 4),
-                    width: isActive ? 26 : 8,
-                    height: 8,
+                    width: isActive ? 22 : 6,
+                    height: 6,
                     decoration: BoxDecoration(
                       color: isActive
                           ? const Color(0xFFFF3D93)
@@ -2137,9 +1941,13 @@ class _InstructionsPageState extends State<InstructionsPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFFFF7FA),
 
-      bottomNavigationBar: BottomBeautyNav(
-        currentIndex: 1,
-        onTap: (index) {
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: 1,
+        height: 68,
+        backgroundColor: Colors.white,
+        indicatorColor: const Color(0xFFFF4D97).withOpacity(0.12),
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        onDestinationSelected: (index) {
           Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(
@@ -2148,6 +1956,38 @@ class _InstructionsPageState extends State<InstructionsPage> {
             (route) => false,
           );
         },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.face_retouching_natural_outlined),
+            selectedIcon: Icon(Icons.face_retouching_natural),
+            label: 'Scan',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.shopping_bag_outlined),
+            selectedIcon: Icon(Icons.shopping_bag),
+            label: 'Market',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.receipt_long_outlined),
+            selectedIcon: Icon(Icons.receipt_long),
+            label: 'Orders',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.workspace_premium_outlined),
+            selectedIcon: Icon(Icons.workspace_premium),
+            label: 'Premium',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'Settings',
+          ),
+        ],
       ),
 
       body: SafeArea(
@@ -2158,675 +1998,6 @@ class _InstructionsPageState extends State<InstructionsPage> {
           ),
           child: _buildAIStepsPager(),
         ),
-      ),
-    );
-  }
-}
-
-// ========== HELPER WIDGETS ==========
-
-class _InstructionCard extends StatelessWidget {
-  final String stepNumber;
-  final String title;
-  final String instruction;
-  final VoidCallback? onTap;
-
-  const _InstructionCard({
-    required this.stepNumber,
-    required this.title,
-    required this.instruction,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: const Color(0xFFFFD8E8),
-            width: 1,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'STEP $stepNumber • ${title.toUpperCase()}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 12.8,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFFFF3D93),
-                letterSpacing: 0.1,
-                height: 1,
-              ),
-            ),
-
-            const SizedBox(height: 5),
-
-            Text(
-              instruction,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 10.2,
-                height: 1.45,
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF55555C),
-              ),
-            ),
-
-            const SizedBox(height: 6),
-
-            const Text(
-              'Tap to read full guide',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFFFF3D93),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _GuideCardShell extends StatelessWidget {
-  final Widget child;
-
-  const _GuideCardShell({
-    required this.child,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: child,
-    );
-  }
-}
-
-class _FloatingMiniButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-
-  const _FloatingMiniButton({
-    required this.icon,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: const Color(0xFFFF3D93),
-      borderRadius: BorderRadius.circular(14),
-      elevation: 4,
-      shadowColor: const Color(0xFFFF3D93).withOpacity(0.22),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: SizedBox(
-          width: 40,
-          height: 40,
-          child: Icon(
-            icon,
-            color: Colors.white,
-            size: 19,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _KitQtyButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  final bool isDisabled;
-
-  const _KitQtyButton({
-    required this.icon,
-    required this.onTap,
-    this.isDisabled = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: isDisabled ? null : onTap,
-      borderRadius: BorderRadius.circular(999),
-      child: Container(
-        width: 30,
-        height: 30,
-        decoration: BoxDecoration(
-          color: isDisabled ? const Color(0xFFF0F0F0) : Colors.white,
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: isDisabled ? const Color(0xFFE0E0E0) : const Color(0xFFFFD3E5),
-          ),
-        ),
-        child: Icon(
-          icon,
-          size: 16,
-          color: isDisabled ? Colors.grey : const Color(0xFFFF3D93),
-        ),
-      ),
-    );
-  }
-}
-
-class AiTutorialLoadingView extends StatelessWidget {
-  final String lookName;
-
-  const AiTutorialLoadingView({
-    super.key,
-    required this.lookName,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFF7FA),
-      bottomNavigationBar: BottomBeautyNav(
-        currentIndex: 1,
-        onTap: (index) {
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(
-              builder: (_) => HomeScreen(initialIndex: index),
-            ),
-            (route) => false,
-          );
-        },
-      ),
-      body: SafeArea(
-        bottom: false,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SizedBox(
-              height: constraints.maxHeight,
-              child: Stack(
-                children: [
-                  Positioned(
-                    top: 90,
-                    left: -80,
-                    child: Container(
-                      width: 220,
-                      height: 220,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: const Color(0xFFFF4D97).withOpacity(0.08),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 80,
-                    right: -70,
-                    child: Container(
-                      width: 210,
-                      height: 210,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: const Color(0xFF8B5CF6).withOpacity(0.07),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    top: 145,
-                    right: -8,
-                    child: Transform.rotate(
-                      angle: 0.35,
-                      child: Opacity(
-                        opacity: 0.85,
-                        child: Image.asset(
-                          'assets/images/makeup_brush.png',
-                          width: 92,
-                        )
-                            .animate(onPlay: (controller) => controller.repeat())
-                            .moveY(
-                              begin: -4,
-                              end: 6,
-                              duration: 2400.ms,
-                              curve: Curves.easeInOut,
-                            )
-                            .then()
-                            .moveY(
-                              begin: 6,
-                              end: -4,
-                              duration: 2400.ms,
-                              curve: Curves.easeInOut,
-                            ),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 22),
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 28),
-                        const Text(
-                          'Creating your',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFF171725),
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                        const Text(
-                          'personalized tutorial',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 27,
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFFFF4D97),
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Analyzing your skin tone, undertone, selected look, and product matches to create your $lookName guide.',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            height: 1.35,
-                            fontWeight: FontWeight.w500,
-                            color: Color(0xFF74747A),
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            Container(
-                              width: 150,
-                              height: 150,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFFFF4D97)
-                                        .withOpacity(0.26),
-                                    blurRadius: 42,
-                                    spreadRadius: 8,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            ClipOval(
-                              child: Image.asset(
-                                'assets/images/ai_orb.png',
-                                width: 150,
-                                height: 150,
-                                fit: BoxFit.cover,
-                              ),
-                            )
-                                .animate(
-                                  onPlay: (controller) => controller.repeat(),
-                                )
-                                .scale(
-                                  duration: 2200.ms,
-                                  begin: const Offset(0.94, 0.94),
-                                  end: const Offset(1.04, 1.04),
-                                  curve: Curves.easeInOut,
-                                )
-                                .then()
-                                .scale(
-                                  duration: 2200.ms,
-                                  begin: const Offset(1.04, 1.04),
-                                  end: const Offset(0.94, 0.94),
-                                  curve: Curves.easeInOut,
-                                ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 22,
-                            vertical: 11,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.95),
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(
-                              color: const Color(0xFFE7D7FF),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF8B5CF6)
-                                    .withOpacity(0.12),
-                                blurRadius: 18,
-                                offset: const Offset(0, 8),
-                              ),
-                            ],
-                          ),
-                          child: Shimmer.fromColors(
-                            baseColor: const Color(0xFF6D4FE8),
-                            highlightColor: const Color(0xFFFF4D97),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.auto_awesome_rounded,
-                                  size: 20,
-                                ),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Analyzing your features...',
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        const _AiProgressCard(),
-                        const SizedBox(height: 14),
-                        _AiInfoCard(lookName: lookName),
-                        const Spacer(),
-                        const _AiTipCard(),
-                        const SizedBox(height: 12),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-}
-
-class _AiProgressCard extends StatelessWidget {
-  const _AiProgressCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.92),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: const Color(0xFFFFD9E9)),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFFFF4D97).withOpacity(0.08),
-            blurRadius: 22,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Row(
-        children: const [
-          Expanded(
-            child: _ProgressStep(
-              icon: Icons.palette_rounded,
-              title: 'Selecting',
-              subtitle: 'Look',
-              active: false,
-              done: true,
-            ),
-          ),
-          Expanded(
-            child: _ProgressStep(
-              icon: Icons.face_retouching_natural_rounded,
-              title: 'Analyzing',
-              subtitle: 'Face',
-              active: false,
-              done: true,
-            ),
-          ),
-          Expanded(
-            child: _ProgressStep(
-              icon: Icons.auto_awesome_rounded,
-              title: 'Generating',
-              subtitle: 'Steps',
-              active: true,
-              done: false,
-            ),
-          ),
-          Expanded(
-            child: _ProgressStep(
-              icon: Icons.description_rounded,
-              title: 'Finalizing',
-              subtitle: 'Guide',
-              active: false,
-              done: false,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ProgressStep extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final bool active;
-  final bool done;
-
-  const _ProgressStep({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.active,
-    required this.done,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = active
-        ? const Color(0xFF8B5CF6)
-        : done
-            ? const Color(0xFFFF4D97)
-            : const Color(0xFFB8B8BF);
-
-    return Column(
-      children: [
-        Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Container(
-              width: 54,
-              height: 54,
-              decoration: BoxDecoration(
-                color: active
-                    ? const Color(0xFFF4EEFF)
-                    : done
-                        ? const Color(0xFFFFEEF6)
-                        : const Color(0xFFF4F4F5),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: color.withOpacity(0.25),
-                ),
-              ),
-              child: Icon(
-                icon,
-                color: color,
-                size: 26,
-              ),
-            ),
-            if (done)
-              Positioned(
-                top: -4,
-                right: -2,
-                child: Container(
-                  width: 20,
-                  height: 20,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFFF4D97),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.check,
-                    color: Colors.white,
-                    size: 14,
-                  ),
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Text(
-          title,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 11.5,
-            fontWeight: FontWeight.w800,
-            color: color,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          subtitle,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 10.5,
-            fontWeight: FontWeight.w500,
-            color: Color(0xFF74747A),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _AiInfoCard extends StatelessWidget {
-  final String lookName;
-
-  const _AiInfoCard({
-    required this.lookName,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 112,
-      padding: const EdgeInsets.fromLTRB(16, 14, 10, 14),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.92),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFFFD9E9)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Row(
-                  children: [
-                    Icon(
-                      Icons.auto_awesome_rounded,
-                      color: Color(0xFFFF4D97),
-                      size: 20,
-                    ),
-                    SizedBox(width: 8),
-                    Text(
-                      "What's happening?",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF171725),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Analyzing your skin tone, undertone, selected look, and product matches to create your $lookName guide.',
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    height: 1.3,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF74747A),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Opacity(
-            opacity: 0.65,
-            child: Image.asset(
-              'assets/images/face_mesh.png',
-              width: 78,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AiTipCard extends StatelessWidget {
-  const _AiTipCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 60,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.75),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFFFFD9E9)),
-      ),
-      child: const Row(
-        children: [
-          Icon(
-            Icons.lightbulb_outline_rounded,
-            color: Color(0xFFFF4D97),
-            size: 28,
-          ),
-          SizedBox(width: 12),
-          Expanded(
-            child: Text.rich(
-              TextSpan(
-                children: [
-                  TextSpan(
-                    text: 'This may take a few moments.\n',
-                    style: TextStyle(
-                      color: Color(0xFFFF4D97),
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  TextSpan(
-                    text: "We're crafting something beautiful ✨",
-                    style: TextStyle(
-                      color: Color(0xFF74747A),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-              style: TextStyle(
-                fontSize: 12.5,
-                height: 1.3,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

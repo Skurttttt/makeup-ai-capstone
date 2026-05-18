@@ -8,7 +8,6 @@ import 'home_screen.dart';
 import 'makeup_layer.dart';
 import 'instructions_page.dart';
 import 'look_engine.dart';
-import 'widgets/bottom_beauty_nav.dart';
 import 'widgets/face_preview_card.dart';
 import 'widgets/beauty_slider.dart';
 
@@ -238,9 +237,13 @@ class _ScanResultPageState extends State<ScanResultPage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFFFF7FA),
-      bottomNavigationBar: BottomBeautyNav(
-        currentIndex: 1,
-        onTap: (index) {
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: 1,
+        height: 68,
+        backgroundColor: Colors.white,
+        indicatorColor: const Color(0xFFFF4D97).withOpacity(0.12),
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        onDestinationSelected: (index) {
           Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(
@@ -249,6 +252,38 @@ class _ScanResultPageState extends State<ScanResultPage> {
             (route) => false,
           );
         },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.face_retouching_natural_outlined),
+            selectedIcon: Icon(Icons.face_retouching_natural),
+            label: 'Scan',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.shopping_bag_outlined),
+            selectedIcon: Icon(Icons.shopping_bag),
+            label: 'Market',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.receipt_long_outlined),
+            selectedIcon: Icon(Icons.receipt_long),
+            label: 'Orders',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.workspace_premium_outlined),
+            selectedIcon: Icon(Icons.workspace_premium),
+            label: 'Premium',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'Settings',
+          ),
+        ],
       ),
       body: SafeArea(
         bottom: false,
@@ -368,8 +403,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
 
                       const SizedBox(height: 8),
 
-                      _ActionCards(
-                        onProduct: () {},
+                      _TutorialOnlyCard(
                         onTutorial: widget.look == null
                             ? null
                             : () {
@@ -642,112 +676,92 @@ class _SingleOpacityCard extends StatelessWidget {
   }
 }
 
-class _ActionCards extends StatelessWidget {
-  final VoidCallback onProduct;
+class _TutorialOnlyCard extends StatelessWidget {
   final VoidCallback? onTutorial;
 
-  const _ActionCards({
-    required this.onProduct,
+  const _TutorialOnlyCard({
     required this.onTutorial,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _ActionCard(
-            icon: Icons.shopping_bag_outlined,
-            title: 'Product',
-            subtitle: 'Recommended for you',
-            color: const Color(0xFFFF4D97),
-            background: const Color(0xFFFFEEF6),
-            onTap: onProduct,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _ActionCard(
-            icon: Icons.school_outlined,
-            title: 'Tutorial',
-            subtitle: 'Step by step guide',
-            color: const Color(0xFF7B4CE0),
-            background: const Color(0xFFF4EEFF),
-            onTap: onTutorial,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ActionCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final Color background;
-  final VoidCallback? onTap;
-
-  const _ActionCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.background,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
     return Opacity(
-      opacity: onTap == null ? 0.45 : 1,
+      opacity: onTutorial == null ? 0.45 : 1,
       child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: onTap,
+        borderRadius: BorderRadius.circular(22),
+        onTap: onTutorial,
         child: Container(
-          height: 58,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          width: double.infinity,
+          height: 68,
+          padding: const EdgeInsets.symmetric(horizontal: 18),
           decoration: BoxDecoration(
-            color: background,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: color.withOpacity(0.24)),
+            color: const Color(0xFFF4EEFF),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: const Color(0xFF7B4CE0).withOpacity(0.22),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF7B4CE0).withOpacity(0.08),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+              ),
+            ],
           ),
           child: Row(
             children: [
-              Icon(icon, color: color, size: 28),
-              const SizedBox(width: 9),
-              Expanded(
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.92),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.school_outlined,
+                  color: Color(0xFF7B4CE0),
+                  size: 24,
+                ),
+              ),
+
+              const SizedBox(width: 14),
+
+              const Expanded(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      title,
-                      style: TextStyle(
-                        color: color,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
+                      'Tutorial',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: color.withOpacity(0.8),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF171725),
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Open AI step-by-step makeup guide',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF777780),
                       ),
                     ),
                   ],
                 ),
               ),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: color,
-                size: 23,
+
+              const SizedBox(width: 8),
+
+              const Icon(
+                Icons.arrow_forward_ios_rounded,
+                color: Color(0xFF7B4CE0),
+                size: 18,
               ),
             ],
           ),

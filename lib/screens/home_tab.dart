@@ -7,11 +7,12 @@ import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart' as geocoding;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:camera/camera.dart';
 
 import '../look_engine.dart';
 import '../scan_result_page.dart';
+import 'camera_screen.dart';
 import 'market_tab.dart';
-import 'scan_tab.dart';
 import 'settings_tab.dart';
 
 class HomeTab extends StatefulWidget {
@@ -409,12 +410,41 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     return '$symbol${price.toStringAsFixed(2)}';
   }
 
+  Future<void> _openCameraScreen({
+    MakeupLookPreset? preselectedLook,
+  }) async {
+    try {
+      final cameras = await availableCameras();
+
+      final frontCamera = cameras.firstWhere(
+        (camera) => camera.lensDirection == CameraLensDirection.front,
+        orElse: () => cameras.first,
+      );
+
+      if (!mounted) return;
+
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => CameraScreen(
+            camera: frontCamera,
+            preselectedLook: preselectedLook,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to open camera: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   void _openScanTab({MakeupLookPreset? preselectedLook}) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ScanTab(preselectedLook: preselectedLook),
-      ),
-    );
+    _openCameraScreen(preselectedLook: preselectedLook);
   }
 
   void _openMarketTab() {
@@ -1002,158 +1032,158 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
         return GestureDetector(
           onTap: isActive
               ? null
-              : () => _openScanTab(preselectedLook: recommendedPreset),
+              : () => _openCameraScreen(preselectedLook: recommendedPreset),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 300),
             decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFFFF4D97), Color(0xFFFF6B9D)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+              gradient: const LinearGradient(
+                colors: [Color(0xFFFF4D97), Color(0xFFFF6B9D)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFF4D97).withOpacity(0.4),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+              border: isActive ? Border.all(color: Colors.white, width: 2) : null,
             ),
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFFFF4D97).withOpacity(0.4),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
-            border: isActive ? Border.all(color: Colors.white, width: 2) : null,
-          ),
-          child: Stack(
-            children: [
-              // Decorative elements
-              Positioned(
-                right: -30,
-                top: -30,
-                child: Container(
-                  width: 150,
-                  height: 150,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white.withOpacity(0.1),
+            child: Stack(
+              children: [
+                // Decorative elements
+                Positioned(
+                  right: -30,
+                  top: -30,
+                  child: Container(
+                    width: 150,
+                    height: 150,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withOpacity(0.1),
+                    ),
                   ),
                 ),
-              ),
-              Positioned(
-                left: -20,
-                bottom: -20,
-                child: Container(
-                  width: 100,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white.withOpacity(0.05),
+                Positioned(
+                  left: -20,
+                  bottom: -20,
+                  child: Container(
+                    width: 100,
+                    height: 100,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withOpacity(0.05),
+                    ),
                   ),
                 ),
-              ),
-              // Content
-              Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.25),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.wb_sunny_outlined,
-                                color: Colors.white,
-                                size: 14,
-                              ),
-                              SizedBox(width: 6),
-                              Text(
-                                'Weather Pick',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      recommendedLabel,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 26,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      reason,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
-                        fontSize: 12,
-                        height: 1.3,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                // Content
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
-                          Text(
-                            isActive ? 'Drop product here' : 'Try this look',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Icon(
-                            isActive
-                                ? Icons.add_circle_outline
-                                : Icons.camera_alt_outlined,
-                            color: Colors.white,
-                            size: 18,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.25),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.wb_sunny_outlined,
+                                  color: Colors.white,
+                                  size: 14,
+                                ),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Weather Pick',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 12),
+                      Text(
+                        recommendedLabel,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        reason,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.9),
+                          fontSize: 12,
+                          height: 1.3,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              isActive ? 'Drop product here' : 'Try this look',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(
+                              isActive
+                                  ? Icons.add_circle_outline
+                                  : Icons.camera_alt_outlined,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      );
+        );
       },
     );
   }
 
   Widget _buildLookCard(String name, IconData icon, Gradient gradient) {
     return GestureDetector(
-      onTap: () => _openScanTab(preselectedLook: _presetForLookName(name)),
+      onTap: () => _openCameraScreen(preselectedLook: _presetForLookName(name)),
       child: Container(
         width: 120,
         margin: const EdgeInsets.only(right: 12),
@@ -1362,12 +1392,19 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                 // Weather & Scan Cards
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    children: [
-                      Expanded(child: _buildTemperatureCard()),
-                      const SizedBox(width: 12),
-                      Expanded(child: _buildQuickScanCard(context)),
-                    ],
+                  child: IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          child: _buildTemperatureCard(),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildQuickScanCard(context),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -1574,7 +1611,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
 
   Widget _buildQuickScanCard(BuildContext context) {
     return GestureDetector(
-      onTap: () => _openScanTab(),
+      onTap: () => _openCameraScreen(),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
