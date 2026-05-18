@@ -156,6 +156,13 @@ class _ChatScreenState extends State<ChatScreen> {
       });
       _botTimer = Timer(const Duration(milliseconds: 1500), () async {
         try {
+          // Only let the bot reply when the seller is offline.
+          final sellerOnline =
+              await _service.isSellerOnline(widget.conversationId);
+          if (sellerOnline) {
+            if (mounted) setState(() => _botTyping = false);
+            return;
+          }
           final msgs = await _service.loadMessages(widget.conversationId);
           if (msgs.isEmpty || msgs.last['sender_role'] != 'buyer') return;
           final reply = await _service.botReply(

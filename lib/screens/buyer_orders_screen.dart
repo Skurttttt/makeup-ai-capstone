@@ -10,8 +10,11 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:url_launcher/url_launcher.dart';
+
 import 'chat_screen.dart';
 import '../services/cart_service.dart';
+import '../services/supabase_service.dart';
 
 // ─── palette ─────────────────────────────────────────────────────────────────
 const Color _kPink = Color(0xFFFF4D97);
@@ -837,10 +840,31 @@ class _BuyerOrderCardState extends State<_BuyerOrderCard> {
               ),
             ),
 
-          // ── cancel button (awaiting payment only) ─────────────────────
-          if (status == 'pending')
+          // ── pay now + cancel buttons (pending only) ───────────────────
+          if (status == 'pending') ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _payNow(context),
+                  icon: const Icon(Icons.payment_rounded, size: 18),
+                  label: const Text('Pay Now',
+                      style: TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w800)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _kPink,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               child: SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
@@ -859,6 +883,7 @@ class _BuyerOrderCardState extends State<_BuyerOrderCard> {
                 ),
               ),
             ),
+          ],
 
           // ── action row ────────────────────────────────────────────────
           Padding(
@@ -920,6 +945,65 @@ class _BuyerOrderCardState extends State<_BuyerOrderCard> {
       backgroundColor: Colors.transparent,
       builder: (_) => _OrderDetailsSheet(order: order),
     );
+  }
+
+  Future<void> _payNow(BuildContext context) async {
+    // Step 1: show payment method selection
+    String? selectedMethod = await showDialog<String>(
+      context: context,
+      builder: (ctx) => _PaymentMethodDialog(),
+    );
+    if (selectedMethod == null) return;
+
+    if (!context.mounted) return;
+
+    // Show loading
+    final messenger = ScaffoldMessenger.of(context);
+    final progressOverlay = OverlayEntry(
+      builder: (_) => const ColoredBox(
+        color: Color(0x55000000),
+        child: Center(child: CircularProgressIndicator(color: Colors.white)),
+      ),
+    );
+    Overlay.of(context).insert(progressOverlay);
+
+    try {
+      final result = await SupabaseService().payExistingOrder(
+        orderId: widget.order['id'].toString(),
+        paymentMethod: selectedMethod,
+      );
+      progressOverlay.remove();
+
+      final checkoutUrl = result['checkout_url']?.toString();
+      if (checkoutUrl == null || checkoutUrl.isEmpty) {
+        throw 'No checkout URL returned';
+      }
+
+      final uri = Uri.parse(checkoutUrl);
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+        throw 'Could not open payment page';
+      }
+
+      if (!context.mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Complete your payment in the browser. Your order will update once paid.'),
+          backgroundColor: Color(0xFF22C55E),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 5),
+        ),
+      );
+    } catch (e) {
+      progressOverlay.remove();
+      if (!context.mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Payment failed: $e'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Future<void> _cancelOrder(BuildContext context) async {
@@ -1416,6 +1500,130 @@ class _ItemRow extends StatelessWidget {
         child: const Icon(Icons.image_outlined,
             size: 24, color: _kPinkLight),
       );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PAYMENT METHOD DIALOG
+// ═══════════════════════════════════════════════════════════════════════════════
+class _PaymentMethodDialog extends StatefulWidget {
+  @override
+  State<_PaymentMethodDialog> createState() => _PaymentMethodDialogState();
+}
+
+class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
+  String _selected = 'xendit';
+
+  static const _methods = [
+    {'key': 'xendit', 'label': 'Credit / Debit Card', 'sub': 'Visa, Mastercard via Xendit', 'icon': Icons.credit_card_rounded},
+    {'key': 'gcash', 'label': 'GCash', 'sub': 'Pay via GCash e-wallet', 'icon': Icons.account_balance_wallet_rounded},
+    {'key': 'paymaya', 'label': 'Maya', 'sub': 'Pay via Maya e-wallet', 'icon': Icons.wallet_rounded},
+    {'key': 'otc', 'label': 'Over-the-Counter', 'sub': '7-Eleven, Bayad Center, etc.', 'icon': Icons.store_rounded},
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: _kPinkSoft,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.payment_rounded, color: _kPink, size: 20),
+                ),
+                const SizedBox(width: 10),
+                const Text(
+                  'Select Payment Method',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: _kPinkDeep),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            ..._methods.map((m) {
+              final key = m['key'] as String;
+              final isSelected = _selected == key;
+              return GestureDetector(
+                onTap: () => setState(() => _selected = key),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: isSelected ? _kPinkSoft : Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isSelected ? _kPink : Colors.grey.shade200,
+                      width: isSelected ? 2 : 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(m['icon'] as IconData,
+                          color: isSelected ? _kPink : Colors.grey.shade500, size: 22),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(m['label'] as String,
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                    color: isSelected ? _kPinkDeep : Colors.black87)),
+                            Text(m['sub'] as String,
+                                style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                          ],
+                        ),
+                      ),
+                      if (isSelected)
+                        const Icon(Icons.check_circle_rounded, color: _kPink, size: 20),
+                    ],
+                  ),
+                ),
+              );
+            }),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context, null),
+                    child: const Text('Cancel',
+                        style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w600)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context, _selected),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _kPink,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Continue',
+                        style: TextStyle(fontWeight: FontWeight.w800)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

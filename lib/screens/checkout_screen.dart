@@ -430,7 +430,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           _selectedPaymentMethod == 'gcash') {
         final paymentResponse =
             await _supabaseService.createXenditCheckoutForOrder(
-          items: widget.cartItems,
+          items: widget.cartItems
+              .map((item) => {
+                    'product_id': item['id']?.toString() ?? '',
+                    'quantity': (item['quantity'] as num?)?.toInt() ?? 1,
+                  })
+              .toList(),
           paymentMethod: _selectedPaymentMethod,
         );
         final checkoutUrl = paymentResponse['checkout_url']?.toString();

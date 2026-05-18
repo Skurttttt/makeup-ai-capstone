@@ -15,7 +15,41 @@ class ChatService {
 
   final _client = Supabase.instance.client;
 
+  /// Exposes the Supabase client for convenience (e.g. online-status check).
+  SupabaseClient get supabaseClient => _client;
+
   String? get _uid => _client.auth.currentUser?.id;
+
+  /// Returns true if the seller for a given conversation is currently online.
+  /// When the seller is online, the bot should stay silent.
+  Future<bool> isSellerOnline(String conversationId) async {
+    try {
+      final conv = await _client
+          .from('chat_conversations')
+          .select('seller_id')
+          .eq('id', conversationId)
+          .maybeSingle();
+      final sellerId = conv?['seller_id']?.toString();
+      if (sellerId == null) return false;
+      final acc = await _client
+          .from('accounts')
+          .select('is_online')
+          .eq('id', sellerId)
+          .maybeSingle();
+      return acc?['is_online'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Toggles the current user's online status.
+  Future<void> setOnlineStatus(bool online) async {
+    final uid = _uid;
+    if (uid == null) return;
+    try {
+      await _client.from('accounts').update({'is_online': online}).eq('id', uid);
+    } catch (_) {}
+  }
 
   /// Resolves the default marketplace seller (single-seller setup).
   /// Picks the first business / client account, preferring those that have
@@ -311,22 +345,6 @@ class ChatService {
           suggestions: ['How to pay', 'Shipping fee', 'Track my order'],
         );
       }
-      if (lb.contains('want a recommendation') ||
-          lb.contains('shall i suggest') ||
-          lb.contains('want me to suggest')) {
-        final recs = await _personalizedRecommendations(ctx);
-        return BotReply(
-          text: recs.isNotEmpty
-              ? "Here are picks I think you'll love 💖"
-              : "Hmm, I couldn't find good matches right now. Try browsing the marketplace!",
-          productCards: recs.take(3).map(_toProductCard).toList(),
-          suggestions: const [
-            'Cheaper options',
-            'Best for my undertone',
-            'Show bestsellers',
-          ],
-        );
-      }
     }
 
     // ── Greetings ────────────────────────────────────────────────────────
@@ -348,9 +366,9 @@ class ChatService {
               ]
             : const [
                 'Show me bestsellers',
-                'Recommend by undertone',
                 'How to order',
                 'Track my order',
+                'How to pay',
               ],
       );
     }
@@ -360,7 +378,7 @@ class ChatService {
       return BotReply(
         text:
             "You're welcome${firstName != null ? ', $firstName' : ''}! 💖 Tell me anytime if you need shade advice or product picks.",
-        suggestions: const ['Recommend products', 'Track my order'],
+        suggestions: const ['Show bestsellers', 'Track my order'],
       );
     }
     if (_matchesAny(m, ['bye', 'goodbye', 'see you', 'paalam'])) {
@@ -446,7 +464,7 @@ class ChatService {
       return const BotReply(
         text:
             "✅ Every product on Fashion21 Marketplace is 100% authentic and sourced directly from official suppliers.",
-        suggestions: ['Show bestsellers', 'Recommend for me'],
+        suggestions: ['Show bestsellers', 'Track my order'],
       );
     }
 
@@ -498,7 +516,7 @@ class ChatService {
       return const BotReply(
         text:
             "Quick test 🌟: Look at the veins on your wrist in natural light.\n• Greenish veins → *warm* undertone\n• Bluish/purple → *cool* undertone\n• A mix → *neutral* undertone\nOr run our in-app skin scan from the Home tab — it detects your undertone and skin type for you!",
-        suggestions: ['Run skin scan', 'Recommend for me'],
+        suggestions: ['Run skin scan', 'Show bestsellers'],
       );
     }
     if (_matchesAny(m, [
@@ -508,7 +526,7 @@ class ChatService {
       return const BotReply(
         text:
             "Try the in-app skin scan on the Home tab — it analyzes oiliness, dryness and texture, and tags your skin type. ✨",
-        suggestions: ['Run skin scan', 'Recommend for me'],
+        suggestions: ['Run skin scan', 'Show bestsellers'],
       );
     }
 
@@ -526,7 +544,7 @@ class ChatService {
         return BotReply(
           text: intro,
           productCards: alt.take(3).map(_toProductCard).toList(),
-          suggestions: const ['Best for me', 'Compare top 2', 'Show bestsellers'],
+          suggestions: const ['Compare top 2', 'Show bestsellers', 'Track my order'],
         );
       }
     }
@@ -537,7 +555,7 @@ class ChatService {
       if (compare != null) {
         return BotReply(
           text: compare,
-          suggestions: const ['Best for me', 'Cheaper options'],
+          suggestions: const ['Cheaper options', 'Show bestsellers'],
         );
       }
     }
@@ -550,12 +568,6 @@ class ChatService {
       'stock', 'available', 'availability', 'in stock', 'sold out',
       'meron pa', 'meron ba', 'still available',
     ]);
-    final wantsRecommendation = _matchesAny(m, [
-      'recommend', 'suggest', 'best', 'top ', 'popular', 'bestseller',
-      'show me', 'looking for', 'do you have', 'do you sell',
-      'meron ba kayo', 'mayroon ba', 'any ', 'anything',
-    ]);
-
     if ((wantsPrice || wantsStock) &&
         ctx.product != null &&
         !_messageMentionsAnyProduct(m)) {
@@ -575,7 +587,7 @@ class ChatService {
       );
     }
 
-    if (wantsPrice || wantsStock || wantsRecommendation) {
+    if (wantsPrice || wantsStock) {
       final products = await _searchProducts(m);
       if (products.isNotEmpty) {
         if (products.length == 1) {
@@ -598,7 +610,6 @@ class ChatService {
           productCards: products.take(3).map(_toProductCard).toList(),
           suggestions: const [
             'Cheaper options',
-            'Best for me',
             'Compare top 2',
           ],
         );
@@ -613,26 +624,14 @@ class ChatService {
         return BotReply(
           text: "Here's what we have in $category 💄",
           productCards: products.take(3).map(_toProductCard).toList(),
-          suggestions: const ['Cheaper options', 'Best for me'],
+          suggestions: const ['Cheaper options', 'Show bestsellers'],
         );
       }
       return BotReply(
         text:
             "We don't have any $category in stock right now. Browse the marketplace for similar items, or check back soon!",
-        suggestions: const ['Show bestsellers', 'Recommend for me'],
+        suggestions: const ['Show bestsellers', 'Track my order'],
       );
-    }
-
-    // ── Personalized recommendation fallback ────────────────────────────
-    if (wantsRecommendation) {
-      final picks = await _personalizedRecommendations(ctx);
-      if (picks.isNotEmpty) {
-        return BotReply(
-          text: "Based on your beauty profile, you might love these 💖",
-          productCards: picks.take(3).map(_toProductCard).toList(),
-          suggestions: const ['Cheaper options', 'Compare top 2'],
-        );
-      }
     }
 
     // ── Default fallback ────────────────────────────────────────────────
@@ -641,9 +640,9 @@ class ChatService {
           "Got it — I've passed your message to the seller. While you wait, what would you like to do?",
       suggestions: const [
         'Show bestsellers',
-        'Recommend for my undertone',
         'Track my order',
         'How to pay',
+        'Shade match',
       ],
     );
   }
@@ -996,40 +995,6 @@ class ChatService {
       return "Comparison 🆚\n• ${pa['name']} — ₱$pap (${pa['category'] ?? 'product'})\n• ${pb['name']} — ₱$pbp (${pb['category'] ?? 'product'})\n\n*$winner* is the more budget-friendly pick. Want me to recommend based on your skin type?";
     } catch (_) {
       return null;
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> _personalizedRecommendations(
-      _ChatContext ctx) async {
-    final undertone = ctx.buyer?['undertone']?.toString();
-    final skinType = ctx.buyer?['skin_type']?.toString();
-    try {
-      var query = _client
-          .from('products')
-          .select('id, name, price, stock_quantity, category, undertone, compatible_skin_type, image_url, currency')
-          .eq('is_active', true);
-      final rows = await query.limit(50);
-      final list = List<Map<String, dynamic>>.from(rows);
-      // Score by match
-      list.sort((a, b) {
-        int score(Map<String, dynamic> p) {
-          var s = 0;
-          final pu = p['undertone']?.toString().toLowerCase();
-          final ps = p['compatible_skin_type']?.toString().toLowerCase();
-          if (undertone != null &&
-              pu != null &&
-              (pu == undertone.toLowerCase() || pu == 'all')) s += 2;
-          if (skinType != null &&
-              ps != null &&
-              (ps.contains(skinType.toLowerCase()) || ps == 'all')) s += 2;
-          if ((p['stock_quantity'] as int? ?? 0) > 0) s += 1;
-          return s;
-        }
-        return score(b).compareTo(score(a));
-      });
-      return list.take(5).toList();
-    } catch (_) {
-      return [];
     }
   }
 
