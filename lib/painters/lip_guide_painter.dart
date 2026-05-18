@@ -216,6 +216,16 @@ class LipGuidePainter extends CustomPainter {
           centerBlendStrength: 0.08,
           cornerDepth: 0.30,
         );
+
+      default:
+        return const _LipGuideStyle(
+          fillWidthFactor: 0.92,
+          fillHeightFactor: 0.82,
+          centerWidthFactor: 0.46,
+          centerHeightFactor: 0.40,
+          opacity: 0.78,
+          borderOpacity: 0.82,
+        );
     }
   }
 
@@ -482,15 +492,19 @@ class _LipGuideStyle {
   final bool showOverlineCue;
   final double centerBlendStrength;
   final double cornerDepth;
+  final double? opacity;
+  final double? borderOpacity;
 
   const _LipGuideStyle({
-    required this.guideColor,
-    required this.fillWidthFactor,
-    required this.fillHeightFactor,
-    required this.centerWidthFactor,
-    required this.centerHeightFactor,
-    required this.showOverlineCue,
-    required this.centerBlendStrength,
-    required this.cornerDepth,
+    this.guideColor = const Color(0xFFFF4D97),
+    this.fillWidthFactor = 0.92,
+    this.fillHeightFactor = 0.82,
+    this.centerWidthFactor = 0.46,
+    this.centerHeightFactor = 0.40,
+    this.showOverlineCue = true,
+    this.centerBlendStrength = 0.25,
+    this.cornerDepth = 0.15,
+    this.opacity,
+    this.borderOpacity,
   });
 }
