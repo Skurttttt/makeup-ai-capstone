@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../services/chat_service.dart';
 
 class ClientSettingsScreen extends StatefulWidget {
   final Map<String, dynamic> clientData;
@@ -21,6 +22,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen>
   bool _soundEffects = true;
   bool _lowStockAlerts = true;
   bool _orderConfirmations = true;
+  bool _isOnline = false;
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -37,6 +39,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen>
   @override
   void initState() {
     super.initState();
+    _loadOnlineStatus();
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
@@ -53,6 +56,24 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen>
       curve: Curves.easeOutCubic,
     ));
     _animationController.forward();
+  }
+
+  Future<void> _loadOnlineStatus() async {
+    try {
+      final uid = ChatService.instance.supabaseClient.auth.currentUser?.id;
+      if (uid == null) return;
+      final row = await ChatService.instance.supabaseClient
+          .from('accounts')
+          .select('is_online')
+          .eq('id', uid)
+          .maybeSingle();
+      if (mounted) setState(() => _isOnline = row?['is_online'] == true);
+    } catch (_) {}
+  }
+
+  Future<void> _toggleOnline(bool val) async {
+    setState(() => _isOnline = val);
+    await ChatService.instance.setOnlineStatus(val);
   }
 
   @override
@@ -193,6 +214,8 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen>
           flex: 1,
           child: Column(
             children: [
+              _buildChatBotCard(),
+              const SizedBox(height: 24),
               _buildNotificationsCard(),
               const SizedBox(height: 24),
               _buildAppearanceCard(),
@@ -219,6 +242,8 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen>
   Widget _buildMobileLayout() {
     return Column(
       children: [
+        _buildChatBotCard(),
+        const SizedBox(height: 16),
         _buildNotificationsCard(),
         const SizedBox(height: 16),
         _buildAppearanceCard(),
@@ -229,6 +254,104 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen>
         const SizedBox(height: 16),
         _buildDangerZoneCard(),
       ],
+    );
+  }
+
+  Widget _buildChatBotCard() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: pinkLight.withOpacity(0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: pinkPrimary.withOpacity(0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: pinkPrimary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.smart_toy_rounded,
+                  color: pinkPrimary,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Chat & AI Bot 🤖',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: pinkDeep,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _buildSwitchTile(
+            icon: _isOnline
+                ? Icons.circle
+                : Icons.circle_outlined,
+            title: 'Online Status',
+            subtitle: _isOnline
+                ? 'You are online — AI bot is OFF (you reply to buyers)'
+                : 'You are offline — AI bot is ON (bot handles buyer messages)',
+            value: _isOnline,
+            onChanged: _toggleOnline,
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: _isOnline
+                  ? const Color(0xFFE8F5E9)
+                  : const Color(0xFFFFF3E0),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _isOnline
+                      ? Icons.person_rounded
+                      : Icons.smart_toy_rounded,
+                  color: _isOnline
+                      ? const Color(0xFF388E3C)
+                      : const Color(0xFFF57C00),
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _isOnline
+                        ? 'Buyers will see you as available. AI bot is disabled.'
+                        : 'AI bot will auto-reply when buyers message. Turn on to handle chats yourself.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: _isOnline
+                          ? const Color(0xFF388E3C)
+                          : const Color(0xFFF57C00),
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 

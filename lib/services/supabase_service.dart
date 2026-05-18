@@ -668,6 +668,38 @@ class SupabaseService {
     }
   }
 
+  Future<Map<String, dynamic>> payExistingOrder({
+    required String orderId,
+    String? paymentMethod,
+    String? successUrl,
+    String? cancelUrl,
+  }) async {
+    try {
+      final response = await client.functions.invoke(
+        'create-xendit-checkout',
+        body: {
+          'kind': 'pay_order',
+          'order_id': orderId,
+          if (paymentMethod != null) 'payment_method': paymentMethod,
+          if (successUrl != null) 'success_url': successUrl,
+          if (cancelUrl != null) 'cancel_url': cancelUrl,
+        },
+      );
+
+      if (response.status != 200) {
+        final respData = response.data;
+        final msg =
+            'Function error (status: ${response.status}): ${respData ?? response.toString()}';
+        debugPrint(msg);
+        throw msg;
+      }
+
+      return Map<String, dynamic>.from(response.data as Map);
+    } catch (e) {
+      throw 'Failed to create payment for order: $e';
+    }
+  }
+
   // ==================== AUDIT LOGS ====================
 
   /// Log admin action

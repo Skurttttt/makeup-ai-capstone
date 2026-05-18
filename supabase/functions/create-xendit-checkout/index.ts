@@ -52,6 +52,7 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     let xenditKey = Deno.env.get("XENDIT_SECRET_KEY") ?? "";
+    let xenditKeySubscription = Deno.env.get("XENDIT_SECRET_KEY_SUBSCRIPTION") ?? "";
 
     if (!supabaseUrl || !supabaseServiceKey) {
       return new Response(
@@ -65,7 +66,7 @@ serve(async (req) => {
 
     const dbClient = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Fallback: read Xendit key from app_config table if not in env
+    // Fallback: read Xendit keys from app_config table if not in env
     if (!xenditKey) {
       try {
         const { data: cfg } = await dbClient
@@ -76,6 +77,18 @@ serve(async (req) => {
         if (cfg?.value) xenditKey = cfg.value;
       } catch (_) { /* ignore */ }
     }
+    if (!xenditKeySubscription) {
+      try {
+        const { data: cfg } = await dbClient
+          .from("app_config")
+          .select("value")
+          .eq("key", "XENDIT_SECRET_KEY_SUBSCRIPTION")
+          .maybeSingle();
+        if (cfg?.value) xenditKeySubscription = cfg.value;
+      } catch (_) { /* ignore */ }
+    }
+    // Fall back to the same key if subscription key not set
+    if (!xenditKeySubscription) xenditKeySubscription = xenditKey;
 
     if (!xenditKey) {
       return new Response(
@@ -348,7 +361,7 @@ serve(async (req) => {
       ];
 
       const invoice = await createXenditInvoice({
-        xenditKey,
+        xenditKey: xenditKeySubscription,
         externalId: `sub-${plan.id}-${userData.user.id}-${Date.now()}`,
         amount,
         currency,
