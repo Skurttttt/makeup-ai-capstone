@@ -1,6 +1,7 @@
 // lib/screens/market_tab_enhanced.dart - Enhanced market with Shopee/Lazada-like UI
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'cart_screen.dart';
 import 'checkout_screen.dart';
 import 'chat_screen.dart';
 import '../services/cart_service.dart';
@@ -21,7 +22,6 @@ class _MarketTabState extends State<MarketTab>
 
   // Cart state (loaded from CartService so it persists across logout)
   List<Map<String, dynamic>> _cartItems = [];
-  bool _showCart = false;
   int _cartItemCount = 0;
 
   // Filter state
@@ -371,68 +371,6 @@ class _MarketTabState extends State<MarketTab>
     }
   }
 
-  Future<void> _removeFromCart(int index) async {
-    if (index < 0 || index >= _cartItems.length) return;
-    final cartId = _cartItems[index]['cart_id']?.toString();
-    if (cartId != null) {
-      await CartService.instance.removeItem(cartId);
-    }
-    await _loadCartFromDb();
-    if (mounted && _cartItems.isEmpty) {
-      setState(() => _showCart = false);
-    }
-  }
-
-  Future<void> _updateCartQuantity(int index, int newQuantity) async {
-    if (index < 0 || index >= _cartItems.length) return;
-    final cartId = _cartItems[index]['cart_id']?.toString();
-    if (cartId == null) return;
-    if (newQuantity <= 0) {
-      await _removeFromCart(index);
-      return;
-    }
-    await CartService.instance.updateQuantity(cartId, newQuantity);
-    await _loadCartFromDb();
-  }
-
-  double get _cartTotal {
-    return _cartItems.fold(
-      0.0,
-      (sum, item) =>
-          sum + ((item['price'] as num).toDouble() * (item['quantity'] as int)),
-    );
-  }
-
-  Future<void> _proceedToCheckout() async {
-    if (_cartItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Your cart is empty'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => CheckoutScreen(
-          cartItems: _cartItems,
-          onCheckoutComplete: () async {
-            await CartService.instance.clearCart();
-            if (!mounted) return;
-            setState(() {
-              _cartItems = [];
-              _cartItemCount = 0;
-              _showCart = false;
-            });
-          },
-        ),
-      ),
-    );
-  }
-
   // Helper for readable contrast on chips
   Color _contrastColor(Color background) {
     final luminance = background.computeLuminance();
@@ -455,16 +393,18 @@ class _MarketTabState extends State<MarketTab>
                 automaticallyImplyLeading: false,
                 titleSpacing: 16,
                 title: Row(
-                  children: const [
-                    Icon(Icons.store, color: Colors.white, size: 26),
-                    SizedBox(width: 10),
+                  children: [
+                    const Icon(Icons.store, color: Colors.white, size: 26),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
-                        children: [
+                        children: const [
                           Text(
                             'Fashion21 Marketplace',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 17,
@@ -473,6 +413,8 @@ class _MarketTabState extends State<MarketTab>
                           ),
                           Text(
                             'Official Fashion21 products',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               color: Colors.white70,
                               fontSize: 11,
@@ -495,8 +437,15 @@ class _MarketTabState extends State<MarketTab>
                             color: Colors.white,
                             size: 26,
                           ),
-                          onPressed: () =>
-                              setState(() => _showCart = !_showCart),
+                          onPressed: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const CartScreen(),
+                              ),
+                            );
+                            if (mounted) await _loadCartFromDb();
+                          },
                         ),
                         if (_cartItemCount > 0)
                           Positioned(
@@ -598,77 +547,93 @@ class _MarketTabState extends State<MarketTab>
                     Container(
                       color: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: SizedBox(
-                        height: 90,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          itemCount: _quickCategories.length,
-                          itemBuilder: (context, index) {
-                            final category = _quickCategories[index];
-                            final isSelected =
-                                _selectedCategory == category['name'];
-                            return GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _selectedCategory = category['name'] == 'All'
-                                      ? null
-                                      : category['name'];
-                                  _fetchProducts();
-                                });
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final isNarrow = constraints.maxWidth < 360;
+                          final tileWidth = isNarrow ? 60.0 : 70.0;
+                          final iconBox = isNarrow ? 44.0 : 50.0;
+                          final iconSize = isNarrow ? 24.0 : 28.0;
+                          final rowHeight = isNarrow ? 82.0 : 90.0;
+                          return SizedBox(
+                            height: rowHeight,
+                            child: ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 12),
+                              itemCount: _quickCategories.length,
+                              itemBuilder: (context, index) {
+                                final category = _quickCategories[index];
+                                final isSelected =
+                                    _selectedCategory == category['name'];
+                                return GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      _selectedCategory =
+                                          category['name'] == 'All'
+                                              ? null
+                                              : category['name'];
+                                      _fetchProducts();
+                                    });
+                                  },
+                                  child: Container(
+                                    width: tileWidth,
+                                    margin: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                    ),
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Container(
+                                          width: iconBox,
+                                          height: iconBox,
+                                          decoration: BoxDecoration(
+                                            color: isSelected
+                                                ? const Color(0xFFFF4D97)
+                                                    .withOpacity(0.15)
+                                                : Colors.grey.shade50,
+                                            borderRadius: BorderRadius.circular(
+                                                iconBox / 2),
+                                            border: isSelected
+                                                ? Border.all(
+                                                    color: const Color(
+                                                        0xFFFF4D97),
+                                                    width: 2,
+                                                  )
+                                                : null,
+                                          ),
+                                          child: Icon(
+                                            category['icon'] as IconData,
+                                            color: isSelected
+                                                ? const Color(0xFFFF4D97)
+                                                : Color(
+                                                    category['color'] as int),
+                                            size: iconSize,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          category['name'] as String,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: isNarrow ? 10 : 11,
+                                            color: isSelected
+                                                ? const Color(0xFFFF4D97)
+                                                : Colors.black87,
+                                            fontWeight: isSelected
+                                                ? FontWeight.w600
+                                                : FontWeight.normal,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
                               },
-                              child: Container(
-                                width: 70,
-                                margin: const EdgeInsets.symmetric(
-                                  horizontal: 4,
-                                ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Container(
-                                      width: 50,
-                                      height: 50,
-                                      decoration: BoxDecoration(
-                                        color: isSelected
-                                            ? const Color(
-                                                0xFFFF4D97,
-                                              ).withOpacity(0.15)
-                                            : Colors.grey.shade50,
-                                        borderRadius: BorderRadius.circular(25),
-                                        border: isSelected
-                                            ? Border.all(
-                                                color: const Color(0xFFFF4D97),
-                                                width: 2,
-                                              )
-                                            : null,
-                                      ),
-                                      child: Icon(
-                                        category['icon'] as IconData,
-                                        color: isSelected
-                                            ? const Color(0xFFFF4D97)
-                                            : Color(category['color'] as int),
-                                        size: 28,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      category['name'] as String,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: isSelected
-                                            ? const Color(0xFFFF4D97)
-                                            : Colors.black87,
-                                        fontWeight: isSelected
-                                            ? FontWeight.w600
-                                            : FontWeight.normal,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+                            ),
+                          );
+                        },
                       ),
                     ),
 
@@ -931,19 +896,36 @@ class _MarketTabState extends State<MarketTab>
               else
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  sliver: SliverGrid(
-                    gridDelegate:
-                        const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 220,
+                  sliver: SliverLayoutBuilder(
+                    builder: (context, constraints) {
+                      final width = constraints.crossAxisExtent;
+                      // Aim for ~170-200px wide cards. Compute column count.
+                      final columns = width < 360
+                          ? 2
+                          : width < 600
+                              ? 2
+                              : width < 900
+                                  ? 3
+                                  : (width / 220).floor();
+                      // Tune aspect ratio so card fits on every phone.
+                      final aspect = width < 360 ? 0.62 : 0.66;
+                      return SliverGrid(
+                        gridDelegate:
+                            SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: columns,
                           mainAxisSpacing: 12,
                           crossAxisSpacing: 12,
-                          childAspectRatio: 0.75,
+                          childAspectRatio: aspect,
                         ),
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) =>
-                          _buildShopeeStyleCard(context, _allProducts[index]),
-                      childCount: _allProducts.length,
-                    ),
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) => _buildShopeeStyleCard(
+                            context,
+                            _allProducts[index],
+                          ),
+                          childCount: _allProducts.length,
+                        ),
+                      );
+                    },
                   ),
                 ),
 
@@ -951,12 +933,8 @@ class _MarketTabState extends State<MarketTab>
             ],
           ),
 
-          // Cart Drawer
-          if (_showCart) _buildCartDrawer(),
-
           // Floating chat-with-seller bubble
-          if (!_showCart)
-            Positioned(
+          Positioned(
               right: 16,
               bottom: 24,
               child: FloatingActionButton.extended(
@@ -1001,14 +979,18 @@ class _MarketTabState extends State<MarketTab>
               color: isActive ? const Color(0xFFFF4D97) : Colors.grey.shade600,
             ),
             const SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: isActive
-                    ? const Color(0xFFFF4D97)
-                    : Colors.grey.shade700,
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: isActive
+                      ? const Color(0xFFFF4D97)
+                      : Colors.grey.shade700,
+                ),
               ),
             ),
           ],
@@ -1093,43 +1075,28 @@ class _MarketTabState extends State<MarketTab>
       color: Colors.white,
       borderRadius: BorderRadius.circular(12),
       clipBehavior: Clip.antiAlias,
+      elevation: 1,
+      shadowColor: Colors.black.withOpacity(0.06),
       child: InkWell(
         onTap: () => _showProductDetail(context, product),
         splashColor: const Color(0xFFFF4D97).withOpacity(0.08),
         highlightColor: const Color(0xFFFF4D97).withOpacity(0.04),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 4,
-              offset: const Offset(0, 1),
-            ),
-          ],
-        ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Image with badges
+            // Image with badges - square, fills full card width
             Stack(
               children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(12),
-                  ),
+                AspectRatio(
+                  aspectRatio: 1,
                   child: Container(
-                    height: 120,
-                    width: double.infinity,
                     color: Colors.grey.shade100,
                     child: imageUrl == null || imageUrl.isEmpty
                         ? const Icon(Icons.image, size: 48, color: Colors.grey)
                         : Image.network(
                             imageUrl,
                             fit: BoxFit.cover,
-                            width: double.infinity,
-                            errorBuilder: (_, _, _) => const Icon(
+                            errorBuilder: (_, __, ___) => const Icon(
                               Icons.broken_image,
                               size: 48,
                               color: Colors.grey,
@@ -1163,419 +1130,136 @@ class _MarketTabState extends State<MarketTab>
               ],
             ),
 
-            // Product info
-            Padding(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      height: 1.3,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '₱${price.toStringAsFixed(0)}',
-                    style: const TextStyle(
-                      color: Color(0xFFFF4D97),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                    ),
-                  ),
-                  if (category != null && category.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
+            // Product info — flexible so it never overflows
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.max,
+                  children: [
+                    Flexible(
                       child: Text(
+                        name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w500,
+                          height: 1.25,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        '₱${price.toStringAsFixed(0)}',
+                        style: const TextStyle(
+                          color: Color(0xFFFF4D97),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                    if (category != null && category.isNotEmpty)
+                      Text(
                         category,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 10,
                           color: Colors.grey.shade500,
                         ),
                       ),
+                    const Spacer(),
+                    // Action buttons row — pinned to bottom
+                    SizedBox(
+                      height: 30,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: isOutOfStock
+                                  ? null
+                                  : () => _addToCart(product),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(
+                                  color: Color(0xFFFF4D97),
+                                ),
+                                padding: EdgeInsets.zero,
+                                foregroundColor: const Color(0xFFFF4D97),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                              ),
+                              child: isLoading
+                                  ? const SizedBox(
+                                      height: 14,
+                                      width: 14,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Color(0xFFFF4D97),
+                                      ),
+                                    )
+                                  : const FittedBox(
+                                      child: Text(
+                                        'Cart',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFFFF4D97),
+                                        ),
+                                      ),
+                                    ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed:
+                                  isOutOfStock ? null : () => _buyNow(product),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFFF4D97),
+                                foregroundColor: Colors.white,
+                                padding: EdgeInsets.zero,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                              ),
+                              child: isLoading
+                                  ? const SizedBox(
+                                      height: 14,
+                                      width: 14,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const FittedBox(
+                                      child: Text(
+                                        'Buy',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  const SizedBox(height: 8),
-                  // Action Buttons Row
-                  Row(
-                    children: [
-                      // Add to Cart Button
-                      Expanded(
-                        child: SizedBox(
-                          height: 32,
-                          child: OutlinedButton(
-                            onPressed: isOutOfStock
-                                ? null
-                                : () => _addToCart(product),
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Color(0xFFFF4D97)),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                              ),
-                              foregroundColor: const Color(0xFFFF4D97),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                            ),
-                            child: isLoading
-                                ? const SizedBox(
-                                    height: 14,
-                                    width: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Color(0xFFFF4D97),
-                                    ),
-                                  )
-                                : const Text(
-                                    'Cart',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFFFF4D97),
-                                    ),
-                                  ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Buy Now Button
-                      Expanded(
-                        child: SizedBox(
-                          height: 32,
-                          child: ElevatedButton(
-                            onPressed: isOutOfStock
-                                ? null
-                                : () => _buyNow(product),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFFF4D97),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                            ),
-                            child: isLoading
-                                ? const SizedBox(
-                                    height: 14,
-                                    width: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Text(
-                                    'Buy',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],
         ),
-      ),
-      ),
-    );
-  }
-
-  Widget _buildCartDrawer() {
-    return GestureDetector(
-      onTap: () => setState(() => _showCart = false),
-      child: Container(
-        color: Colors.black.withOpacity(0.5),
-        child: GestureDetector(
-          onTap: () {},
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: Container(
-              width: MediaQuery.of(context).size.width * 0.85,
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  bottomLeft: Radius.circular(20),
-                ),
-              ),
-              child: Column(
-                children: [
-                  // Header
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFFF4D97),
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(20),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.shopping_bag, color: Colors.white),
-                        const SizedBox(width: 12),
-                        Text(
-                          'My Cart (${_cartItems.length})',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const Spacer(),
-                        IconButton(
-                          icon: const Icon(Icons.close, color: Colors.white),
-                          onPressed: () => setState(() => _showCart = false),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Cart Items
-                  Expanded(
-                    child: _cartItems.isEmpty
-                        ? const Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.shopping_cart_outlined,
-                                  size: 64,
-                                  color: Colors.grey,
-                                ),
-                                SizedBox(height: 16),
-                                Text(
-                                  'Your cart is empty',
-                                  style: TextStyle(
-                                    color: Colors.grey,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                        : ListView.builder(
-                            itemCount: _cartItems.length,
-                            itemBuilder: (context, index) {
-                              final item = _cartItems[index];
-                              return _buildCartItem(item, index);
-                            },
-                          ),
-                  ),
-                  // Footer
-                  if (_cartItems.isNotEmpty)
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 8,
-                            offset: const Offset(0, -2),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'Subtotal',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                              Text(
-                                '₱${_cartTotal.toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFFFF4D97),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Shipping fee calculated at checkout',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton(
-                              onPressed: _proceedToCheckout,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFFF4D97),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 14,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              child: const Text(
-                                'Proceed to Checkout',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCartItem(Map<String, dynamic> item, int index) {
-    final quantity = item['quantity'] as int;
-    final price = (item['price'] as num).toDouble();
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
-      ),
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              width: 60,
-              height: 60,
-              color: Colors.grey.shade100,
-              child:
-                  item['image_url'] != null &&
-                      item['image_url'].toString().isNotEmpty
-                  ? Image.network(
-                      item['image_url'],
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) =>
-                          const Icon(Icons.image, size: 30),
-                    )
-                  : const Icon(Icons.image, size: 30, color: Colors.grey),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item['name'] ?? 'Product',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                    color: Colors.black87,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (item['variation'] != null)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${item['variation']['color_name']}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                      Text(
-                        (item['variation']['stock'] is int &&
-                                (item['variation']['stock'] as int) > 0)
-                            ? 'Stock: ${item['variation']['stock']}'
-                            : 'Out of stock',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color:
-                              (item['variation']['stock'] is int &&
-                                  (item['variation']['stock'] as int) > 0)
-                              ? Colors.grey.shade500
-                              : Colors.red.shade400,
-                        ),
-                      ),
-                    ],
-                  ),
-                Text(
-                  '₱${price.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    color: Color(0xFFFF4D97),
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.remove_circle_outline, size: 24),
-                onPressed: () => _updateCartQuantity(index, quantity - 1),
-                color: Colors.grey.shade600,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-              Container(
-                width: 40,
-                alignment: Alignment.center,
-                child: Text(
-                  '$quantity',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                    color: Colors.black87,
-                  ),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.add_circle_outline, size: 24),
-                onPressed: () => _updateCartQuantity(index, quantity + 1),
-                color: const Color(0xFFFF4D97),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-            ],
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            icon: const Icon(Icons.delete_outline, size: 20),
-            onPressed: () => _removeFromCart(index),
-            color: Colors.red,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-          ),
-        ],
       ),
     );
   }
@@ -1641,38 +1325,39 @@ class _MarketTabState extends State<MarketTab>
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Container(
-                      height: 250,
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        color: Colors.grey[100],
-                      ),
-                      child: imageUrl == null || imageUrl.isEmpty
-                          ? const Center(
-                              child: Icon(
-                                Icons.image,
-                                size: 64,
-                                color: Colors.grey,
-                              ),
-                            )
-                          : ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: Image.network(
-                                imageUrl,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) => const Center(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: AspectRatio(
+                        aspectRatio: 1, // square — like Shopee/Lazada
+                        child: Container(
+                          width: double.infinity,
+                          color: Colors.grey[100],
+                          child: imageUrl == null || imageUrl.isEmpty
+                              ? const Center(
                                   child: Icon(
-                                    Icons.broken_image,
+                                    Icons.image,
                                     size: 64,
                                     color: Colors.grey,
                                   ),
+                                )
+                              : Image.network(
+                                  imageUrl,
+                                  fit: BoxFit.cover,
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                  errorBuilder: (_, _, _) => const Center(
+                                    child: Icon(
+                                      Icons.broken_image,
+                                      size: 64,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),

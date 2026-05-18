@@ -1,0 +1,1424 @@
+﻿// lib/screens/admin_subscriptions_section.dart
+// Subscriptions section: subscription-plans table, user-subscriptions table
+// with search/filter/pagination, and all management dialogs.
+
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import '../services/supabase_service.dart';
+import '../utils/responsive.dart';
+import 'admin_shared.dart';
+
+class AdminSubscriptionsSection extends StatefulWidget {
+  const AdminSubscriptionsSection({super.key});
+
+  @override
+  State<AdminSubscriptionsSection> createState() =>
+      _AdminSubscriptionsSectionState();
+}
+
+class _AdminSubscriptionsSectionState
+    extends State<AdminSubscriptionsSection> {
+  final _supabaseService = SupabaseService();
+  final _searchController = TextEditingController();
+
+  List<dynamic> _subscriptions = [];
+  List<dynamic> _plans = [];
+  bool _loading = true;
+  String? _error;
+  String _searchQuery = '';
+  String _statusFilter = 'all';
+  int _page = 0;
+  static const int _pageSize = 10;
+
+  double get _sectionPadding =>
+      context.responsive(compact: 16, medium: 20, expanded: 24, large: 28);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final results = await Future.wait([
+        _supabaseService.getAllSubscriptions(),
+        _supabaseService.getAllPlans(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _subscriptions = results[0] as List<dynamic>;
+        _plans = results[1] as List<dynamic>;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<dynamic> get _filteredSubs {
+    return _subscriptions.where((sub) {
+      final matchesSearch = _searchQuery.isEmpty ||
+          (sub['accounts']?['full_name']
+                  ?.toString()
+                  .toLowerCase()
+                  .contains(_searchQuery.toLowerCase()) ??
+              false) ||
+          (sub['subscription_plans']?['name']
+                  ?.toString()
+                  .toLowerCase()
+                  .contains(_searchQuery.toLowerCase()) ??
+              false) ||
+          (sub['accounts']?['email']
+                  ?.toString()
+                  .toLowerCase()
+                  .contains(_searchQuery.toLowerCase()) ??
+              false);
+      final matchesStatus =
+          _statusFilter == 'all' || sub['status']?.toString() == _statusFilter;
+      return matchesSearch && matchesStatus;
+    }).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(
+          child: CircularProgressIndicator(color: AdminTheme.accentColor));
+    }
+
+    if (_error != null) {
+      return Center(
+        child: buildErrorState(
+          'Failed to load subscriptions',
+          details: _error,
+          onRetry: _loadData,
+        ),
+      );
+    }
+
+    // Show all active plans (don't filter by name since plan names vary)
+    final plans = _plans.where((plan) {
+      return plan['is_active'] != false;
+    }).toList();
+
+    final filtered = _filteredSubs;
+    final totalPages = filtered.isEmpty ? 1 : (filtered.length / _pageSize).ceil();
+    final paginated = filtered.skip(_page * _pageSize).take(_pageSize).toList();
+
+    final activeCount = _subscriptions.where((s) => s['status'] == 'active').length;
+    final trialCount = _subscriptions.where((s) => s['status'] == 'trial').length;
+    final expiredCount = _subscriptions
+        .where((s) => s['status'] == 'expired' || s['status'] == 'canceled')
+        .length;
+
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(_sectionPadding),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // â”€â”€ Header â”€â”€
+          buildSectionHeader(
+            context,
+            'Subscription Management',
+            actions: [
+              ElevatedButton.icon(
+                onPressed: () => _showAssignSubscriptionDialog(_plans),
+                icon: const Icon(Icons.person_add_rounded, size: 18),
+                label: const Text('Assign'),
+                style: primaryButtonStyle(AdminTheme.accentColor),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                onPressed: _showAddPlanDialog,
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Add Plan'),
+                style: primaryButtonStyle(AdminTheme.successColor),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: _loadData,
+                tooltip: 'Refresh',
+                icon: const Icon(Icons.refresh_rounded),
+                style: IconButton.styleFrom(
+                  backgroundColor: AdminTheme.cardColor,
+                  side: const BorderSide(color: AdminTheme.borderColor),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // â”€â”€ KPI Cards â”€â”€
+          buildAdaptiveCardGrid(
+            minWidth: 160,
+            children: [
+              buildSummaryCard('Total', '${_subscriptions.length}',
+                  Icons.subscriptions_rounded, AdminTheme.accentColor),
+              buildSummaryCard('Active', '$activeCount',
+                  Icons.check_circle_rounded, AdminTheme.successColor),
+              buildSummaryCard('Trial', '$trialCount',
+                  Icons.star_half_rounded, AdminTheme.warningColor),
+              buildSummaryCard('Expired / Canceled', '$expiredCount',
+                  Icons.cancel_rounded, AdminTheme.dangerColor),
+            ],
+          ),
+          const SizedBox(height: 32),
+
+          // â”€â”€ Plans Table â”€â”€
+          buildSectionHeader(context, 'Subscription Plans', isSubsection: true),
+          const SizedBox(height: 12),
+          if (plans.isEmpty)
+            _buildEmptyState('No subscription plans configured',
+                Icons.card_membership_rounded)
+          else
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final count = constraints.maxWidth < 560
+                    ? 1
+                    : constraints.maxWidth < 920
+                        ? 2
+                        : 3;
+                const spacing = 16.0;
+                final cardW =
+                    (constraints.maxWidth - spacing * (count - 1)) / count;
+                return Wrap(
+                  spacing: spacing,
+                  runSpacing: spacing,
+                  children: plans
+                      .map((plan) => SizedBox(
+                            width: cardW,
+                            child: _buildPlanCard(plan),
+                          ))
+                      .toList(),
+                );
+              },
+            ),
+          const SizedBox(height: 32),
+
+          // â”€â”€ User Subscriptions â”€â”€
+          buildSectionHeader(context, 'User Subscriptions', isSubsection: true),
+          const SizedBox(height: 12),
+          buildFilterBar(
+            searchController: _searchController,
+            searchHint: 'Search by name, email, or plan...',
+            searchQuery: _searchQuery,
+            onSearchChanged: (v) => setState(() {
+              _searchQuery = v;
+              _page = 0;
+            }),
+            onClearSearch: () {
+              _searchController.clear();
+              setState(() {
+                _searchQuery = '';
+                _page = 0;
+              });
+            },
+            filters: [
+              FilterDropdown(
+                value: _statusFilter,
+                label: 'Status',
+                items: const [
+                  DropdownMenuItem(value: 'all', child: Text('All')),
+                  DropdownMenuItem(value: 'active', child: Text('Active')),
+                  DropdownMenuItem(value: 'trial', child: Text('Trial')),
+                  DropdownMenuItem(value: 'past_due', child: Text('Past Due')),
+                  DropdownMenuItem(value: 'canceled', child: Text('Canceled')),
+                  DropdownMenuItem(value: 'expired', child: Text('Expired')),
+                  DropdownMenuItem(value: 'paused', child: Text('Paused')),
+                ],
+                onChanged: (v) => setState(() {
+                  _statusFilter = v ?? _statusFilter;
+                  _page = 0;
+                }),
+              ),
+            ],
+            onResetFilters: () {
+              _searchController.clear();
+              setState(() {
+                _searchQuery = '';
+                _statusFilter = 'all';
+                _page = 0;
+              });
+            },
+          ),
+          const SizedBox(height: 12),
+
+          // Results count badge
+          if (_subscriptions.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  Text(
+                    '${filtered.length} subscription${filtered.length != 1 ? 's' : ''}',
+                    style: const TextStyle(
+                        fontSize: 13,
+                        color: AdminTheme.textSecondary,
+                        fontWeight: FontWeight.w500),
+                  ),
+                  if (_searchQuery.isNotEmpty || _statusFilter != 'all')
+                    Padding(
+                      padding: const EdgeInsets.only(left: 6),
+                      child: Text('(filtered)',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: AdminTheme.accentColor.withOpacity(0.8))),
+                    ),
+                ],
+              ),
+            ),
+
+          if (filtered.isEmpty)
+            _buildEmptyState(
+              _searchQuery.isNotEmpty || _statusFilter != 'all'
+                  ? 'No subscriptions match your filters'
+                  : 'No subscriptions yet',
+              Icons.subscriptions_outlined,
+            )
+          else ...[
+            ...paginated
+                .map((sub) => _buildSubscriptionCard(sub))
+                .toList(),
+            if (totalPages > 1)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        onPressed: _page > 0
+                            ? () => setState(() => _page--)
+                            : null,
+                        icon: const Icon(Icons.chevron_left_rounded, size: 20),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      Text(
+                        'Page ${_page + 1} of $totalPages',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AdminTheme.textSecondary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: _page < totalPages - 1
+                            ? () => setState(() => _page++)
+                            : null,
+                        icon: const Icon(Icons.chevron_right_rounded, size: 20),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(String message, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 56, horizontal: 24),
+      decoration: BoxDecoration(
+        color: AdminTheme.cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AdminTheme.borderColor),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AdminTheme.textSecondary.withOpacity(0.08),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon,
+                  size: 40, color: AdminTheme.textSecondary.withOpacity(0.4)),
+            ),
+            const SizedBox(height: 16),
+            Text(message,
+                style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AdminTheme.textPrimary)),
+            const SizedBox(height: 6),
+            Text('Try adjusting your filters or refreshing the page.',
+                style: TextStyle(
+                    fontSize: 13,
+                    color: AdminTheme.textSecondary.withOpacity(0.7))),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubscriptionCard(Map<String, dynamic> sub) {
+    final rawName = sub['accounts']?['full_name']?.toString();
+    final userId = sub['user_id']?.toString() ?? '';
+    final userName =
+        rawName?.isNotEmpty == true ? rawName! : 'User â€¦${userId.length > 8 ? userId.substring(userId.length - 8) : userId}';
+    final userEmail = sub['accounts']?['email']?.toString() ?? '';
+    final planName =
+        sub['subscription_plans']?['name']?.toString() ?? 'Unknown Plan';
+    final planDisplay =
+        sub['subscription_plans']?['display_name']?.toString() ?? planName;
+    final status = sub['status']?.toString() ?? 'unknown';
+    final amount = (sub['amount_paid'] ?? sub['subscription_plans']?['price'] ?? 0) as num;
+    final startDate = sub['current_period_start']?.toString();
+    final endDate = sub['current_period_end']?.toString();
+    final statusColor = getStatusColor(status);
+    final initial = userName.isNotEmpty ? userName[0].toUpperCase() : '?';
+
+    DateTime? endDt = endDate != null ? DateTime.tryParse(endDate) : null;
+    final isExpiringSoon = endDt != null &&
+        endDt.isAfter(DateTime.now()) &&
+        endDt.isBefore(DateTime.now().add(const Duration(days: 7)));
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: AdminTheme.cardColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+            color: isExpiringSoon
+                ? AdminTheme.warningColor.withOpacity(0.5)
+                : AdminTheme.borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Avatar
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                gradient: AdminTheme.primaryGradient,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Center(
+                child: Text(initial,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 18)),
+              ),
+            ),
+            const SizedBox(width: 14),
+
+            // Main content
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Row 1: name + status chip
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          userName,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              color: AdminTheme.textPrimary),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: statusColor.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                              color: statusColor.withOpacity(0.3)),
+                        ),
+                        child: Text(
+                          status.replaceAll('_', ' ').toUpperCase(),
+                          style: TextStyle(
+                              color: statusColor,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 10,
+                              letterSpacing: 0.5),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  if (userEmail.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(userEmail,
+                        style: const TextStyle(
+                            fontSize: 12,
+                            color: AdminTheme.textSecondary)),
+                  ],
+
+                  const SizedBox(height: 10),
+
+                  // Row 2: info chips
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 6,
+                    children: [
+                      _infoChip(Icons.card_membership_rounded, planDisplay,
+                          AdminTheme.accentColor),
+                      _infoChip(Icons.payments_outlined,
+                          formatPHP(amount.toDouble()), AdminTheme.successColor),
+                      if (startDate != null)
+                        _infoChip(
+                            Icons.play_arrow_rounded,
+                            DateFormat('MMM dd, yyyy')
+                                .format(DateTime.parse(startDate)),
+                            AdminTheme.textSecondary),
+                      if (endDate != null)
+                        _infoChip(
+                            isExpiringSoon
+                                ? Icons.warning_rounded
+                                : Icons.event_rounded,
+                            'Until ${DateFormat('MMM dd, yyyy').format(DateTime.parse(endDate))}',
+                            isExpiringSoon
+                                ? AdminTheme.warningColor
+                                : AdminTheme.textSecondary),
+                    ],
+                  ),
+
+                  if (isExpiringSoon)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded,
+                              size: 14, color: AdminTheme.warningColor),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Expires soon â€” consider renewing',
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: AdminTheme.warningColor,
+                                fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
+            // Action buttons
+            Column(
+              children: [
+                buildTableActionButton(
+                    Icons.edit_rounded,
+                    'Edit',
+                    AdminTheme.accentColor,
+                    () => _showEditSubscriptionDialog(sub, _plans)),
+                const SizedBox(height: 6),
+                buildTableActionButton(
+                    Icons.delete_rounded,
+                    'Delete',
+                    AdminTheme.dangerColor,
+                    () => _showDeleteSubscriptionDialog(
+                        sub['id']?.toString() ?? '', userName)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _infoChip(IconData icon, String label, Color color) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: color.withOpacity(0.85)),
+        const SizedBox(width: 4),
+        Text(label,
+            style: TextStyle(
+                fontSize: 12,
+                color: color.withOpacity(0.9),
+                fontWeight: FontWeight.w500)),
+      ],
+    );
+  }
+
+  // ==================== PLAN DIALOGS ====================
+
+  void _showAddPlanDialog() {
+    final formKey = GlobalKey<FormState>();
+    String name = '';
+    String displayName = '';
+    String description = '';
+    double price = 0;
+    String billingPeriod = 'month';
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                  color: AdminTheme.successColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.add_rounded,
+                  color: AdminTheme.successColor, size: 20),
+            ),
+            const SizedBox(width: 12),
+            const Text('Add Subscription Plan'),
+          ]),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    decoration: InputDecoration(
+                        labelText: 'Plan Name',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8))),
+                    validator: (v) =>
+                        v == null || v.trim().isEmpty ? 'Required' : null,
+                    onChanged: (v) => name = v.trim(),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    decoration: InputDecoration(
+                        labelText: 'Display Name',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8))),
+                    onChanged: (v) => displayName = v.trim(),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    decoration: InputDecoration(
+                        labelText: 'Description',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8))),
+                    maxLines: 2,
+                    onChanged: (v) => description = v.trim(),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    decoration: InputDecoration(
+                        labelText: 'Price (â‚±)',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8))),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) return 'Required';
+                      if (double.tryParse(v) == null) return 'Invalid number';
+                      return null;
+                    },
+                    onChanged: (v) => price = double.tryParse(v) ?? 0,
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: billingPeriod,
+                    decoration: InputDecoration(
+                        labelText: 'Billing Period',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8))),
+                    items: const [
+                      DropdownMenuItem(value: 'month', child: Text('Monthly')),
+                      DropdownMenuItem(value: 'year', child: Text('Yearly')),
+                      DropdownMenuItem(value: 'week', child: Text('Weekly')),
+                    ],
+                    onChanged: (v) => billingPeriod = v ?? 'month',
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                if (!formKey.currentState!.validate()) return;
+                try {
+                  await _supabaseService.createPlan(
+                    name: name,
+                    price: price,
+                    displayName: displayName.isNotEmpty ? displayName : name,
+                    description: description,
+                    billingPeriod: billingPeriod,
+                  );
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    _loadData();
+                    showAdminSnackBar(context, 'Plan added successfully',
+                        isError: false);
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    showAdminSnackBar(context, 'Error: $e', isError: true);
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: AdminTheme.successColor,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8))),
+              child: const Text('Add'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditPlanDialog(Map<String, dynamic> plan) {
+    final formKey = GlobalKey<FormState>();
+    final nameController =
+        TextEditingController(text: plan['name']?.toString() ?? '');
+    final descController =
+        TextEditingController(text: plan['description']?.toString() ?? '');
+    final priceController = TextEditingController(
+        text: (plan['price'] as num?)?.toString() ?? '0');
+    String billingPeriod = plan['billing_period']?.toString() ?? 'month';
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                  color: AdminTheme.accentColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.edit_rounded,
+                  color: AdminTheme.accentColor, size: 20),
+            ),
+            const SizedBox(width: 12),
+            const Text('Edit Plan'),
+          ]),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: nameController,
+                    decoration: InputDecoration(
+                        labelText: 'Plan Name',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8))),
+                    validator: (v) =>
+                        v == null || v.trim().isEmpty ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: descController,
+                    decoration: InputDecoration(
+                        labelText: 'Description',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8))),
+                    maxLines: 2,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: priceController,
+                    decoration: InputDecoration(
+                        labelText: 'Price (â‚±)',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8))),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) return 'Required';
+                      if (double.tryParse(v) == null) return 'Invalid number';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: billingPeriod,
+                    decoration: InputDecoration(
+                        labelText: 'Billing Period',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8))),
+                    items: const [
+                      DropdownMenuItem(value: 'month', child: Text('Monthly')),
+                      DropdownMenuItem(value: 'year', child: Text('Yearly')),
+                      DropdownMenuItem(value: 'week', child: Text('Weekly')),
+                    ],
+                    onChanged: (v) =>
+                        setDialogState(() => billingPeriod = v ?? 'month'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                if (!formKey.currentState!.validate()) return;
+                try {
+                  await _supabaseService.updatePlan(
+                    planId: plan['id']?.toString() ?? '',
+                    updates: {
+                      'name': nameController.text.trim(),
+                      'description': descController.text.trim(),
+                      'price': double.tryParse(priceController.text) ?? 0,
+                      'billing_period': billingPeriod,
+                    },
+                  );
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    _loadData();
+                    showAdminSnackBar(context, 'Plan updated successfully',
+                        isError: false);
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    showAdminSnackBar(context, 'Error: $e', isError: true);
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: AdminTheme.accentColor,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8))),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showDeletePlanDialog(String planId, String planName) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete Plan'),
+        content: Text('Are you sure you want to delete "$planName"?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              try {
+                await _supabaseService.deletePlan(planId);
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  _loadData();
+                  showAdminSnackBar(context, 'Plan deleted', isError: false);
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  showAdminSnackBar(context, 'Error: $e', isError: true);
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AdminTheme.dangerColor,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8))),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==================== SUBSCRIPTION DIALOGS ====================
+
+  void _showAssignSubscriptionDialog(List<dynamic> plans) {
+    final formKey = GlobalKey<FormState>();
+    String? selectedPlanId;
+    String? selectedUserId;
+    String status = 'active';
+    bool isLoading = false;
+    final usersController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                  color: AdminTheme.accentColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.person_add_rounded,
+                  color: AdminTheme.accentColor, size: 20),
+            ),
+            const SizedBox(width: 12),
+            const Text('Assign Subscription'),
+          ]),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: usersController,
+                    decoration: InputDecoration(
+                        labelText: 'User ID',
+                        hintText: 'Paste user UUID',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8))),
+                    validator: (v) =>
+                        v == null || v.trim().isEmpty ? 'Required' : null,
+                    onChanged: (v) => selectedUserId = v.trim(),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: selectedPlanId,
+                    decoration: InputDecoration(
+                        labelText: 'Plan',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8))),
+                    items: plans
+                        .map((p) => DropdownMenuItem<String>(
+                              value: p['id']?.toString(),
+                              child: Text(
+                                  '${p['name']} â€” ${formatPHP((p['price'] as num?)?.toDouble() ?? 0)}'),
+                            ))
+                        .toList(),
+                    onChanged: (v) =>
+                        setDialogState(() => selectedPlanId = v),
+                    validator: (v) =>
+                        v == null ? 'Please select a plan' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: status,
+                    decoration: InputDecoration(
+                        labelText: 'Status',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8))),
+                    items: const [
+                      DropdownMenuItem(value: 'active', child: Text('Active')),
+                      DropdownMenuItem(value: 'trial', child: Text('Trial')),
+                      DropdownMenuItem(value: 'paused', child: Text('Paused')),
+                    ],
+                    onChanged: (v) =>
+                        setDialogState(() => status = v ?? 'active'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: isLoading ? null : () => Navigator.pop(context),
+                child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: isLoading
+                  ? null
+                  : () async {
+                      if (!formKey.currentState!.validate()) return;
+                      setDialogState(() => isLoading = true);
+                      try {
+                        await _supabaseService.createUserSubscription(
+                          accountId: selectedUserId!,
+                          planId: selectedPlanId!,
+                          status: status,
+                          currentPeriodEnd:
+                              DateTime.now().add(const Duration(days: 30)),
+                        );
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                          _loadData();
+                          showAdminSnackBar(
+                              context, 'Subscription assigned',
+                              isError: false);
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          showAdminSnackBar(context, 'Error: $e',
+                              isError: true);
+                        }
+                      } finally {
+                        if (context.mounted) {
+                          setDialogState(() => isLoading = false);
+                        }
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: AdminTheme.accentColor,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8))),
+              child: isLoading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('Assign'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditSubscriptionDialog(
+      Map<String, dynamic> subscription, List<dynamic> plans) {
+    String selectedPlanId =
+        subscription['plan_id']?.toString() ?? plans.firstOrNull?['id']?.toString() ?? '';
+    String selectedStatus = subscription['status']?.toString() ?? 'active';
+    bool isLoading = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                  color: AdminTheme.accentColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.edit_rounded,
+                  color: AdminTheme.accentColor, size: 20),
+            ),
+            const SizedBox(width: 12),
+            const Text('Edit Subscription'),
+          ]),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'User: ${subscription['accounts']?['full_name'] ?? 'Unknown'}',
+                style: const TextStyle(
+                    color: AdminTheme.textSecondary, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: selectedPlanId.isNotEmpty ? selectedPlanId : null,
+                decoration: InputDecoration(
+                    labelText: 'Plan',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8))),
+                items: plans
+                    .map((p) => DropdownMenuItem<String>(
+                          value: p['id']?.toString(),
+                          child: Text(
+                              '${p['name']} â€” ${formatPHP((p['price'] as num?)?.toDouble() ?? 0)}'),
+                        ))
+                    .toList(),
+                onChanged: (v) =>
+                    setDialogState(() => selectedPlanId = v ?? selectedPlanId),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: selectedStatus,
+                decoration: InputDecoration(
+                    labelText: 'Status',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8))),
+                items: const [
+                  DropdownMenuItem(value: 'active', child: Text('Active')),
+                  DropdownMenuItem(value: 'trial', child: Text('Trial')),
+                  DropdownMenuItem(value: 'pending', child: Text('Pending')),
+                  DropdownMenuItem(
+                      value: 'past_due', child: Text('Past Due')),
+                  DropdownMenuItem(
+                      value: 'canceled', child: Text('Canceled')),
+                  DropdownMenuItem(value: 'expired', child: Text('Expired')),
+                ],
+                onChanged: (v) =>
+                    setDialogState(() => selectedStatus = v ?? selectedStatus),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: isLoading ? null : () => Navigator.pop(context),
+                child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: isLoading
+                  ? null
+                  : () async {
+                      setDialogState(() => isLoading = true);
+                      try {
+                        await _supabaseService.updateSubscription(
+                          subscriptionId:
+                              subscription['id']?.toString() ?? '',
+                          updates: {
+                            'plan_id': selectedPlanId,
+                            'status': selectedStatus,
+                          },
+                        );
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                          _loadData();
+                          showAdminSnackBar(
+                              context, 'Subscription updated',
+                              isError: false);
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          showAdminSnackBar(context, 'Error: $e',
+                              isError: true);
+                        }
+                      } finally {
+                        if (context.mounted) {
+                          setDialogState(() => isLoading = false);
+                        }
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: AdminTheme.accentColor,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8))),
+              child: isLoading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showDeleteSubscriptionDialog(
+      String subscriptionId, String userName) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete Subscription'),
+        content:
+            Text('Are you sure you want to delete $userName\'s subscription?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              try {
+                await _supabaseService.deleteSubscription(subscriptionId);
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  _loadData();
+                  showAdminSnackBar(context, 'Subscription deleted',
+                      isError: false);
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  showAdminSnackBar(context, 'Error: $e', isError: true);
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AdminTheme.dangerColor,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8))),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==================== PLAN CARD ====================
+
+  Widget _buildPlanCard(Map<String, dynamic> plan) {
+    final price = (plan['price'] as num?)?.toDouble() ?? 0;
+    final isFree = price == 0;
+    final period = plan['billing_period']?.toString() ?? '';
+    final displayName =
+        plan['display_name']?.toString() ?? plan['name']?.toString() ?? '';
+    final planName = plan['name']?.toString() ?? '';
+    final description = plan['description']?.toString() ?? '';
+
+    // Only 2 plan types: Free and Premium (weekly / monthly / yearly)
+    final Color accent =
+        isFree ? AdminTheme.textSecondary : AdminTheme.accentColor;
+
+    final Gradient headerGradient = isFree
+        ? const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF94A3B8), Color(0xFF64748B)])
+        : AdminTheme.accentGradient;
+
+    final IconData planIcon =
+        isFree ? Icons.lock_open_rounded : Icons.workspace_premium_rounded;
+
+    final String badge = isFree ? 'FREE' : 'PREMIUM';
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AdminTheme.cardColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: accent.withOpacity(0.2), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withOpacity(0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Gradient header
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              gradient: headerGradient,
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(18)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(planIcon, color: Colors.white, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        displayName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                        ),
+                      ),
+                      if (planName.isNotEmpty && planName != displayName)
+                        Text(
+                          planName,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.7),
+                            fontSize: 11,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    badge,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Body
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Price row
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      isFree ? 'Free' : formatPHP(price),
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
+                        color: accent,
+                      ),
+                    ),
+                    if (!isFree && period.isNotEmpty) ...[
+                      const SizedBox(width: 4),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 3),
+                        child: Text(
+                          '/ $period',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AdminTheme.textSecondary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 8),
+
+                // Billing period chip
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: accent.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(20),
+                    border:
+                        Border.all(color: accent.withOpacity(0.2)),
+                  ),
+                  child: Text(
+                    _formatBillingPeriod(period),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: accent,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ),
+
+                if (description.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    description,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AdminTheme.textSecondary,
+                      height: 1.4,
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+
+                const SizedBox(height: 16),
+
+                // Action buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _showEditPlanDialog(plan),
+                        icon: const Icon(Icons.edit_rounded, size: 15),
+                        label: const Text('Edit'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AdminTheme.accentColor,
+                          side: const BorderSide(
+                              color: AdminTheme.accentColor),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 10),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _showDeletePlanDialog(
+                          plan['id']?.toString() ?? '',
+                          plan['name']?.toString() ?? '',
+                        ),
+                        icon: const Icon(Icons.delete_rounded, size: 15),
+                        label: const Text('Delete'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AdminTheme.dangerColor,
+                          side: const BorderSide(
+                              color: AdminTheme.dangerColor),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 10),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatBillingPeriod(String period) {
+    switch (period.toLowerCase()) {
+      case 'week':
+        return 'Billed Weekly';
+      case 'month':
+        return 'Billed Monthly';
+      case 'year':
+        return 'Billed Yearly';
+      default:
+        return period.isEmpty ? 'Free Forever' : period;
+    }
+  }
+}

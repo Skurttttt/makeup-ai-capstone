@@ -1,5 +1,6 @@
 // lib/screens/subscription_tab.dart
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/supabase_service.dart';
 
@@ -13,7 +14,42 @@ class SubscriptionTab extends StatefulWidget {
 class _SubscriptionTabState extends State<SubscriptionTab> {
   final _supabaseService = SupabaseService();
   Map<String, dynamic>? _selectedPlan;
-  String _selectedPaymentMethod = 'paymongo';
+  String _selectedPaymentMethod = 'xendit';
+  Map<String, dynamic>? _currentSubscription;
+  bool _isLoadingSubscription = true;
+  String? _currentPlanId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCurrentSubscription();
+  }
+
+  Future<void> _loadCurrentSubscription() async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) {
+      if (mounted) setState(() => _isLoadingSubscription = false);
+      return;
+    }
+    try {
+      final subs = await _supabaseService.getUserSubscriptions(userId);
+      final active = subs
+          .where((s) =>
+              (s['status'] ?? '').toString().toLowerCase() == 'active')
+          .toList();
+      if (mounted) {
+        setState(() {
+          _currentSubscription = active.isNotEmpty ? active.first : null;
+          _currentPlanId = active.isNotEmpty
+              ? active.first['plan_id']?.toString()
+              : null;
+          _isLoadingSubscription = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingSubscription = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -41,8 +77,24 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
                 },
               )
             : null,
+        actions: [
+          // My Subscription button for quick access
+          TextButton.icon(
+            onPressed: () {
+              Navigator.of(context).pushNamed('/my-subscription');
+            },
+            icon: const Icon(Icons.workspace_premium_rounded, color: Colors.white, size: 20),
+            label: const Text('My Subscription', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
       ),
-      body: _selectedPlan == null ? _buildPlansList() : _buildPlanDetails(),
+      body: Padding(
+        padding: const EdgeInsets.only(top: 8.0),
+        child: _selectedPlan == null ? _buildPlansList() : _buildPlanDetails(),
+      ),
     );
   }
 
@@ -59,37 +111,33 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
         if (snapshot.hasError) {
           return Center(
             child: Text(
-              'Error loading plans: ${snapshot.error}',
+              'Error loading plans: \\n${snapshot.error}',
               style: const TextStyle(color: Colors.red),
             ),
           );
         }
 
-        final plans = snapshot.data ?? [];
+        final plans = (snapshot.data ?? [])
+            .where((p) =>
+                (p['price'] is num
+                    ? (p['price'] as num).toDouble()
+                    : double.tryParse(p['price'].toString()) ?? 0.0) >
+                0.0)
+            .toList();
         if (plans.isEmpty) {
           return const Center(
             child: Text(
               'No subscription plans available',
-              style: TextStyle(color: Colors.black54),
+              style: TextStyle(color: Colors.black54, fontSize: 18),
             ),
           );
         }
 
-        // Filter out inactive plans and free plan
-        final activePlans = plans
-            .where(
-              (plan) =>
-                  (plan['is_active'] == true) &&
-                  (plan['name']?.toString().toLowerCase() != 'free'),
-            )
-            .toList();
-
         return SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Header
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -109,7 +157,7 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
                     ),
                     const SizedBox(height: 10),
                     const Text(
-                      'Choose Your Plan',
+                      'Subscription Plans',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 22,
@@ -119,7 +167,7 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Upgrade to unlock premium features',
+                      'See all available plans below',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 13,
@@ -129,10 +177,28 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
-
-              // Plan Cards
-              ...activePlans.map((plan) => _buildPlanCard(plan)),
+              const SizedBox(height: 16),
+              // ── Current subscription banner ──────────────────────────────
+              if (_isLoadingSubscription)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 16),
+                  child: Center(
+                    child: SizedBox(
+                      height: 24,
+                      width: 24,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Color(0xFFFF4D97)),
+                    ),
+                  ),
+                )
+              else if (_currentSubscription != null)
+                _buildCurrentSubscriptionBanner(),
+              // ── Plan cards ────────────────────────────────────────────────
+              ...plans.map((plan) {
+                final isCurrentPlan =
+                    plan['id']?.toString() == _currentPlanId;
+                return _buildPlanCard(plan, isCurrentPlan: isCurrentPlan);
+              }),
             ],
           ),
         );
@@ -140,12 +206,120 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
     );
   }
 
-  Widget _buildPlanCard(Map<String, dynamic> plan) {
+  Widget _buildCurrentSubscriptionBanner() {
+    final sub = _currentSubscription!;
+    final planDetails =
+        sub['subscription_plans'] as Map<String, dynamic>? ?? {};
+    final planName = planDetails['display_name'] ??
+        planDetails['name'] ??
+        sub['plan'] ??
+        'Premium';
+    final billing = planDetails['billing_period'] ?? sub['billing_period'] ?? '';
+    final isLifetime =
+        billing == 'lifetime' || planName.toString().toLowerCase().contains('lifetime');
+    final periodEnd = sub['current_period_end']?.toString();
+    String expiryText = '';
+    if (!isLifetime && periodEnd != null) {
+      final end = DateTime.tryParse(periodEnd);
+      if (end != null) {
+        expiryText =
+            'Renews ${end.day}/${end.month}/${end.year}';
+      }
+    }
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF6C3FC8), Color(0xFFFF4D97)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFFF4D97).withOpacity(0.3),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.workspace_premium,
+              color: Colors.white,
+              size: 28,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isLifetime
+                      ? 'You have $planName! 🎉'
+                      : 'Active: $planName',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  isLifetime
+                      ? 'You enjoy lifetime premium access — no renewal needed.'
+                      : (expiryText.isNotEmpty
+                          ? expiryText
+                          : 'Your plan is active'),
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              isLifetime ? '∞ Lifetime' : billing,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlanCard(Map<String, dynamic> plan,
+      {bool isCurrentPlan = false}) {
     final planName = plan['display_name'] ?? plan['name'] ?? 'N/A';
     final price = plan['price'] ?? 0;
     final billingPeriod = plan['billing_period'] ?? '';
     final description = plan['description'] ?? '';
-    final lowerPlanName = planName.toLowerCase();
+    final lowerPlanName = planName.toString().toLowerCase();
+    final isFree = (plan['price'] is num
+            ? (plan['price'] as num).toDouble()
+            : double.tryParse(plan['price'].toString()) ?? 0.0) ==
+        0.0;
     final isPremium =
         lowerPlanName.contains('premium') || lowerPlanName.contains('lifetime');
     final isPopular =
@@ -204,7 +378,11 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: Icon(
-                        isPremium ? Icons.workspace_premium : Icons.star_border,
+                        isFree
+                            ? Icons.card_giftcard
+                            : (isPremium
+                                ? Icons.workspace_premium
+                                : Icons.star_border),
                         size: 28,
                         color: isPremium
                             ? Colors.white
@@ -270,22 +448,43 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
                         ],
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: isPremium
-                            ? Colors.white.withOpacity(0.2)
-                            : const Color(0xFFFF4D97).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(10),
+                    if (isCurrentPlan)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(
+                              isPremium ? 0.25 : 0.9),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '✓ Active',
+                          style: TextStyle(
+                            color: isPremium
+                                ? Colors.white
+                                : const Color(0xFFFF4D97),
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: isPremium
+                              ? Colors.white.withOpacity(0.2)
+                              : const Color(0xFFFF4D97).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          Icons.arrow_forward_ios,
+                          color: isPremium
+                              ? Colors.white
+                              : const Color(0xFFFF4D97),
+                          size: 14,
+                        ),
                       ),
-                      child: Icon(
-                        Icons.arrow_forward_ios,
-                        color: isPremium
-                            ? Colors.white
-                            : const Color(0xFFFF4D97),
-                        size: 14,
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -313,6 +512,35 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
               ),
               child: const Text(
                 '⭐ MOST POPULAR',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+          ),
+        if (isFree)
+          Positioned(
+            top: 8,
+            right: 20,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.green.shade600,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.green.withOpacity(0.35),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Text(
+                '🎁 FREE',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 10,
@@ -489,28 +717,75 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
 
           const SizedBox(height: 20),
 
-          // Subscribe Button
-          ElevatedButton(
-            onPressed: () => _showSubscribeConfirmation(),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: isPremium
-                  ? Colors.orange
-                  : const Color(0xFFFF4D97),
+          // Subscribe / Current plan button
+          if (_selectedPlan?['id']?.toString() == _currentPlanId)
+            Container(
               padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
                 borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.green.shade300),
               ),
-              elevation: 4,
-            ),
-            child: Text(
-              'Subscribe to $planName',
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.check_circle,
+                      color: Colors.green.shade600, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'You are subscribed to $planName',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green.shade700,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if ((price is num ? price.toDouble() : double.tryParse(price.toString()) ?? 0.0) == 0.0)
+            ElevatedButton.icon(
+              onPressed: () => _activateFreePlan(),
+              icon: const Icon(Icons.volunteer_activism, color: Colors.white),
+              label: Text(
+                'Activate $planName for Free',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green.shade600,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 4,
+              ),
+            )
+          else
+            ElevatedButton(
+              onPressed: () => _showSubscribeConfirmation(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isPremium
+                    ? Colors.orange
+                    : const Color(0xFFFF4D97),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 4,
+              ),
+              child: Text(
+                'Subscribe to $planName',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -581,6 +856,55 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
     );
   }
 
+  Future<void> _activateFreePlan() async {
+    if (_selectedPlan == null) return;
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+    final planId = _selectedPlan!['id']?.toString();
+    final planName =
+        _selectedPlan!['display_name'] ?? _selectedPlan!['name'] ?? 'Free';
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    try {
+      // Cancel any existing active subscription first
+      if (_currentSubscription != null) {
+        final existingId = _currentSubscription!['id']?.toString();
+        if (existingId != null) {
+          await _supabaseService.updateSubscription(
+            subscriptionId: existingId,
+            updates: {'status': 'cancelled'},
+          );
+        }
+      }
+      await _supabaseService.createUserSubscription(
+        accountId: userId,
+        planId: planId!,
+        status: 'active',
+        currentPeriodEnd:
+            DateTime.now().add(const Duration(days: 36500)), // 100 years
+        amountPaid: 0,
+      );
+      if (mounted) {
+        await _loadCurrentSubscription();
+        setState(() => _selectedPlan = null);
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: Text('$planName activated successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: Text('Failed to activate plan: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   void _showSubscribeConfirmation() {
     if (_selectedPlan == null) return;
 
@@ -591,8 +915,8 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
 
-    // Reset payment method to paymongo when showing confirmation
-    _selectedPaymentMethod = 'paymongo';
+    // Reset payment method to xendit when showing confirmation
+    _selectedPaymentMethod = 'xendit';
 
     showDialog(
       context: context,
@@ -637,18 +961,20 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
                 ),
                 const SizedBox(height: 8),
                 RadioListTile<String>(
-                  value: 'paymongo',
+                  value: 'xendit',
                   groupValue: _selectedPaymentMethod,
                   onChanged: (value) =>
                       setDialogState(() => _selectedPaymentMethod = value!),
                   title: Row(
                     children: [
-                      Image.network(
-                        'https://paymongo.com/favicon.ico',
-                        height: 24,
+                      Container(
                         width: 24,
-                        errorBuilder: (_, _, _) =>
-                            const Icon(Icons.credit_card),
+                        height: 24,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0052CC),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Icon(Icons.credit_card, size: 16, color: Colors.white),
                       ),
                       const SizedBox(width: 12),
                       const Text(
@@ -692,7 +1018,7 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
 
                 try {
                   final response = await _supabaseService
-                      .createPaymongoCheckoutForPlan(
+                      .createXenditCheckoutForPlan(
                         planId: _selectedPlan!['id'],
                         paymentMethod: _selectedPaymentMethod,
                       );

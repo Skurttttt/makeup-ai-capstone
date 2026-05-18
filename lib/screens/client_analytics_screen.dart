@@ -29,9 +29,28 @@ class _ClientAnalyticsScreenState extends State<ClientAnalyticsScreen>
   static const Color pinkAccent = Color(0xFFFF6B9D);
   static const Color pinkDeep = Color(0xFFC71563);
 
+  // Cached streams — never recreated inside build() to avoid setState
+  // being called during mouse-tracking phase (_debugDuringDeviceUpdate).
+  late final Stream<List<Map<String, dynamic>>> _productsStream;
+  late final Stream<List<Map<String, dynamic>>> _orderItemsStream;
+
   @override
   void initState() {
     super.initState();
+    final businessId = widget.clientData['id']?.toString() ?? '';
+    // CRITICAL: pipe Supabase streams through Stream.asyncMap so cached/initial
+    // emissions hop to a microtask. A synchronous emit during widget mount or
+    // mouse-tracker device update triggers `_debugDuringDeviceUpdate` cascades.
+    _productsStream = Supabase.instance.client
+        .from('products')
+        .stream(primaryKey: ['id'])
+        .eq('business_id', businessId)
+        .asyncMap((rows) async => rows);
+    _orderItemsStream = Supabase.instance.client
+        .from('order_items')
+        .stream(primaryKey: ['id'])
+        .eq('business_id', businessId)
+        .asyncMap((rows) async => rows);
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
@@ -63,18 +82,12 @@ class _ClientAnalyticsScreenState extends State<ClientAnalyticsScreen>
     final isTablet = MediaQuery.of(context).size.width > 600;
 
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: Supabase.instance.client
-          .from('products')
-          .stream(primaryKey: ['id'])
-          .eq('business_id', widget.clientData['id']),
+      stream: _productsStream,
       builder: (context, productsSnapshot) {
         final products = productsSnapshot.data ?? [];
 
         return StreamBuilder<List<Map<String, dynamic>>>(
-          stream: Supabase.instance.client
-              .from('order_items')
-              .stream(primaryKey: ['id'])
-              .eq('business_id', widget.clientData['id']),
+          stream: _orderItemsStream,
           builder: (context, ordersSnapshot) {
             final orderItems = ordersSnapshot.data ?? [];
             final rangeOrders = _filterByRange(orderItems);
@@ -148,7 +161,7 @@ class _ClientAnalyticsScreenState extends State<ClientAnalyticsScreen>
                 child: SingleChildScrollView(
                   padding: EdgeInsets.all(isDesktop ? 32 : 20),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       // Header Section
                       _buildHeader(context, isDesktop),
@@ -384,28 +397,26 @@ class _ClientAnalyticsScreenState extends State<ClientAnalyticsScreen>
         pinkDark,
       ),
     ];
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const spacing = 12.0;
-        if (constraints.maxWidth < 360) {
-          return Column(
-            children: [
-              for (var i = 0; i < cards.length; i++) ...[
-                if (i > 0) const SizedBox(height: spacing),
-                cards[i],
-              ],
-            ],
-          );
-        }
-        return Row(
-          children: [
-            for (var i = 0; i < cards.length; i++) ...[
-              if (i > 0) const SizedBox(width: spacing),
-              Expanded(child: cards[i]),
-            ],
+    // Use MediaQuery instead of LayoutBuilder to avoid layout re-entrancy.
+    final width = MediaQuery.sizeOf(context).width;
+    const spacing = 12.0;
+    if (width < 360) {
+      return Column(
+        children: [
+          for (var i = 0; i < cards.length; i++) ...[
+            if (i > 0) const SizedBox(height: spacing),
+            cards[i],
           ],
-        );
-      },
+        ],
+      );
+    }
+    return Row(
+      children: [
+        for (var i = 0; i < cards.length; i++) ...[
+          if (i > 0) const SizedBox(width: spacing),
+          Expanded(child: cards[i]),
+        ],
+      ],
     );
   }
 
@@ -480,7 +491,6 @@ class _ClientAnalyticsScreenState extends State<ClientAnalyticsScreen>
         ],
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [7, 30, 90, 365].map((days) {
           final isSelected = _rangeDays == days;
           return Expanded(
@@ -594,7 +604,7 @@ class _ClientAnalyticsScreenState extends State<ClientAnalyticsScreen>
         crossAxisCount: isDesktop ? 3 : (isTablet ? 2 : 1),
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: 1.6,
+        mainAxisExtent: 120,
       ),
       itemCount: metrics.length,
       itemBuilder: (context, index) => _buildMetricCard(metrics[index]),
@@ -603,97 +613,91 @@ class _ClientAnalyticsScreenState extends State<ClientAnalyticsScreen>
 
   Widget _buildMetricCard(_MetricData metric) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: pinkLight.withOpacity(0.3)),
         boxShadow: [
           BoxShadow(
-            color: metric.color.withOpacity(0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
+            color: metric.color.withOpacity(0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [metric.color.withOpacity(0.15), metric.color.withOpacity(0.05)],
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(metric.icon, color: metric.color, size: 22),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [metric.color.withOpacity(0.15), metric.color.withOpacity(0.05)],
               ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [pinkSoft, pinkLight.withOpacity(0.5)],
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  metric.trend,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(metric.icon, color: metric.color, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  metric.value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: pinkPrimary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: pinkDeep,
+                    letterSpacing: -0.5,
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 2),
+                Text(
+                  metric.label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (metric.subtitle != null)
+                  Text(
+                    metric.subtitle!,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: metric.color,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                metric.value,
+          if (metric.trend.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [pinkSoft, pinkLight.withOpacity(0.5)],
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                metric.trend,
                 style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                  color: pinkDeep,
-                  letterSpacing: -0.5,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: pinkPrimary,
                 ),
               ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      metric.label,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey.shade600,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                  if (metric.subtitle != null)
-                    Flexible(
-                      child: Text(
-                        metric.subtitle!,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: metric.color,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                ],
-              ),
-            ],
-          ),
+            ),
         ],
       ),
     );
@@ -1174,6 +1178,7 @@ class _ClientAnalyticsScreenState extends State<ClientAnalyticsScreen>
                                 color: Colors.white,
                                 fontSize: 14,
                               ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                             const SizedBox(height: 4),
                             Text(
@@ -1182,6 +1187,8 @@ class _ClientAnalyticsScreenState extends State<ClientAnalyticsScreen>
                                 color: Colors.white.withOpacity(0.8),
                                 fontSize: 12,
                               ),
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
@@ -1286,7 +1293,8 @@ class _ChartPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (data.isEmpty) return;
+    // Guard against zero/invalid canvas sizes (can happen mid-layout).
+    if (data.isEmpty || size.width <= 0 || size.height <= 0) return;
 
     final paint = Paint()
       ..color = color
@@ -1306,13 +1314,17 @@ class _ChartPainter extends CustomPainter {
 
     final maxValue = data.reduce((a, b) => a > b ? a : b);
     final minValue = data.reduce((a, b) => a < b ? a : b);
-    final range = maxValue - minValue;
+    // Avoid divide-by-zero when all values are equal (produces NaN coords
+    // that corrupt the render tree and trigger hit-test/no-size cascades).
+    final range = (maxValue - minValue).abs() < 1e-9 ? 1.0 : (maxValue - minValue);
+    // Avoid divide-by-zero when data has a single point.
+    final denom = data.length > 1 ? (data.length - 1) : 1;
 
     final path = Path();
     final fillPath = Path();
 
     for (int i = 0; i < data.length; i++) {
-      final x = (i / (data.length - 1)) * size.width;
+      final x = (i / denom) * size.width;
       final y = size.height - ((data[i] - minValue) / range) * size.height;
 
       if (i == 0) {
@@ -1333,7 +1345,8 @@ class _ChartPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _ChartPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.data != data;
 }
 
 String _formatPHP(double amount) {

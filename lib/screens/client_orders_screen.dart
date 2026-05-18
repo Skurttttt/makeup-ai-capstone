@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'chat_screen.dart';
+import 'waybill_preview_screen.dart';
 
 // ─── colour palette (matches client_dashboard_screen) ────────────────────────
 const _kPink = Color(0xFFFF4D8C);
@@ -425,6 +426,52 @@ class _ClientOrdersScreenState extends State<ClientOrdersScreen>
     }
   }
 
+  // ── print waybill ─────────────────────────────────────────────────────────
+  Future<void> _printWaybill(Map<String, dynamic> order) async {
+    try {
+      // Try to fetch the seller's business profile for the "FROM" block.
+      Map<String, dynamic>? shopInfo;
+      try {
+        final myUid = _client.auth.currentUser?.id;
+        if (myUid != null) {
+          final res = await _client
+              .from('accounts')
+              .select(
+                  'business_name, full_name, phone, business_phone, business_address')
+              .eq('id', myUid)
+              .maybeSingle();
+          if (res != null) {
+            shopInfo = {
+              'business_name': res['business_name'] ?? res['full_name'],
+              'phone': res['business_phone'] ?? res['phone'],
+              'address': res['business_address'],
+            };
+          }
+        }
+      } catch (_) {
+        // Non-fatal — fall back to defaults.
+      }
+
+      if (!mounted) return;
+      // Show preview screen first; user can then print/share/download.
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) =>
+              WaybillPreviewScreen(order: order, shopInfo: shopInfo),
+        ),
+      );
+    } catch (e, st) {
+      debugPrint('Waybill error: $e\n$st');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to open waybill: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   // ── cancel order ──────────────────────────────────────────────────────────
   // ── chat with customer ──────────────────────────────────────────────────
   Future<void> _openChat(Map<String, dynamic> order) async {
@@ -432,7 +479,6 @@ class _ClientOrdersScreenState extends State<ClientOrdersScreen>
     final buyerId = order['buyer_id']?.toString();
     final buyerName = order['buyer_name']?.toString() ?? 'Customer';
     if (myUid == null || buyerId == null) return;
-
     // look up existing conversation or create one
     try {
       Map<String, dynamic>? convo;
@@ -591,6 +637,7 @@ class _ClientOrdersScreenState extends State<ClientOrdersScreen>
                                   onAdvance: () => _advanceStatus(list[i]),
                                   onCancel: () => _cancelOrder(list[i]),
                                   onChat: () => _openChat(list[i]),
+                                  onPrintWaybill: () => _printWaybill(list[i]),
                                 ),
                           ),
                         );
@@ -669,12 +716,14 @@ class _OrderCard extends StatelessWidget {
   final VoidCallback onAdvance;
   final VoidCallback onCancel;
   final VoidCallback onChat;
+  final VoidCallback onPrintWaybill;
 
   const _OrderCard({
     required this.order,
     required this.onAdvance,
     required this.onCancel,
     required this.onChat,
+    required this.onPrintWaybill,
   });
 
   @override
@@ -807,10 +856,13 @@ class _OrderCard extends StatelessWidget {
                   const Icon(Icons.phone_outlined,
                       size: 14, color: Colors.grey),
                   const SizedBox(width: 4),
-                  Text(
-                    order['buyer_phone'].toString(),
-                    style: TextStyle(
-                        fontSize: 12, color: Colors.grey.shade600),
+                  Flexible(
+                    child: Text(
+                      order['buyer_phone'].toString(),
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.grey.shade600),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ],
@@ -959,6 +1011,21 @@ class _OrderCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 4),
+                // Print waybill — available once order is paid/processing/shipped
+                if (!isTerminal && status != 'pending')
+                  IconButton(
+                    onPressed: onPrintWaybill,
+                    tooltip: 'Print waybill',
+                    icon: const Icon(Icons.print_rounded,
+                        color: _kPink, size: 20),
+                    style: IconButton.styleFrom(
+                      backgroundColor: _kPinkSoft,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.all(8),
+                    ),
+                  ),
+                if (!isTerminal && status != 'pending') const SizedBox(width: 4),
                 if (canCancel)
                   TextButton(
                     onPressed: onCancel,

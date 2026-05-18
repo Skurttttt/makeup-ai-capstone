@@ -579,10 +579,10 @@ class _InstructionsPageState extends State<InstructionsPage> {
 
       final undertone =
           (product['undertone'] ?? '').toString().toLowerCase();
-      
+
       final shadeDepth =
           (product['shade_depth'] ?? '').toString().toLowerCase();
-      
+
       final userSkinTone =
           widget.faceProfile?.skinTone.name.toLowerCase() ?? '';
 
@@ -824,7 +824,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
       setState(() {
         _aiSteps = steps;
       });
-      
+
       // Trigger Step 1 guide after AI loads
       _ensureGuideForTargetArea('full_face');
     } catch (e) {
@@ -975,7 +975,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
 
     try {
       final eyeshadowColor = _recommendedStepColors['eyeshadow'] ?? widget.look.eyeshadowColor;
-      
+
       final path = await _createGuideImage(
         prefix: 'eyeshadow_guide_',
         painter: EyeshadowGuidePainter(
@@ -1517,7 +1517,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
               final newQty = currentQty + change;
 
               if (newQty < 0) return;
-              
+
               if (newQty == 0) {
                 setModalState(() {
                   _recommendedKitItems[index]['quantity'] = 0;

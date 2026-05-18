@@ -216,6 +216,7 @@ class _ClientScreenState extends State<ClientScreen> {
   int _currentSection = 0;
   late Future<Map<String, dynamic>> _clientDataFuture;
   StreamSubscription<AppNotification>? _notifSub;
+  int _productsRefreshTick = 0;
 
   @override
   void initState() {
@@ -236,22 +237,40 @@ class _ClientScreenState extends State<ClientScreen> {
   }
 
   void _pingUser(AppNotification n) {
-    if (!mounted) return;
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    if (messenger == null) return;
-    final color = switch (n.type) {
-      AppNotificationType.order => const Color(0xFF22C55E),
-      AppNotificationType.lowStock => const Color(0xFFFF9800),
-      AppNotificationType.message => AppTheme.primaryColor,
-    };
-    final icon = switch (n.type) {
-      AppNotificationType.order => Icons.shopping_bag_rounded,
-      AppNotificationType.lowStock => Icons.inventory_2_rounded,
-      AppNotificationType.message => Icons.chat_bubble_rounded,
-    };
-    HapticFeedback.mediumImpact();
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
+    // CRITICAL: defer ALL work past the current frame.
+    // The notification arrives via a Supabase realtime stream listener which
+    // may fire during a mouse-tracker device update or layout pass. Calling
+    // showSnackBar / playing sounds / haptics synchronously from inside that
+    // phase triggers `_debugDuringDeviceUpdate` and `_debugDoingThisLayout`
+    // assertion cascades that look like layout corruption.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      if (messenger == null) return;
+      final color = switch (n.type) {
+        AppNotificationType.order => const Color(0xFF22C55E),
+        AppNotificationType.lowStock => const Color(0xFFFF9800),
+        AppNotificationType.message => AppTheme.primaryColor,
+      };
+      final icon = switch (n.type) {
+        AppNotificationType.order => Icons.shopping_bag_rounded,
+        AppNotificationType.lowStock => Icons.inventory_2_rounded,
+        AppNotificationType.message => Icons.chat_bubble_rounded,
+      };
+      // Audio + haptic feedback. New orders get a stronger "ding-ding"
+      // double alert so sellers notice even when not looking at the screen.
+      if (n.type == AppNotificationType.order) {
+        HapticFeedback.heavyImpact();
+        SystemSound.play(SystemSoundType.alert);
+        Future.delayed(const Duration(milliseconds: 220), () {
+          SystemSound.play(SystemSoundType.alert);
+        });
+      } else {
+        HapticFeedback.mediumImpact();
+        SystemSound.play(SystemSoundType.alert);
+      }
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
       SnackBar(
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
@@ -296,6 +315,7 @@ class _ClientScreenState extends State<ClientScreen> {
         ),
       ),
     );
+    });
   }
 
   @override
@@ -542,6 +562,7 @@ class _ClientScreenState extends State<ClientScreen> {
                               fontWeight: FontWeight.w600,
                               color: AppTheme.textPrimary,
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         Row(
@@ -550,30 +571,37 @@ class _ClientScreenState extends State<ClientScreen> {
                               iconColor: AppTheme.textSecondary,
                             ),
                             const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppTheme.primaryColor.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.store,
-                                    size: 16,
-                                    color: AppTheme.primaryColor,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    clientData['business_name'] ?? 'My Store',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w500,
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 220),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primaryColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.store,
+                                      size: 16,
+                                      color: AppTheme.primaryColor,
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(width: 8),
+                                    Flexible(
+                                      child: Text(
+                                        clientData['business_name'] ?? 'My Store',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ],
@@ -635,6 +663,7 @@ class _ClientScreenState extends State<ClientScreen> {
             color: isSelected ? Colors.white : AppTheme.textPrimary,
             fontWeight: FontWeight.w500,
           ),
+          overflow: TextOverflow.ellipsis,
         ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         onTap: () => _setSection(index),
@@ -781,6 +810,7 @@ class _ClientScreenState extends State<ClientScreen> {
           onEditProduct: _showEditProductDialog,
           onDeleteProduct: _confirmDeleteProduct,
           onToggleProductStatus: _toggleProductStatus,
+          refreshTick: _productsRefreshTick,
         );
       case 3:
         return ClientAnalyticsScreen(clientData: clientData);
@@ -810,7 +840,9 @@ class _ClientScreenState extends State<ClientScreen> {
             backgroundColor: AppTheme.successColor,
           ),
         );
-        setState(() { _clientDataFuture = _fetchClientData(); });
+        // Force the products stream to re-subscribe so the new is_active
+        // value is reflected immediately even if realtime hasn't pushed yet.
+        setState(() => _productsRefreshTick++);
       }
     } catch (e) {
       if (mounted) {
@@ -896,7 +928,9 @@ class _ClientScreenState extends State<ClientScreen> {
               backgroundColor: AppTheme.successColor,
             ),
           );
-          setState(() { _clientDataFuture = _fetchClientData(); });
+          // Force the products stream to re-subscribe so the deleted row
+          // disappears immediately even if realtime hasn't pushed yet.
+          setState(() => _productsRefreshTick++);
         }
       } catch (e) {
         if (mounted) {

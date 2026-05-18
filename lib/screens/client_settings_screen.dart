@@ -74,7 +74,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen>
           child: SingleChildScrollView(
             padding: EdgeInsets.all(isDesktop ? 32 : 20),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // Header
                 _buildHeader(isDesktop),
@@ -153,6 +153,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen>
                     fontSize: 14,
                     fontWeight: FontWeight.w400,
                   ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -700,6 +701,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen>
                       fontWeight: FontWeight.w600,
                       color: Colors.grey.shade800,
                     ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -708,6 +710,7 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen>
                       fontSize: 11,
                       color: Colors.grey.shade500,
                     ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
@@ -727,14 +730,16 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen>
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: Colors.grey.shade600,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
+          Flexible(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
           const SizedBox(width: 8),
