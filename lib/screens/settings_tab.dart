@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:typed_data';
+import 'package:image_picker/image_picker.dart';
 import '../services/supabase_service.dart';
 import '../utils/logout_util.dart';
 import 'user_subscription_page.dart';
@@ -25,6 +27,10 @@ class _SettingsTabState extends State<SettingsTab> {
   String _userAddress = '';
   String _userCity = '';
   String _userPostalCode = '';
+  String? _avatarUrl;
+  Uint8List? _avatarBytes;
+  bool _isUploadingAvatar = false;
+  final ImagePicker _avatarPicker = ImagePicker();
 
   // Current subscription state
   bool _subscriptionLoading = true;
@@ -94,6 +100,8 @@ class _SettingsTabState extends State<SettingsTab> {
             : name.trim().isNotEmpty
             ? name.trim()
             : 'Beauty Enthusiast';
+        _avatarUrl = (meta['avatar_url'] as String?) ?? null;
+        _avatarBytes = null;
       });
       debugPrint('Loaded user id: $_userId');
     }
@@ -1615,6 +1623,70 @@ class _SettingsTabState extends State<SettingsTab> {
 
         return StatefulBuilder(
           builder: (sheetContext, setSheetState) {
+            Future<void> _pickAndUploadProfileImage() async {
+              if (_isUploadingAvatar) return;
+              final user = Supabase.instance.client.auth.currentUser;
+              if (user == null) return;
+              XFile? pickedFile;
+              try {
+                pickedFile = await _avatarPicker.pickImage(
+                  source: ImageSource.gallery,
+                  maxWidth: 800,
+                  maxHeight: 800,
+                  imageQuality: 85,
+                );
+                if (pickedFile == null) return;
+              } catch (_) {
+                return;
+              }
+              setSheetState(() => _isUploadingAvatar = true);
+              try {
+                final bytes = await pickedFile.readAsBytes();
+                final safeName = pickedFile.name.replaceAll(RegExp(r'[^A-Za-z0-9_.-]'), '_');
+                final extension = RegExp(r'\.(\w+)\$').firstMatch(pickedFile.name)?.group(1)?.toLowerCase() ?? 'png';
+                final fileName = '${DateTime.now().millisecondsSinceEpoch}_$safeName.$extension';
+                final storagePath = '${user.id}/avatars/$fileName';
+
+                await Supabase.instance.client.storage.from('scan-images').uploadBinary(
+                  storagePath,
+                  bytes,
+                  fileOptions: const FileOptions(cacheControl: '3600', upsert: true),
+                );
+
+                final publicUrl = Supabase.instance.client.storage
+                    .from('scan-images')
+                    .getPublicUrl(storagePath);
+
+                // Update accounts table and auth metadata
+                await Supabase.instance.client
+                    .from('accounts')
+                    .update({'avatar_url': publicUrl})
+                    .eq('id', user.id);
+                try {
+                  await Supabase.instance.client.auth.updateUser(
+                    UserAttributes(data: {'avatar_url': publicUrl}),
+                  );
+                } catch (_) {}
+
+                if (!mounted) return;
+                setState(() {
+                  _avatarBytes = bytes;
+                  _avatarUrl = publicUrl;
+                });
+                setSheetState(() => _isUploadingAvatar = false);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Profile photo updated')),
+                );
+              } catch (e) {
+                setSheetState(() => _isUploadingAvatar = false);
+                if (sheetContext.mounted) {
+                  ScaffoldMessenger.of(sheetContext).showSnackBar(
+                    SnackBar(content: Text('Upload failed: $e')),
+                  );
+                }
+              }
+            }
+
             Future<void> handleSave() async {
               final newName = nameController.text.trim();
               final newPhone = phoneController.text.trim();
@@ -1669,8 +1741,7 @@ class _SettingsTabState extends State<SettingsTab> {
               child: Container(
                 decoration: const BoxDecoration(
                   color: Color(0xFFFAF7FB),
-                  borderRadius:
-                      BorderRadius.vertical(top: Radius.circular(28)),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -1687,16 +1758,18 @@ class _SettingsTabState extends State<SettingsTab> {
                         ),
                       ),
                     ),
+
                     // Gradient header with avatar
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [primaryPink, pinkDeep],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
                       ),
                       child: Column(
                         children: [
@@ -1709,8 +1782,7 @@ class _SettingsTabState extends State<SettingsTab> {
                                 decoration: BoxDecoration(
                                   color: Colors.white,
                                   shape: BoxShape.circle,
-                                  border: Border.all(
-                                      color: Colors.white, width: 3),
+                                  border: Border.all(color: Colors.white, width: 3),
                                   boxShadow: [
                                     BoxShadow(
                                       color: Colors.black.withOpacity(0.15),
@@ -1720,12 +1792,61 @@ class _SettingsTabState extends State<SettingsTab> {
                                   ],
                                 ),
                                 child: Center(
-                                  child: Text(
-                                    initial,
-                                    style: const TextStyle(
-                                      color: primaryPink,
-                                      fontSize: 36,
-                                      fontWeight: FontWeight.w800,
+                                  child: _avatarBytes != null || _avatarUrl != null
+                                      ? CircleAvatar(
+                                          radius: 36,
+                                          backgroundImage: _avatarBytes != null
+                                              ? MemoryImage(_avatarBytes!) as ImageProvider
+                                              : NetworkImage(_avatarUrl!),
+                                          backgroundColor: Colors.white,
+                                        )
+                                      : Text(
+                                          initial,
+                                          style: const TextStyle(
+                                            color: primaryPink,
+                                            fontSize: 36,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                ),
+                              ),
+                              Positioned(
+                                bottom: 8,
+                                right: 8,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(colors: [primaryPink, pinkDeep]),
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: primaryPink.withOpacity(0.4),
+                                        blurRadius: 12,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      onTap: _isUploadingAvatar ? null : _pickAndUploadProfileImage,
+                                      borderRadius: BorderRadius.circular(20),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(12),
+                                        child: _isUploadingAvatar
+                                            ? const SizedBox(
+                                                width: 20,
+                                                height: 20,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  color: Colors.white,
+                                                ),
+                                              )
+                                            : const Icon(
+                                                Icons.camera_alt_rounded,
+                                                size: 20,
+                                                color: Colors.white,
+                                              ),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -1752,64 +1873,33 @@ class _SettingsTabState extends State<SettingsTab> {
                         ],
                       ),
                     ),
+
                     // Form fields
                     Flexible(
                       child: SingleChildScrollView(
                         padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
                         child: Column(
                           children: [
-                            _buildEditField(
-                              controller: nameController,
-                              label: 'Full Name',
-                              icon: Icons.person_outline,
-                            ),
+                            _buildEditField(controller: nameController, label: 'Full Name', icon: Icons.person_outline),
                             const SizedBox(height: 14),
-                            _buildEditField(
-                              controller: emailController,
-                              label: 'Email',
-                              icon: Icons.email_outlined,
-                              enabled: false,
-                            ),
+                            _buildEditField(controller: emailController, label: 'Email', icon: Icons.email_outlined, enabled: false),
                             const SizedBox(height: 14),
-                            _buildEditField(
-                              controller: phoneController,
-                              label: 'Phone Number',
-                              icon: Icons.phone_outlined,
-                              keyboardType: TextInputType.phone,
-                            ),
+                            _buildEditField(controller: phoneController, label: 'Phone Number', icon: Icons.phone_outlined, keyboardType: TextInputType.phone),
                             const SizedBox(height: 14),
-                            _buildEditField(
-                              controller: addressController,
-                              label: 'Address',
-                              icon: Icons.location_on_outlined,
-                              maxLines: 2,
-                            ),
+                            _buildEditField(controller: addressController, label: 'Address', icon: Icons.location_on_outlined, maxLines: 2),
                             const SizedBox(height: 14),
                             Row(
                               children: [
-                                Expanded(
-                                  flex: 2,
-                                  child: _buildEditField(
-                                    controller: cityController,
-                                    label: 'City',
-                                    icon: Icons.location_city_outlined,
-                                  ),
-                                ),
+                                Expanded(flex: 2, child: _buildEditField(controller: cityController, label: 'City', icon: Icons.location_city_outlined)),
                                 const SizedBox(width: 12),
-                                Expanded(
-                                  child: _buildEditField(
-                                    controller: postalController,
-                                    label: 'Postal',
-                                    icon: Icons.markunread_mailbox_outlined,
-                                    keyboardType: TextInputType.number,
-                                  ),
-                                ),
+                                Expanded(child: _buildEditField(controller: postalController, label: 'Postal', icon: Icons.markunread_mailbox_outlined, keyboardType: TextInputType.number)),
                               ],
                             ),
                           ],
                         ),
                       ),
                     ),
+
                     // Action buttons
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
@@ -1817,24 +1907,14 @@ class _SettingsTabState extends State<SettingsTab> {
                         children: [
                           Expanded(
                             child: OutlinedButton(
-                              onPressed: saving
-                                  ? null
-                                  : () => Navigator.pop(sheetContext),
+                              onPressed: saving ? null : () => Navigator.pop(sheetContext),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: Colors.grey.shade700,
-                                side:
-                                    BorderSide(color: Colors.grey.shade300),
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius:
-                                        BorderRadius.circular(14)),
+                                side: BorderSide(color: Colors.grey.shade300),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                               ),
-                              child: const Text(
-                                'Cancel',
-                                style:
-                                    TextStyle(fontWeight: FontWeight.w600),
-                              ),
+                              child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w600)),
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -1842,39 +1922,10 @@ class _SettingsTabState extends State<SettingsTab> {
                             flex: 2,
                             child: ElevatedButton(
                               onPressed: saving ? null : handleSave,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: primaryPink,
-                                foregroundColor: Colors.white,
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius:
-                                        BorderRadius.circular(14)),
-                                elevation: 0,
-                              ),
+                              style: ElevatedButton.styleFrom(backgroundColor: primaryPink, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), elevation: 0),
                               child: saving
-                                  ? const SizedBox(
-                                      height: 18,
-                                      width: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : const Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.check_circle_outline,
-                                            size: 18),
-                                        SizedBox(width: 6),
-                                        Text(
-                                          'Save Changes',
-                                          style: TextStyle(
-                                              fontWeight: FontWeight.w700),
-                                        ),
-                                      ],
-                                    ),
+                                  ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                  : const Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.check_circle_outline, size: 18), SizedBox(width: 6), Text('Save Changes', style: TextStyle(fontWeight: FontWeight.w700))]),
                             ),
                           ),
                         ],

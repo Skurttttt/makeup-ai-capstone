@@ -1,5 +1,8 @@
 // lib/auth/forgot_password_page.dart
+
 import 'package:flutter/material.dart';
+import '../services/password_reset_service.dart';
+import 'wait_for_reset_confirmation_page.dart';
 
 class ForgotPasswordPage extends StatefulWidget {
   const ForgotPasswordPage({super.key});
@@ -24,45 +27,37 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       setState(() {
         _isLoading = true;
       });
-
-      // TODO: Implement actual password reset logic
-      await Future.delayed(const Duration(seconds: 2));
-
-      setState(() {
-        _isLoading = false;
-      });
-
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+      try {
+        await PasswordResetService.sendResetCode(_emailController.text.trim());
+        setState(() {
+          _isLoading = false;
+        });
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => WaitForResetConfirmationPage(email: _emailController.text.trim()),
             ),
-            icon: const Icon(
-              Icons.check_circle,
-              color: Color(0xFFFF4D97),
-              size: 64,
-            ),
-            title: const Text('Email Sent!'),
-            content: Text(
-              'We have sent a password reset link to ${_emailController.text}',
-              textAlign: TextAlign.center,
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.pop(context);
-                },
-                child: const Text(
-                  'OK',
-                  style: TextStyle(color: Color(0xFFFF4D97)),
+          );
+        }
+      } catch (e) {
+        setState(() {
+          _isLoading = false;
+        });
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Error'),
+              content: Text('Failed to send reset email. Please try again.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
                 ),
-              ),
-            ],
-          ),
-        );
+              ],
+            ),
+          );
+        }
       }
     }
   }
