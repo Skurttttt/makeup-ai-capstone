@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'auth/login_supabase_page.dart';
+import 'auth/change_password_page.dart';
 import 'home_screen.dart';
 import 'screens/admin_screen_new.dart';
 import 'screens/client_screen.dart';
@@ -57,6 +58,19 @@ class App extends StatelessWidget {
         ),
       ),
       home: const AuthGate(),
+      onGenerateRoute: (settings) {
+        // Handle deep link for password reset
+        final uri = Uri.tryParse(settings.name ?? '');
+        if (uri != null && uri.path == '/reset-password') {
+          final accessToken = uri.queryParameters['access_token'];
+          if (accessToken != null && accessToken.isNotEmpty) {
+            return MaterialPageRoute(
+              builder: (_) => ChangePasswordPage(accessToken: accessToken),
+            );
+          }
+        }
+        return null;
+      },
     );
   }
 }
@@ -130,9 +144,9 @@ class _AuthGateState extends State<AuthGate> {
         MaterialPageRoute(builder: (_) => const ClientScreen()),
       );
     } else {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
-      );
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const HomeScreen()));
     }
   }
 

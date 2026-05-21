@@ -15,7 +15,7 @@ class ClientShopScreen extends StatefulWidget {
 class _ClientShopScreenState extends State<ClientShopScreen>
     with SingleTickerProviderStateMixin {
   String _shopName = '';
-  String _shopCategory = '';
+  String _shopEmail = '';
   String _shopPhone = '';
   String _shopAddress = '';
   String? _shopAvatarUrl;
@@ -39,13 +39,6 @@ class _ClientShopScreenState extends State<ClientShopScreen>
 
   final ImagePicker _avatarPicker = ImagePicker();
 
-  final List<Map<String, String>> _shopCategoryOptions = const [
-    {'value': 'makeup_brand', 'label': 'Makeup Brand'},
-    {'value': 'salon', 'label': 'Salon'},
-    {'value': 'artist', 'label': 'Artist'},
-    {'value': 'distributor', 'label': 'Distributor'},
-    {'value': 'retailer', 'label': 'Retailer'},
-  ];
 
   @override
   void initState() {
@@ -436,7 +429,14 @@ class _ClientShopScreenState extends State<ClientShopScreen>
             onChanged: (val) => setState(() => _shopName = val),
           ),
           const SizedBox(height: 20),
-          _buildCategoryDropdown(),
+          _buildTextField(
+            label: 'Shop Email',
+            hint: 'Enter shop contact email',
+            icon: Icons.email_rounded,
+            value: _shopEmail,
+            onChanged: (val) => setState(() => _shopEmail = val),
+            keyboard: TextInputType.emailAddress,
+          ),
           const SizedBox(height: 20),
           _buildTextField(
             label: 'Phone Number',
@@ -602,102 +602,17 @@ class _ClientShopScreenState extends State<ClientShopScreen>
     );
   }
 
-  Widget _buildCategoryDropdown() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Business Category',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: Colors.grey.shade700,
-          ),
-        ),
-        const SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          initialValue: _shopCategoryOptions.any((opt) => opt['value'] == _shopCategory)
-              ? _shopCategory
-              : null,
-          decoration: InputDecoration(
-            hintText: 'Select category',
-            hintStyle: TextStyle(
-              color: Colors.grey.shade400,
-              fontSize: 14,
-            ),
-            prefixIcon: const Icon(Icons.category_rounded, color: pinkPrimary, size: 20),
-            filled: true,
-            fillColor: pinkSoft.withOpacity(0.3),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: pinkLight.withOpacity(0.3)),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: pinkLight.withOpacity(0.3)),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: pinkPrimary, width: 2),
-            ),
-            contentPadding: const EdgeInsets.all(16),
-          ),
-          icon: Icon(Icons.keyboard_arrow_down_rounded, color: pinkPrimary),
-          dropdownColor: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          items: _shopCategoryOptions
-              .map(
-                (opt) => DropdownMenuItem(
-                  value: opt['value'],
-                  child: Row(
-                    children: [
-                      Icon(
-                        _getCategoryIcon(opt['value']!),
-                        size: 18,
-                        color: pinkPrimary,
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        opt['label']!,
-                        style: const TextStyle(fontSize: 14),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-              .toList(),
-          onChanged: (val) => setState(() => _shopCategory = val ?? ''),
-        ),
-      ],
-    );
-  }
 
-  IconData _getCategoryIcon(String category) {
-    switch (category) {
-      case 'makeup_brand':
-        return Icons.brush_rounded;
-      case 'salon':
-        return Icons.content_cut_rounded;
-      case 'artist':
-        return Icons.palette_rounded;
-      case 'distributor':
-        return Icons.local_shipping_rounded;
-      case 'retailer':
-        return Icons.shopping_bag_rounded;
-      default:
-        return Icons.store_rounded;
-    }
-  }
 
   void _initializeShopForm(Map<String, dynamic> clientData) {
     _shopName = (clientData['business_name'] ?? '').toString();
-    _shopCategory = (clientData['business_type'] ?? '').toString();
+    _shopEmail = (clientData['business_email'] ?? clientData['shop_email'] ?? '').toString();
     _shopPhone = (clientData['business_phone'] ?? '').toString();
     _shopAddress = (clientData['business_address'] ?? '').toString();
 
     _initialSnapshot = {
       'name': _shopName,
-      'category': _shopCategory,
+      'email': _shopEmail,
       'phone': _shopPhone,
       'address': _shopAddress,
     };
@@ -713,7 +628,7 @@ class _ClientShopScreenState extends State<ClientShopScreen>
 
   bool get _isDirty {
     return _shopName != _initialSnapshot['name'] ||
-        _shopCategory != _initialSnapshot['category'] ||
+      _shopEmail != _initialSnapshot['email'] ||
         _shopPhone != _initialSnapshot['phone'] ||
         _shopAddress != _initialSnapshot['address'];
   }
@@ -721,7 +636,7 @@ class _ClientShopScreenState extends State<ClientShopScreen>
   void _resetChanges() {
     setState(() {
       _shopName = _initialSnapshot['name'] ?? '';
-      _shopCategory = _initialSnapshot['category'] ?? '';
+      _shopEmail = _initialSnapshot['email'] ?? '';
       _shopPhone = _initialSnapshot['phone'] ?? '';
       _shopAddress = _initialSnapshot['address'] ?? '';
     });
@@ -850,24 +765,20 @@ class _ClientShopScreenState extends State<ClientShopScreen>
 
     setState(() => _isSavingShop = true);
     try {
-      await Supabase.instance.client
+        await Supabase.instance.client
           .from('accounts')
           .update({
-            'business_name': _shopName.trim(),
-            'business_type': _shopCategory.trim().isEmpty
-                ? null
-                : _shopCategory.trim(),
-            'business_phone':
-                _shopPhone.trim().isEmpty ? null : _shopPhone.trim(),
-            'business_address':
-                _shopAddress.trim().isEmpty ? null : _shopAddress.trim(),
+          'business_name': _shopName.trim(),
+          'business_email': _shopEmail.trim().isEmpty ? null : _shopEmail.trim(),
+          'business_phone': _shopPhone.trim().isEmpty ? null : _shopPhone.trim(),
+          'business_address': _shopAddress.trim().isEmpty ? null : _shopAddress.trim(),
           })
           .eq('id', user.id);
 
       if (!mounted) return;
       _initialSnapshot = {
         'name': _shopName,
-        'category': _shopCategory,
+        'email': _shopEmail,
         'phone': _shopPhone,
         'address': _shopAddress,
       };
