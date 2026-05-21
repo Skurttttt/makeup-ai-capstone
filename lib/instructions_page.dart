@@ -264,6 +264,40 @@ class _InstructionsPageState extends State<InstructionsPage> {
     return 'rosy pink';
   }
 
+  // Helper to check if a product is a contour product
+  bool _isContourProduct(Map<String, dynamic> product) {
+    final name = (product['name'] ?? '').toString().toLowerCase();
+    final category = (product['category'] ?? '').toString().toLowerCase();
+    final shade = (product['shade_name'] ?? '').toString().toLowerCase();
+    final variations = (product['variations'] ?? '').toString().toLowerCase();
+
+    final isContour = name.contains('contour') || category.contains('contour');
+
+    final isMultiPalette =
+        name.contains('multi palette') ||
+        name.contains('multi-palette') ||
+        name.contains('palette') ||
+        category.contains('palette');
+
+    final hasSet123 =
+        shade.contains('set 1') ||
+        shade.contains('set 2') ||
+        shade.contains('set 3') ||
+        variations.contains('set 1') ||
+        variations.contains('set 2') ||
+        variations.contains('set 3');
+
+    return isContour || (isMultiPalette && hasSet123);
+  }
+
+  // Helper to check if a product is a blush product
+  bool _isBlushProduct(Map<String, dynamic> product) {
+    final name = (product['name'] ?? '').toString().toLowerCase();
+    final category = (product['category'] ?? '').toString().toLowerCase();
+
+    return name.contains('blush') || category.contains('blush');
+  }
+
   Future<List<Map<String, dynamic>>> _fetchRecommendedProducts(
     String targetArea,
   ) async {
@@ -306,9 +340,9 @@ class _InstructionsPageState extends State<InstructionsPage> {
             productCategory.contains('palette');
       }
 
+      // Use helper methods for blush_contour filtering
       if (targetArea == 'blush_contour') {
-        return productCategory.contains('blush') ||
-            productCategory.contains('contour');
+        return _isBlushProduct(product) || _isContourProduct(product);
       }
 
       if (targetArea == 'lips') {
@@ -346,6 +380,9 @@ class _InstructionsPageState extends State<InstructionsPage> {
 
       final productHex =
           (product['hex_code'] ?? '').toString().trim();
+
+      final productCategory =
+          (product['category'] ?? '').toString().toLowerCase();
 
       score += 10;
 
@@ -413,6 +450,47 @@ class _InstructionsPageState extends State<InstructionsPage> {
         }
       }
 
+      // Additional scoring for blush_contour products
+      if (targetArea == 'blush_contour') {
+        final productName = (product['name'] ?? '').toString().toLowerCase();
+        final shadeName = (product['shade_name'] ?? '').toString().toLowerCase();
+
+        final variationsRaw = product['variations'];
+        final variationsText = variationsRaw == null
+            ? ''
+            : variationsRaw.toString().toLowerCase();
+
+        final isBlush =
+            productCategory.contains('blush') ||
+            productName.contains('blush');
+
+        final isContour =
+            productCategory.contains('contour') ||
+            productName.contains('contour');
+
+        final isMultiPalette =
+            productCategory.contains('palette') ||
+            productName.contains('palette') ||
+            productName.contains('multi palette') ||
+            productName.contains('multi-palette');
+
+        final hasSet123 =
+            shadeName.contains('set 1') ||
+            shadeName.contains('set 2') ||
+            shadeName.contains('set 3') ||
+            variationsText.contains('set 1') ||
+            variationsText.contains('set 2') ||
+            variationsText.contains('set 3');
+
+        if (isBlush) {
+          score += 50;
+        }
+
+        if (isContour || (isMultiPalette && hasSet123)) {
+          score += 50;
+        }
+      }
+
       return {
         ...product,
         '_match_score': score,
@@ -423,7 +501,10 @@ class _InstructionsPageState extends State<InstructionsPage> {
       return (b['_match_score'] as int).compareTo(a['_match_score'] as int);
     });
 
-    final bestProducts = scoredProducts.take(2).toList();
+    // Keep all scored products for blush_contour, but limit others to 2
+    final bestProducts = targetArea == 'blush_contour'
+        ? scoredProducts
+        : scoredProducts.take(2).toList();
 
     // MARKET COLOR LOCKING:
     // The first/best product HEX becomes the official color.
@@ -439,13 +520,46 @@ class _InstructionsPageState extends State<InstructionsPage> {
     return bestProducts;
   }
 
+  // Fetch blush and contour products separately with debug prints
+  Future<List<Map<String, dynamic>>> _fetchBlushContourProducts() async {
+    final products = await _fetchRecommendedProducts('blush_contour');
+
+    final blushProducts = products
+        .where(_isBlushProduct)
+        .take(2)
+        .map((p) => {
+              ...p,
+              '_recommendation_group': 'BLUSH',
+            })
+        .toList();
+
+    final contourProducts = products
+        .where(_isContourProduct)
+        .take(2)
+        .map((p) => {
+              ...p,
+              '_recommendation_group': 'CONTOUR',
+            })
+        .toList();
+
+    debugPrint('BLUSH COUNT: ${blushProducts.length}');
+    debugPrint('CONTOUR COUNT: ${contourProducts.length}');
+
+    return [
+      ...blushProducts,
+      ...contourProducts,
+    ];
+  }
+
   Future<void> _prefetchRecommendedProductColor(String targetArea) async {
     if (_prefetchedTargetAreas.contains(targetArea)) return;
 
     _prefetchedTargetAreas.add(targetArea);
 
     try {
-      final products = await _fetchRecommendedProducts(targetArea);
+      final products = targetArea == 'blush_contour'
+          ? await _fetchBlushContourProducts()
+          : await _fetchRecommendedProducts(targetArea);
 
       if (products.isEmpty) return;
 
@@ -949,7 +1063,10 @@ class _InstructionsPageState extends State<InstructionsPage> {
       isScrollControlled: true,
       builder: (_) {
         return FutureBuilder<List<Map<String, dynamic>>>(
-          future: _fetchRecommendedProducts(targetArea),
+          // Use specialized method for blush_contour
+          future: targetArea == 'blush_contour'
+              ? _fetchBlushContourProducts()
+              : _fetchRecommendedProducts(targetArea),
           builder: (context, snapshot) {
             final loading = snapshot.connectionState == ConnectionState.waiting;
             final products = snapshot.data ?? [];
@@ -1009,9 +1126,21 @@ class _InstructionsPageState extends State<InstructionsPage> {
                               final shade = product['shade_name']?.toString() ?? '';
                               final price = product['price']?.toString() ?? '';
                               final imageUrl = product['image_url']?.toString() ?? '';
-                              // ignore: unused_local_variable
-                              final matchScore = product['_match_score']?.toString() ?? '';
-                              final matchLabel = index == 0 ? 'BEST MATCH' : 'ALTERNATIVE';
+                              final group = product['_recommendation_group']?.toString();
+
+                              // Dynamic match label based on product group
+                              String matchLabel;
+                              if (targetArea == 'blush_contour' && group != null) {
+                                final sameGroupIndex = products
+                                    .where((p) => p['_recommendation_group'] == group)
+                                    .toList()
+                                    .indexOf(product);
+                                matchLabel = sameGroupIndex == 0
+                                    ? '$group BEST MATCH'
+                                    : '$group ALTERNATIVE';
+                              } else {
+                                matchLabel = index == 0 ? 'BEST MATCH' : 'ALTERNATIVE';
+                              }
 
                               return Container(
                                 margin: const EdgeInsets.only(bottom: 12),
@@ -1054,7 +1183,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
                                             style: TextStyle(
                                               fontSize: 10,
                                               fontWeight: FontWeight.w900,
-                                              color: index == 0
+                                              color: matchLabel.contains('BEST')
                                                   ? const Color(0xFFFF3D93)
                                                   : const Color(0xFF777780),
                                               letterSpacing: 0.5,
@@ -1238,6 +1367,9 @@ class _InstructionsPageState extends State<InstructionsPage> {
   }
 
   // Recommended kit methods
+// ... (previous code remains the same until _buildFinalRecommendedKit) ...
+
+  // Recommended kit methods
   Future<void> _buildFinalRecommendedKit() async {
     if (_buildingRecommendedKit) return;
 
@@ -1257,24 +1389,59 @@ class _InstructionsPageState extends State<InstructionsPage> {
       final Map<String, Map<String, dynamic>> uniqueProducts = {};
 
       for (final targetArea in targetAreas) {
-        final products = await _fetchRecommendedProducts(targetArea);
+        final products = targetArea == 'blush_contour'
+            ? await _fetchBlushContourProducts()
+            : await _fetchRecommendedProducts(targetArea);
 
         if (products.isEmpty) continue;
 
-        final bestMatch = products.first;
-        final productId = bestMatch['id']?.toString();
+        // UPDATED: For blush_contour, find the best blush and best contour separately
+        List<Map<String, dynamic>> itemsToAdd;
 
-        if (productId == null || productId.isEmpty) continue;
-        if (uniqueProducts.containsKey(productId)) continue;
+        if (targetArea == 'blush_contour') {
+          final blushBest = products.where((p) {
+            final group = p['_recommendation_group']?.toString();
+            return group == 'BLUSH';
+          }).isNotEmpty
+              ? products.firstWhere((p) {
+                  final group = p['_recommendation_group']?.toString();
+                  return group == 'BLUSH';
+                })
+              : null;
 
-        uniqueProducts[productId] = {
-          ...bestMatch,
-          'quantity': 1,
-          'variation': {
-            'color_name': bestMatch['shade_name'],
-            'hex_code': bestMatch['hex_code'],
-          },
-        };
+          final contourBest = products.where((p) {
+            final group = p['_recommendation_group']?.toString();
+            return group == 'CONTOUR';
+          }).isNotEmpty
+              ? products.firstWhere((p) {
+                  final group = p['_recommendation_group']?.toString();
+                  return group == 'CONTOUR';
+                })
+              : null;
+
+          itemsToAdd = [
+            if (blushBest != null) blushBest,
+            if (contourBest != null) contourBest,
+          ];
+        } else {
+          itemsToAdd = [products.first];
+        }
+
+        for (final bestMatch in itemsToAdd) {
+          final productId = bestMatch['id']?.toString();
+
+          if (productId == null || productId.isEmpty) continue;
+          if (uniqueProducts.containsKey(productId)) continue;
+
+          uniqueProducts[productId] = {
+            ...bestMatch,
+            'quantity': 1,
+            'variation': {
+              'color_name': bestMatch['shade_name'],
+              'hex_code': bestMatch['hex_code'],
+            },
+          };
+        }
       }
 
       if (!mounted) return;
@@ -1299,6 +1466,8 @@ class _InstructionsPageState extends State<InstructionsPage> {
       }
     }
   }
+
+// ... (rest of the code remains the same) ...
 
   void _showFinalRecommendedKitSheet() {
     showModalBottomSheet(
