@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -27,8 +28,8 @@ class ScanResultPage extends StatefulWidget {
   final FaceProfile? faceProfile;
   final LookResult? look;
   final MakeupLookPreset selectedPreset;
-  final bool isRestoredSavedLook; // ADDED THIS PARAMETER
-  final List<Map<String, dynamic>>? restoredAiSteps; // ADDED THIS PARAMETER
+  final bool isRestoredSavedLook;
+  final List<Map<String, dynamic>>? restoredAiSteps;
 
   const ScanResultPage({
     super.key,
@@ -38,8 +39,8 @@ class ScanResultPage extends StatefulWidget {
     this.faceProfile,
     this.look,
     this.selectedPreset = MakeupLookPreset.softGlam,
-    this.isRestoredSavedLook = false, // ADDED WITH DEFAULT VALUE
-    this.restoredAiSteps, // ADDED
+    this.isRestoredSavedLook = false,
+    this.restoredAiSteps,
   });
 
   @override
@@ -52,30 +53,38 @@ class _ScanResultPageState extends State<ScanResultPage> {
 
   MakeupControlArea _selectedArea = MakeupControlArea.general;
 
-  final ValueNotifier<MakeupPreviewValues> _previewValues =
-      ValueNotifier<MakeupPreviewValues>(
-    const MakeupPreviewValues(
-      globalIntensity: 1.0,
-      lipOpacity: 1.0,
-      blushOpacity: 1.0,
-      eyeOpacity: 1.0,
-      linerOpacity: 1.0,
-      browOpacity: 1.0,
-    ),
-  );
+  // Individual ValueNotifiers for each opacity type
+  final ValueNotifier<double> _globalOpacity = ValueNotifier<double>(1.0);
+  final ValueNotifier<double> _lipOpacity = ValueNotifier<double>(1.0);
+  final ValueNotifier<double> _blushOpacity = ValueNotifier<double>(1.0);
+  final ValueNotifier<double> _eyeOpacity = ValueNotifier<double>(1.0);
+  final ValueNotifier<double> _linerOpacity = ValueNotifier<double>(1.0);
+  final ValueNotifier<double> _browOpacity = ValueNotifier<double>(1.0);
 
   late final MakeupLookPreset _currentPreset;
 
   @override
   void initState() {
     super.initState();
+
     _currentPreset = widget.selectedPreset;
+
+    // Use already-detected face immediately.
+    // This avoids waiting for ML Kit again.
+    _previewFace = widget.detectedFace;
+
     _loadPreviewAndDetect();
   }
 
   @override
   void dispose() {
-    _previewValues.dispose();
+    _globalOpacity.dispose();
+    _lipOpacity.dispose();
+    _blushOpacity.dispose();
+    _eyeOpacity.dispose();
+    _linerOpacity.dispose();
+    _browOpacity.dispose();
+
     super.dispose();
   }
 
@@ -83,45 +92,47 @@ class _ScanResultPageState extends State<ScanResultPage> {
     final path = widget.scannedImagePath;
     if (path == null) return;
 
-    final bytes = await File(path).readAsBytes();
-    final codec = await ui.instantiateImageCodec(bytes, targetWidth: 720);
-    final frame = await codec.getNextFrame();
-
-    if (!mounted) return;
-
-    setState(() {
-      _uiImage = frame.image;
-      _previewFace = null;
-    });
-
     try {
-      final tmpFile = await _writeUiImageToTempPng(frame.image);
-      final face = await _detectFaceOnFile(tmpFile.path);
+      final bytes = await File(path).readAsBytes();
+
+      final codec = await ui.instantiateImageCodec(
+        bytes,
+        targetWidth: 720,
+      );
+
+      final frame = await codec.getNextFrame();
 
       if (!mounted) return;
 
-      setState(() => _previewFace = face);
-      tmpFile.delete().catchError((_) => tmpFile);
+      setState(() {
+        _uiImage = frame.image;
+        _previewFace = widget.detectedFace;
+      });
+
+      // IMPORTANT:
+      // If the scan already gave us a face, do not run ML Kit again.
+      if (widget.detectedFace != null) {
+        return;
+      }
+
+      // Fallback only for restored/saved looks or missing face data.
+      final face = await _detectFaceOnFile(path);
+
+      if (!mounted) return;
+
+      setState(() {
+        _previewFace = face;
+      });
     } catch (_) {
       if (!mounted) return;
-      setState(() => _previewFace = null);
+
+      setState(() {
+        _previewFace = widget.detectedFace;
+      });
     }
   }
 
-  Future<File> _writeUiImageToTempPng(ui.Image image) async {
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    if (byteData == null) {
-      throw Exception('Failed to encode preview image.');
-    }
-
-    final pngBytes = byteData.buffer.asUint8List();
-    final dir = await Directory.systemTemp.createTemp('ft_preview_');
-    final file = File('${dir.path}/preview.png');
-
-    await file.writeAsBytes(pngBytes, flush: true);
-    return file;
-  }
-
+  // Keep for fallback when needed
   Future<Face?> _detectFaceOnFile(String filePath) async {
     final detector = FaceDetector(
       options: FaceDetectorOptions(
@@ -142,20 +153,25 @@ class _ScanResultPageState extends State<ScanResultPage> {
     }
   }
 
-  double _valueForArea(MakeupPreviewValues values) {
+  ValueNotifier<double> _notifierForArea() {
     switch (_selectedArea) {
       case MakeupControlArea.lips:
-        return values.lipOpacity;
+        return _lipOpacity;
+
       case MakeupControlArea.eyebrows:
-        return values.browOpacity;
+        return _browOpacity;
+
       case MakeupControlArea.eyeshadow:
-        return values.eyeOpacity;
+        return _eyeOpacity;
+
       case MakeupControlArea.eyeliner:
-        return values.linerOpacity;
+        return _linerOpacity;
+
       case MakeupControlArea.blush:
-        return values.blushOpacity;
+        return _blushOpacity;
+
       case MakeupControlArea.general:
-        return values.globalIntensity;
+        return _globalOpacity;
     }
   }
 
@@ -194,39 +210,24 @@ class _ScanResultPageState extends State<ScanResultPage> {
   }
 
   void _updateAreaValue(double value) {
-    final current = _previewValues.value;
+    value = value.clamp(0.0, 1.0);
 
-    switch (_selectedArea) {
-      case MakeupControlArea.lips:
-        _previewValues.value = current.copyWith(lipOpacity: value);
-        break;
-      case MakeupControlArea.eyebrows:
-        _previewValues.value = current.copyWith(browOpacity: value);
-        break;
-      case MakeupControlArea.eyeshadow:
-        _previewValues.value = current.copyWith(eyeOpacity: value);
-        break;
-      case MakeupControlArea.eyeliner:
-        _previewValues.value = current.copyWith(linerOpacity: value);
-        break;
-      case MakeupControlArea.blush:
-        _previewValues.value = current.copyWith(blushOpacity: value);
-        break;
-      case MakeupControlArea.general:
-        _previewValues.value = current.copyWith(globalIntensity: value);
-        break;
+    final notifier = _notifierForArea();
+
+    if ((notifier.value - value).abs() < 0.006) {
+      return;
     }
+
+    notifier.value = value;
   }
 
   void _resetAll() {
-    _previewValues.value = const MakeupPreviewValues(
-      globalIntensity: 1.0,
-      lipOpacity: 1.0,
-      blushOpacity: 1.0,
-      eyeOpacity: 1.0,
-      linerOpacity: 1.0,
-      browOpacity: 1.0,
-    );
+    _globalOpacity.value = 1.0;
+    _lipOpacity.value = 1.0;
+    _blushOpacity.value = 1.0;
+    _eyeOpacity.value = 1.0;
+    _linerOpacity.value = 1.0;
+    _browOpacity.value = 1.0;
 
     setState(() {
       _selectedArea = MakeupControlArea.general;
@@ -327,16 +328,23 @@ class _ScanResultPageState extends State<ScanResultPage> {
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            FacePreviewCard(
-                              uiImage: _uiImage,
-                              scannedImagePath: widget.scannedImagePath,
-                              canOverlay: canOverlay,
-                              faceForOverlay: faceForOverlay,
-                              look: widget.look,
-                              faceProfile: widget.faceProfile,
-                              preset: _currentPreset,
-                              previewValues: _previewValues,
-                              makeupLayer: MakeupLayer.full,
+                            RepaintBoundary(
+                              child: FacePreviewCard(
+                                uiImage: _uiImage,
+                                scannedImagePath: widget.scannedImagePath,
+                                canOverlay: canOverlay,
+                                faceForOverlay: faceForOverlay,
+                                look: widget.look,
+                                faceProfile: widget.faceProfile,
+                                preset: _currentPreset,
+                                globalOpacity: _globalOpacity,
+                                lipOpacity: _lipOpacity,
+                                blushOpacity: _blushOpacity,
+                                eyeOpacity: _eyeOpacity,
+                                linerOpacity: _linerOpacity,
+                                browOpacity: _browOpacity,
+                                makeupLayer: MakeupLayer.full,
+                              ),
                             ),
                             Positioned(
                               top: 12,
@@ -391,15 +399,13 @@ class _ScanResultPageState extends State<ScanResultPage> {
 
                       const SizedBox(height: 10),
 
-                      ValueListenableBuilder<MakeupPreviewValues>(
-                        valueListenable: _previewValues,
-                        builder: (context, values, _) {
-                          final selectedValue = _valueForArea(values);
-
+                      ValueListenableBuilder<double>(
+                        valueListenable: _notifierForArea(),
+                        builder: (_, sliderValue, __) {
                           return _SingleOpacityCard(
                             title: _titleForArea(),
                             subtitle: _subtitleForArea(),
-                            value: selectedValue,
+                            value: sliderValue,
                             onChanged: _updateAreaValue,
                           );
                         },
@@ -411,7 +417,6 @@ class _ScanResultPageState extends State<ScanResultPage> {
                         onTutorial: widget.look == null
                             ? null
                             : () {
-                                // UPDATED: Pass restored look parameters to InstructionsPage
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
