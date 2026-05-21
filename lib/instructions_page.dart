@@ -44,6 +44,8 @@ class InstructionsPage extends StatefulWidget {
   final String? scannedImagePath;
   final Face? detectedFace;
   final MakeupLookPreset selectedPreset;
+  final bool isRestoredSavedLook;
+  final List<Map<String, dynamic>>? restoredAiSteps;
 
   const InstructionsPage({
     super.key,
@@ -52,6 +54,8 @@ class InstructionsPage extends StatefulWidget {
     this.scannedImagePath,
     this.detectedFace,
     required this.selectedPreset,
+    this.isRestoredSavedLook = false,
+    this.restoredAiSteps,
   });
 
   @override
@@ -93,10 +97,18 @@ class _InstructionsPageState extends State<InstructionsPage> {
     super.initState();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (widget.isRestoredSavedLook) {
+        setState(() {
+          _selectedSkinType = SkinType.normal;
+          _aiSteps = widget.restoredAiSteps ?? [];
+          _loadingAI = false;
+        });
+
+        return;
+      }
+
       await _showSkinTypeSheet();
-
       await _lockMarketColorsForLook();
-
       await _generateAIInstructions();
     });
   }

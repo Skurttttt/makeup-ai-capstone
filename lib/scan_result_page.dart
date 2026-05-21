@@ -27,6 +27,8 @@ class ScanResultPage extends StatefulWidget {
   final FaceProfile? faceProfile;
   final LookResult? look;
   final MakeupLookPreset selectedPreset;
+  final bool isRestoredSavedLook; // ADDED THIS PARAMETER
+  final List<Map<String, dynamic>>? restoredAiSteps; // ADDED THIS PARAMETER
 
   const ScanResultPage({
     super.key,
@@ -36,6 +38,8 @@ class ScanResultPage extends StatefulWidget {
     this.faceProfile,
     this.look,
     this.selectedPreset = MakeupLookPreset.softGlam,
+    this.isRestoredSavedLook = false, // ADDED WITH DEFAULT VALUE
+    this.restoredAiSteps, // ADDED
   });
 
   @override
@@ -407,6 +411,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
                         onTutorial: widget.look == null
                             ? null
                             : () {
+                                // UPDATED: Pass restored look parameters to InstructionsPage
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
@@ -416,6 +421,8 @@ class _ScanResultPageState extends State<ScanResultPage> {
                                       scannedImagePath: widget.scannedImagePath,
                                       detectedFace: faceForOverlay,
                                       selectedPreset: _currentPreset,
+                                      isRestoredSavedLook: widget.isRestoredSavedLook,
+                                      restoredAiSteps: widget.restoredAiSteps,
                                     ),
                                   ),
                                 );
