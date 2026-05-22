@@ -221,20 +221,30 @@ class EyebrowGuidePainter extends CustomPainter {
 
     canvas.drawPath(path, mainPaint);
 
-    // --- Points with correct numbering order for each brow ---
-    // The curve is drawn from start → arch → tail
-    // But due to mirroring, on LEFT brow, 'start' is outer tail and 'tail' is inner brow
-    if (isLeft) {
-      // LEFT eyebrow: reverse numbering to show inner (near nose) → arch → tail (outer)
-      // So: tail (inner) = 1, arch = 2, start (outer) = 3
-      _drawPoint(canvas, tail, '1');   // Inner brow (near nose)
-      _drawPoint(canvas, arch, '2');    // Arch (highest point)
-      _drawPoint(canvas, start, '3');   // Tail (outer edge)
+    // --- Points with correct numbering order for each brow based on screen side ---
+    final faceCenterX = face.boundingBox.center.dx;
+
+    // Determine ACTUAL screen side
+    final isScreenLeftBrow = bounds.center.dx < faceCenterX;
+
+    if (isScreenLeftBrow) {
+      // LEFT SIDE OF SCREEN
+      // inner brow is toward RIGHT (near nose)
+      final inner = bounds.right > bounds.left ? start : tail;
+      final outer = bounds.right > bounds.left ? tail : start;
+
+      _drawPoint(canvas, inner, '1');
+      _drawPoint(canvas, arch, '2');
+      _drawPoint(canvas, outer, '3');
     } else {
-      // RIGHT eyebrow: normal numbering (start is inner, tail is outer)
-      _drawPoint(canvas, start, '1');   // Inner brow (near nose)
-      _drawPoint(canvas, arch, '2');    // Arch (highest point)
-      _drawPoint(canvas, tail, '3');    // Tail (outer edge)
+      // RIGHT SIDE OF SCREEN
+      // inner brow is toward LEFT (near nose)
+      final inner = bounds.left < bounds.right ? start : tail;
+      final outer = bounds.left < bounds.right ? tail : start;
+
+      _drawPoint(canvas, inner, '1');
+      _drawPoint(canvas, arch, '2');
+      _drawPoint(canvas, outer, '3');
     }
   }
 

@@ -27,28 +27,13 @@ class _MarketTabState extends State<MarketTab>
   // Filter state
   String? _selectedCategory;
   double _minPrice = 0;
-  double _maxPrice = 100000;
+  double _maxPrice = 10000;
+  List<String> _dbCategories = [];
   String _sortBy = 'newest';
   bool _showFilters = false;
-  Map<String, double> _categoryMaxPrices = {};
   List<Map<String, dynamic>> _allProducts = [];
   bool _isLoading = true;
   String? _errorMessage;
-
-  // Quick category chips - Shopee style
-  final List<Map<String, dynamic>> _quickCategories = [
-    {'name': 'All', 'icon': Icons.grid_view, 'color': 0xFFFF4D97},
-    {'name': 'Lipstick', 'icon': Icons.color_lens, 'color': 0xFFE91E63},
-    {'name': 'Blush', 'icon': Icons.brush, 'color': 0xFFF48FB1},
-    {'name': 'Foundation', 'icon': Icons.opacity, 'color': 0xFFD2B48C},
-    {'name': 'Concealer', 'icon': Icons.face, 'color': 0xFFF5DEB3},
-    {'name': 'Eyeshadow', 'icon': Icons.visibility, 'color': 0xFF9C27B0},
-    {'name': 'Eyeliner', 'icon': Icons.draw, 'color': 0xFF3F51B5},
-    {'name': 'Mascara', 'icon': Icons.remove_red_eye, 'color': 0xFF009688},
-    {'name': 'Tools', 'icon': Icons.build, 'color': 0xFF607D8B},
-  ];
-
-  // Featured products
 
   // Animation
   late AnimationController _cartAnimationController;
@@ -94,15 +79,21 @@ class _MarketTabState extends State<MarketTab>
     });
 
     try {
-      var query = Supabase.instance.client
+      final response = await Supabase.instance.client
           .from('products')
           .select(
-            'id, name, price, currency, image_url, category, is_active, stock_quantity, description, business_id, variations, created_at',
+            'id, name, price, currency, image_url, category, is_active, stock_quantity, description, business_id, variations, created_at, hex_code, shade_name, color_family',
           )
           .eq('is_active', true);
 
-      final response = await query;
       var products = List<Map<String, dynamic>>.from(response);
+
+      final categories = products
+          .map((p) => (p['category'] ?? '').toString().trim())
+          .where((c) => c.isNotEmpty)
+          .toSet()
+          .toList()
+        ..sort();
 
       debugPrint('Products found: ${products.length}');
 
@@ -110,16 +101,17 @@ class _MarketTabState extends State<MarketTab>
         setState(() {
           _isLoading = false;
           _allProducts = [];
+          _dbCategories = categories;
           _errorMessage = null;
         });
         return;
       }
 
       products = _applyFiltersAndSort(products);
-      _calculateCategoryMaxPrices(products);
 
       setState(() {
         _allProducts = products;
+        _dbCategories = categories;
         _isLoading = false;
       });
     } catch (e) {
@@ -186,7 +178,6 @@ class _MarketTabState extends State<MarketTab>
         );
         break;
       case 'newest':
-      default:
         filtered.sort((a, b) {
           final aDate = a['created_at'] != null
               ? DateTime.tryParse(a['created_at'].toString())
@@ -200,28 +191,27 @@ class _MarketTabState extends State<MarketTab>
           return bDate.compareTo(aDate);
         });
         break;
+
+      case 'oldest':
+        filtered.sort((a, b) {
+          final aDate = a['created_at'] != null
+              ? DateTime.tryParse(a['created_at'].toString())
+              : null;
+          final bDate = b['created_at'] != null
+              ? DateTime.tryParse(b['created_at'].toString())
+              : null;
+          if (aDate == null && bDate == null) return 0;
+          if (aDate == null) return 1;
+          if (bDate == null) return -1;
+          return aDate.compareTo(bDate);
+        });
+        break;
+
+      default:
+        break;
     }
 
     return filtered;
-  }
-
-  void _calculateCategoryMaxPrices(List<Map<String, dynamic>> products) {
-    Map<String, double> maxPrices = {};
-    for (var product in products) {
-      final category = (product['category'] ?? 'Other').toString();
-      final price = (product['price'] ?? 0).toDouble();
-      if (!maxPrices.containsKey(category) || price > maxPrices[category]!) {
-        maxPrices[category] = price;
-      }
-    }
-    if (mounted) {
-      setState(() {
-        _categoryMaxPrices = maxPrices;
-        if (maxPrices.values.isNotEmpty) {
-          _maxPrice = maxPrices.values.reduce((a, b) => a > b ? a : b);
-        }
-      });
-    }
   }
 
   Future<void> _addToCart(
@@ -375,6 +365,51 @@ class _MarketTabState extends State<MarketTab>
   Color _contrastColor(Color background) {
     final luminance = background.computeLuminance();
     return luminance > 0.5 ? Colors.black87 : Colors.white;
+  }
+
+  List<Map<String, dynamic>> get _marketCategories {
+    return [
+      {'name': 'All', 'icon': Icons.grid_view, 'color': 0xFFFF4D97},
+      ..._dbCategories.map((category) {
+        return {
+          'name': category,
+          'icon': _iconForCategory(category),
+          'color': _colorForCategory(category),
+        };
+      }),
+    ];
+  }
+
+  IconData _iconForCategory(String category) {
+    final c = category.toLowerCase();
+
+    if (c.contains('lip')) return Icons.color_lens;
+    if (c.contains('blush')) return Icons.brush;
+    if (c.contains('foundation')) return Icons.opacity;
+    if (c.contains('concealer')) return Icons.face;
+    if (c.contains('eyeshadow')) return Icons.visibility;
+    if (c.contains('eyeliner')) return Icons.draw;
+    if (c.contains('mascara')) return Icons.remove_red_eye;
+    if (c.contains('tool') || c.contains('brush')) return Icons.build;
+    if (c.contains('setting')) return Icons.spa;
+
+    return Icons.shopping_bag_outlined;
+  }
+
+  int _colorForCategory(String category) {
+    final c = category.toLowerCase();
+
+    if (c.contains('lip')) return 0xFFE91E63;
+    if (c.contains('blush')) return 0xFFF48FB1;
+    if (c.contains('foundation')) return 0xFFD2B48C;
+    if (c.contains('concealer')) return 0xFFF5DEB3;
+    if (c.contains('eyeshadow')) return 0xFF9C27B0;
+    if (c.contains('eyeliner')) return 0xFF3F51B5;
+    if (c.contains('mascara')) return 0xFF009688;
+    if (c.contains('tool') || c.contains('brush')) return 0xFF607D8B;
+    if (c.contains('setting')) return 0xFFFF9800;
+
+    return 0xFFFF4D97;
   }
 
   @override
@@ -547,93 +582,78 @@ class _MarketTabState extends State<MarketTab>
                     Container(
                       color: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          final isNarrow = constraints.maxWidth < 360;
-                          final tileWidth = isNarrow ? 60.0 : 70.0;
-                          final iconBox = isNarrow ? 44.0 : 50.0;
-                          final iconSize = isNarrow ? 24.0 : 28.0;
-                          final rowHeight = isNarrow ? 82.0 : 90.0;
-                          return SizedBox(
-                            height: rowHeight,
-                            child: ListView.builder(
-                              scrollDirection: Axis.horizontal,
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 12),
-                              itemCount: _quickCategories.length,
-                              itemBuilder: (context, index) {
-                                final category = _quickCategories[index];
-                                final isSelected =
-                                    _selectedCategory == category['name'];
-                                return GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      _selectedCategory =
-                                          category['name'] == 'All'
-                                              ? null
-                                              : category['name'];
-                                      _fetchProducts();
-                                    });
-                                  },
-                                  child: Container(
-                                    width: tileWidth,
-                                    margin: const EdgeInsets.symmetric(
-                                      horizontal: 4,
-                                    ),
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Container(
-                                          width: iconBox,
-                                          height: iconBox,
-                                          decoration: BoxDecoration(
-                                            color: isSelected
-                                                ? const Color(0xFFFF4D97)
-                                                    .withOpacity(0.15)
-                                                : Colors.grey.shade50,
-                                            borderRadius: BorderRadius.circular(
-                                                iconBox / 2),
-                                            border: isSelected
-                                                ? Border.all(
-                                                    color: const Color(
-                                                        0xFFFF4D97),
-                                                    width: 2,
-                                                  )
-                                                : null,
-                                          ),
-                                          child: Icon(
-                                            category['icon'] as IconData,
-                                            color: isSelected
-                                                ? const Color(0xFFFF4D97)
-                                                : Color(
-                                                    category['color'] as int),
-                                            size: iconSize,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 6),
-                                        Text(
-                                          category['name'] as String,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontSize: isNarrow ? 10 : 11,
-                                            color: isSelected
-                                                ? const Color(0xFFFF4D97)
-                                                : Colors.black87,
-                                            fontWeight: isSelected
-                                                ? FontWeight.w600
-                                                : FontWeight.normal,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
+                      child: SizedBox(
+                        height: 90,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          itemCount: _marketCategories.length,
+                          itemBuilder: (context, index) {
+                            final category = _marketCategories[index];
+                            final isSelected =
+                                _selectedCategory == category['name'];
+                            return GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _selectedCategory = category['name'] == 'All'
+                                      ? null
+                                      : category['name'];
+                                  _fetchProducts();
+                                });
                               },
-                            ),
-                          );
-                        },
+                              child: Container(
+                                width: 70,
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      width: 50,
+                                      height: 50,
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? const Color(0xFFFF4D97)
+                                                .withOpacity(0.15)
+                                            : Colors.grey.shade50,
+                                        borderRadius: BorderRadius.circular(25),
+                                        border: isSelected
+                                            ? Border.all(
+                                                color: const Color(0xFFFF4D97),
+                                                width: 2,
+                                              )
+                                            : null,
+                                      ),
+                                      child: Icon(
+                                        category['icon'] as IconData,
+                                        color: isSelected
+                                            ? const Color(0xFFFF4D97)
+                                            : Color(category['color'] as int),
+                                        size: 28,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      category['name'] as String,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: isSelected
+                                            ? const Color(0xFFFF4D97)
+                                            : Colors.black87,
+                                        fontWeight: isSelected
+                                            ? FontWeight.w600
+                                            : FontWeight.normal,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
 
@@ -710,11 +730,7 @@ class _MarketTabState extends State<MarketTab>
                                   onPressed: () {
                                     setState(() {
                                       _minPrice = 0;
-                                      _maxPrice = _categoryMaxPrices.isEmpty
-                                          ? 100000
-                                          : _categoryMaxPrices.values.reduce(
-                                              (a, b) => a > b ? a : b,
-                                            );
+                                      _maxPrice = 10000;
                                       _fetchProducts();
                                     });
                                   },
@@ -729,13 +745,17 @@ class _MarketTabState extends State<MarketTab>
                               ],
                             ),
                             RangeSlider(
-                              values: RangeValues(_minPrice, _maxPrice),
+                              values: RangeValues(
+                                _minPrice.clamp(0, 10000),
+                                _maxPrice.clamp(0, 10000),
+                              ),
                               min: 0,
-                              max: _categoryMaxPrices.isEmpty
-                                  ? 100000
-                                  : _categoryMaxPrices.values.reduce(
-                                      (a, b) => a > b ? a : b,
-                                    ),
+                              max: 10000,
+                              divisions: 100,
+                              labels: RangeLabels(
+                                '₱${_minPrice.toStringAsFixed(0)}',
+                                '₱${_maxPrice.toStringAsFixed(0)}',
+                              ),
                               onChanged: (values) {
                                 setState(() {
                                   _minPrice = values.start;
@@ -871,11 +891,7 @@ class _MarketTabState extends State<MarketTab>
                                 _searchController.clear();
                                 _selectedCategory = null;
                                 _minPrice = 0;
-                                _maxPrice = _categoryMaxPrices.isEmpty
-                                    ? 100000
-                                    : _categoryMaxPrices.values.reduce(
-                                        (a, b) => a > b ? a : b,
-                                      );
+                                _maxPrice = 10000;
                                 _fetchProducts();
                               });
                             },
@@ -896,36 +912,20 @@ class _MarketTabState extends State<MarketTab>
               else
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  sliver: SliverLayoutBuilder(
-                    builder: (context, constraints) {
-                      final width = constraints.crossAxisExtent;
-                      // Aim for ~170-200px wide cards. Compute column count.
-                      final columns = width < 360
-                          ? 2
-                          : width < 600
-                              ? 2
-                              : width < 900
-                                  ? 3
-                                  : (width / 220).floor();
-                      // Tune aspect ratio so card fits on every phone.
-                      final aspect = width < 360 ? 0.62 : 0.66;
-                      return SliverGrid(
-                        gridDelegate:
-                            SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: columns,
-                          mainAxisSpacing: 12,
-                          crossAxisSpacing: 12,
-                          childAspectRatio: aspect,
-                        ),
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) => _buildShopeeStyleCard(
-                            context,
-                            _allProducts[index],
-                          ),
-                          childCount: _allProducts.length,
-                        ),
-                      );
-                    },
+                  sliver: SliverGrid(
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: 0.62,
+                    ),
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) => _buildShopeeStyleCard(
+                        context,
+                        _allProducts[index],
+                      ),
+                      childCount: _allProducts.length,
+                    ),
                   ),
                 ),
 
@@ -935,20 +935,20 @@ class _MarketTabState extends State<MarketTab>
 
           // Floating chat-with-seller bubble
           Positioned(
-              right: 16,
-              bottom: 24,
-              child: FloatingActionButton.extended(
-                heroTag: 'market_chat_fab',
-                backgroundColor: const Color(0xFFFF4D97),
-                foregroundColor: Colors.white,
-                icon: const Icon(Icons.chat_bubble_outline),
-                label: const Text(
-                  'Chat with Seller',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                onPressed: () => _openChatWithSeller(const {}),
+            right: 16,
+            bottom: 24,
+            child: FloatingActionButton.extended(
+              heroTag: 'market_chat_fab',
+              backgroundColor: const Color(0xFFFF4D97),
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.chat_bubble_outline),
+              label: const Text(
+                'Chat with Seller',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
+              onPressed: () => _openChatWithSeller(const {}),
             ),
+          ),
         ],
       ),
     );
@@ -1003,6 +1003,8 @@ class _MarketTabState extends State<MarketTab>
     switch (_sortBy) {
       case 'newest':
         return 'Newest';
+      case 'oldest':
+        return 'Oldest';
       case 'price_asc':
         return 'Price: Low to High';
       case 'price_desc':
@@ -1015,46 +1017,100 @@ class _MarketTabState extends State<MarketTab>
   void _showSortDialog() {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Sort By',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 26),
+          decoration: const BoxDecoration(
+            color: Color(0xFFFFF7FA),
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(26),
             ),
-            const SizedBox(height: 16),
-            _buildSortOption('Newest', 'newest'),
-            _buildSortOption('Price: Low to High', 'price_asc'),
-            _buildSortOption('Price: High to Low', 'price_desc'),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 44,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFD3E5),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+
+                const SizedBox(height: 18),
+
+                const Text(
+                  'Sort By',
+                  style: TextStyle(
+                    fontSize: 21,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF171725),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                _buildSortOption('Newest', 'newest'),
+                _buildSortOption('Oldest', 'oldest'),
+                _buildSortOption('Price: Low to High', 'price_asc'),
+                _buildSortOption('Price: High to Low', 'price_desc'),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildSortOption(String label, String value) {
     final isSelected = _sortBy == value;
-    return ListTile(
-      title: Text(
-        label,
-        style: TextStyle(
-          color: isSelected ? const Color(0xFFFF4D97) : Colors.black87,
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: isSelected
+            ? const Color(0xFFFFE5F0)
+            : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isSelected
+              ? const Color(0xFFFF4D97)
+              : const Color(0xFFFFD8E8),
         ),
       ),
-      trailing: isSelected
-          ? const Icon(Icons.check, color: Color(0xFFFF4D97))
-          : null,
-      onTap: () {
-        setState(() => _sortBy = value);
-        Navigator.pop(context);
-        _fetchProducts();
-      },
+      child: ListTile(
+        dense: true,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 4,
+        ),
+        title: Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: isSelected ? FontWeight.w900 : FontWeight.w700,
+            color: isSelected
+                ? const Color(0xFFFF3D93)
+                : const Color(0xFF33333A),
+          ),
+        ),
+        trailing: isSelected
+            ? const Icon(
+                Icons.check_circle_rounded,
+                color: Color(0xFFFF3D93),
+                size: 22,
+              )
+            : null,
+        onTap: () {
+          setState(() => _sortBy = value);
+          Navigator.pop(context);
+          _fetchProducts();
+        },
+      ),
     );
   }
 
@@ -1065,200 +1121,231 @@ class _MarketTabState extends State<MarketTab>
     final name = product['name']?.toString() ?? 'Unnamed Product';
     final price = (product['price'] as num?)?.toDouble() ?? 0;
     final imageUrl = product['image_url']?.toString();
-    final category = product['category']?.toString();
+    final shadeName = product['shade_name']?.toString() ?? '';
+    final hexCode = product['hex_code']?.toString() ?? '';
+    final shadeColor = _safeParseColor(hexCode);
     final stockQuantity = (product['stock_quantity'] as int?) ?? 0;
     final isLoading = _loadingProductId == product['id']?.toString();
-
     final isOutOfStock = stockQuantity <= 0;
 
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       clipBehavior: Clip.antiAlias,
       elevation: 1,
       shadowColor: Colors.black.withOpacity(0.06),
       child: InkWell(
         onTap: () => _showProductDetail(context, product),
-        splashColor: const Color(0xFFFF4D97).withOpacity(0.08),
-        highlightColor: const Color(0xFFFF4D97).withOpacity(0.04),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Image with badges - square, fills full card width
-            Stack(
-              children: [
-                AspectRatio(
-                  aspectRatio: 1,
-                  child: Container(
-                    color: Colors.grey.shade100,
-                    child: imageUrl == null || imageUrl.isEmpty
-                        ? const Icon(Icons.image, size: 48, color: Colors.grey)
-                        : Image.network(
-                            imageUrl,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => const Icon(
-                              Icons.broken_image,
-                              size: 48,
-                              color: Colors.grey,
-                            ),
-                          ),
-                  ),
-                ),
-                if (isOutOfStock)
-                  Positioned(
-                    top: 8,
-                    left: 8,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFFFD8E8)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Stack(
+                children: [
+                  AspectRatio(
+                    aspectRatio: 1.12,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.7),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Text(
-                        'Out of Stock',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w600,
+                      width: double.infinity,
+                      color: Colors.grey.shade100,
+                      child: imageUrl == null || imageUrl.isEmpty
+                          ? const Icon(
+                              Icons.image_outlined,
+                              size: 42,
+                              color: Colors.grey,
+                            )
+                          : Image.network(
+                              imageUrl,
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              errorBuilder: (_, __, ___) => const Icon(
+                                Icons.broken_image_outlined,
+                                size: 42,
+                                color: Colors.grey,
+                              ),
+                            ),
+                    ),
+                  ),
+                  if (isOutOfStock)
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.70),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Text(
+                          'Out of Stock',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-              ],
-            ),
+                ],
+              ),
 
-            // Product info — flexible so it never overflows
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.max,
-                  children: [
-                    Flexible(
-                      child: Text(
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 9, 10, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
                         name,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 12.5,
-                          fontWeight: FontWeight.w500,
-                          height: 1.25,
-                          color: Colors.black87,
+                          fontWeight: FontWeight.w800,
+                          height: 1.15,
+                          color: Color(0xFF171725),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
+
+                      const SizedBox(height: 5),
+
+                      Text(
                         '₱${price.toStringAsFixed(0)}',
                         style: const TextStyle(
-                          color: Color(0xFFFF4D97),
-                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFFF3D93),
+                          fontWeight: FontWeight.w900,
                           fontSize: 15,
                         ),
                       ),
-                    ),
-                    if (category != null && category.isNotEmpty)
-                      Text(
-                        category,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.grey.shade500,
+
+                      const SizedBox(height: 5),
+
+                      if (shadeName.isNotEmpty || shadeColor != null)
+                        Row(
+                          children: [
+                            Container(
+                              width: 14,
+                              height: 14,
+                              decoration: BoxDecoration(
+                                color: shadeColor ?? const Color(0xFFFFD3E5),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.black.withOpacity(0.08),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                shadeName.isEmpty ? 'Shade' : shadeName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    const Spacer(),
-                    // Action buttons row — pinned to bottom
-                    SizedBox(
-                      height: 30,
-                      child: Row(
+
+                      const Spacer(),
+
+                      Row(
                         children: [
                           Expanded(
-                            child: OutlinedButton(
-                              onPressed: isOutOfStock
-                                  ? null
-                                  : () => _addToCart(product),
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(
-                                  color: Color(0xFFFF4D97),
+                            child: SizedBox(
+                              height: 30,
+                              child: OutlinedButton(
+                                onPressed: isOutOfStock
+                                    ? null
+                                    : () => _addToCart(product),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(
+                                    color: Color(0xFFFF4D97),
+                                  ),
+                                  padding: EdgeInsets.zero,
+                                  foregroundColor: const Color(0xFFFF4D97),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
                                 ),
-                                padding: EdgeInsets.zero,
-                                foregroundColor: const Color(0xFFFF4D97),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                              ),
-                              child: isLoading
-                                  ? const SizedBox(
-                                      height: 14,
-                                      width: 14,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Color(0xFFFF4D97),
-                                      ),
-                                    )
-                                  : const FittedBox(
-                                      child: Text(
-                                        'Cart',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
+                                child: isLoading
+                                    ? const SizedBox(
+                                        height: 13,
+                                        width: 13,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
                                           color: Color(0xFFFF4D97),
                                         ),
-                                      ),
-                                    ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed:
-                                  isOutOfStock ? null : () => _buyNow(product),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFFF4D97),
-                                foregroundColor: Colors.white,
-                                padding: EdgeInsets.zero,
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                              ),
-                              child: isLoading
-                                  ? const SizedBox(
-                                      height: 14,
-                                      width: 14,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : const FittedBox(
-                                      child: Text(
-                                        'Buy',
+                                      )
+                                    : const Text(
+                                        'Cart',
                                         style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.white,
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w800,
                                         ),
                                       ),
-                                    ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 7),
+                          Expanded(
+                            child: SizedBox(
+                              height: 30,
+                              child: ElevatedButton(
+                                onPressed:
+                                    isOutOfStock ? null : () => _buyNow(product),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFFF4D97),
+                                  foregroundColor: Colors.white,
+                                  padding: EdgeInsets.zero,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                child: isLoading
+                                    ? const SizedBox(
+                                        height: 13,
+                                        width: 13,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : const Text(
+                                        'Buy',
+                                        style: TextStyle(
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                              ),
                             ),
                           ),
                         ],
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1763,4 +1850,3 @@ class _MarketTabState extends State<MarketTab>
     }
   }
 }
-

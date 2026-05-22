@@ -1,4 +1,5 @@
 // lib/painters/makeup_overlay_painter.dart
+
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
@@ -15,9 +16,6 @@ import 'contour_highlight_painter.dart';
 import 'eyebrow_painter.dart';
 
 class MakeupOverlayPainter extends CustomPainter {
-  /// Optional for backward compatibility.
-  /// In ultra performance mode, ScanResultPage draws the image using RawImage
-  /// in a separate RepaintBoundary, so this painter only draws makeup layers.
   final ui.Image? image;
   final Face face;
 
@@ -25,10 +23,8 @@ class MakeupOverlayPainter extends CustomPainter {
   final Color blushColor;
   final Color eyeshadowColor;
 
-  /// Global opacity/intensity for the whole makeup look.
   final double intensity;
 
-  /// Individual layer opacity controls.
   final double lipstickOpacity;
   final double blushOpacity;
   final double contourOpacity;
@@ -46,6 +42,7 @@ class MakeupOverlayPainter extends CustomPainter {
   final MakeupLookPreset preset;
   final bool debugMode;
   final bool isLiveMode;
+
   final double? leftCheekLuminance;
   final double? rightCheekLuminance;
 
@@ -60,7 +57,7 @@ class MakeupOverlayPainter extends CustomPainter {
 
   final MakeupLayer makeupLayer;
 
-  MakeupOverlayPainter({
+  const MakeupOverlayPainter({
     this.image,
     required this.face,
     required this.lipstickColor,
@@ -94,93 +91,72 @@ class MakeupOverlayPainter extends CustomPainter {
   });
 
   double _layerIntensity(double layerOpacity) {
-    return (intensity.clamp(0.0, 1.0) * layerOpacity.clamp(0.0, 1.0))
+    return (intensity.clamp(0.0, 1.0) *
+            layerOpacity.clamp(0.0, 1.0))
         .clamp(0.0, 1.0);
+  }
+
+  bool _isLayer(MakeupLayer layer) {
+    return makeupLayer == MakeupLayer.full ||
+        makeupLayer == layer;
   }
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Backward compatibility only. In ultra mode this is null, because the
-    // base photo is drawn by RawImage in ScanResultPage and does not repaint.
     final baseImage = image;
+
     if (baseImage != null) {
       canvas.drawImage(baseImage, Offset.zero, Paint());
     }
 
-    if (debugMode) {
-      canvas.drawRect(
-        Rect.fromLTWH(20, 20, 60, 60),
-        Paint()
-          ..color = Colors.green.withOpacity(0.8)
-          ..style = PaintingStyle.fill,
-      );
-    }
+    final global = intensity.clamp(0.0, 1.0);
 
-    final globalIntensity = intensity.clamp(0.0, 1.0);
-    if (globalIntensity <= 0.001) return;
+    if (global <= 0.001) return;
 
     final browIntensity = _layerIntensity(browOpacity);
-    final eyeshadowIntensity = _layerIntensity(eyeshadowOpacity);
-    final eyelinerIntensity = _layerIntensity(eyelinerOpacity);
-    final blushIntensity = _layerIntensity(blushOpacity);
-    final contourIntensity = _layerIntensity(contourOpacity);
-    final lipIntensity = _layerIntensity(lipstickOpacity);
-
-    final shouldPaintBrows =
-        showBrows &&
-        browIntensity > 0.001 &&
-        (makeupLayer == MakeupLayer.full || makeupLayer == MakeupLayer.brows);
-
-    final shouldPaintEyeshadow =
-        showEyeshadow &&
-        eyeshadowIntensity > 0.001 &&
-        (makeupLayer == MakeupLayer.full || makeupLayer == MakeupLayer.eyeshadow);
-
-    final shouldPaintEyeliner =
-        showEyeliner &&
-        eyelinerIntensity > 0.001 &&
-        (makeupLayer == MakeupLayer.full || makeupLayer == MakeupLayer.eyeliner);
-
-    final shouldPaintBlush =
-        showBlush &&
-        blushIntensity > 0.001 &&
-        (makeupLayer == MakeupLayer.full || makeupLayer == MakeupLayer.blush);
-
-    final shouldPaintContour =
-        showContour &&
-        contourIntensity > 0.001 &&
-        (makeupLayer == MakeupLayer.full || makeupLayer == MakeupLayer.contour);
-
-    final shouldPaintLips =
-        showLips &&
-        lipIntensity > 0.001 &&
-        (makeupLayer == MakeupLayer.full || makeupLayer == MakeupLayer.lips);
-
-    if (!shouldPaintBrows &&
-        !shouldPaintEyeshadow &&
-        !shouldPaintEyeliner &&
-        !shouldPaintBlush &&
-        !shouldPaintContour &&
-        !shouldPaintLips) {
-      return;
-    }
+    final eyeshadowIntensity =
+        _layerIntensity(eyeshadowOpacity);
+    final eyelinerIntensity =
+        _layerIntensity(eyelinerOpacity);
+    final blushIntensity =
+        _layerIntensity(blushOpacity);
+    final contourIntensity =
+        _layerIntensity(contourOpacity);
+    final lipIntensity =
+        _layerIntensity(lipstickOpacity);
 
     EyelinerPainter? eyelinerPainter;
     dynamic eyelinerPaths;
 
-    if (shouldPaintEyeshadow || shouldPaintEyeliner) {
+    final needsEyePaths =
+        (showEyeshadow &&
+                eyeshadowIntensity > 0.001 &&
+                _isLayer(MakeupLayer.eyeshadow)) ||
+            (showEyeliner &&
+                eyelinerIntensity > 0.001 &&
+                _isLayer(MakeupLayer.eyeliner));
+
+    if (needsEyePaths) {
       eyelinerPainter = EyelinerPainter(
         face: face,
         intensity: eyelinerIntensity,
         style: eyelinerStyle,
       );
+
       eyelinerPaths = eyelinerPainter.buildPaths();
     }
 
-    if (shouldPaintBrows) {
+    // =========================
+    // BROWS
+    // =========================
+
+    if (showBrows &&
+        browIntensity > 0.001 &&
+        _isLayer(MakeupLayer.brows)) {
       EyebrowPainter(
         face: face,
-        browColor: LookEngine.browColorFromPreset(preset),
+        browColor:
+            LookEngine.browColorFromPreset(preset),
         intensity: browIntensity,
         thickness: 1.05,
         hairStrokes: true,
@@ -191,11 +167,19 @@ class MakeupOverlayPainter extends CustomPainter {
         debugBrowOpacity: 0.55,
         isMirrored: isLiveMode,
         emaAlpha: 0.84,
-        holdLastGood: const Duration(milliseconds: 250),
+        holdLastGood:
+            const Duration(milliseconds: 250),
       ).paint(canvas, size);
     }
 
-    if (shouldPaintEyeshadow && eyelinerPaths != null) {
+    // =========================
+    // EYESHADOW
+    // =========================
+
+    if (showEyeshadow &&
+        eyeshadowIntensity > 0.001 &&
+        eyelinerPaths != null &&
+        _isLayer(MakeupLayer.eyeshadow)) {
       EyeshadowPainter(
         face: face,
         eyeshadowColor: eyeshadowColor,
@@ -206,11 +190,24 @@ class MakeupOverlayPainter extends CustomPainter {
       ).paint(canvas, size);
     }
 
-    if (shouldPaintEyeliner && eyelinerPainter != null) {
+    // =========================
+    // EYELINER
+    // =========================
+
+    if (showEyeliner &&
+        eyelinerIntensity > 0.001 &&
+        eyelinerPainter != null &&
+        _isLayer(MakeupLayer.eyeliner)) {
       eyelinerPainter.paint(canvas, size);
     }
 
-    if (shouldPaintBlush) {
+    // =========================
+    // BLUSH
+    // =========================
+
+    if (showBlush &&
+        blushIntensity > 0.001 &&
+        _isLayer(MakeupLayer.blush)) {
       BlushPainter(
         face: face,
         blushColor: blushColor,
@@ -218,16 +215,27 @@ class MakeupOverlayPainter extends CustomPainter {
         faceShape: faceShape,
         skinColor: skinColor,
         sceneLuminance: sceneLuminance,
-        leftCheekLuminance: leftCheekLuminance,
-        rightCheekLuminance: rightCheekLuminance,
+        leftCheekLuminance:
+            leftCheekLuminance,
+        rightCheekLuminance:
+            rightCheekLuminance,
         faceId: face.trackingId ?? -1,
         isLiveMode: isLiveMode,
-        lookStyle: LookEngine.blushStyleFromPreset(preset),
+        lookStyle:
+            LookEngine.blushStyleFromPreset(
+          preset,
+        ),
         debugMode: debugMode,
       ).paint(canvas, size);
     }
 
-    if (shouldPaintContour) {
+    // =========================
+    // CONTOUR
+    // =========================
+
+    if (showContour &&
+        contourIntensity > 0.001 &&
+        _isLayer(MakeupLayer.contour)) {
       ContourHighlightPainter(
         face: face,
         intensity: contourIntensity,
@@ -235,7 +243,13 @@ class MakeupOverlayPainter extends CustomPainter {
       ).paint(canvas, size);
     }
 
-    if (shouldPaintLips) {
+    // =========================
+    // LIPS
+    // =========================
+
+    if (showLips &&
+        lipIntensity > 0.001 &&
+        _isLayer(MakeupLayer.lips)) {
       LipPainter(
         face: face,
         lipstickColor: lipstickColor,
@@ -246,36 +260,39 @@ class MakeupOverlayPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant MakeupOverlayPainter old) {
+  bool shouldRepaint(
+    covariant MakeupOverlayPainter old,
+  ) {
     return old.image != image ||
         old.face != face ||
         old.intensity != intensity ||
         old.lipstickOpacity != lipstickOpacity ||
         old.blushOpacity != blushOpacity ||
         old.contourOpacity != contourOpacity ||
-        old.eyeshadowOpacity != eyeshadowOpacity ||
-        old.eyelinerOpacity != eyelinerOpacity ||
+        old.eyeshadowOpacity !=
+            eyeshadowOpacity ||
+        old.eyelinerOpacity !=
+            eyelinerOpacity ||
         old.browOpacity != browOpacity ||
         old.faceShape != faceShape ||
-        old.eyelinerStyle != eyelinerStyle ||
+        old.eyelinerStyle !=
+            eyelinerStyle ||
         old.lipFinish != lipFinish ||
         old.lipstickColor != lipstickColor ||
         old.blushColor != blushColor ||
-        old.eyeshadowColor != eyeshadowColor ||
+        old.eyeshadowColor !=
+            eyeshadowColor ||
         old.skinColor != skinColor ||
-        old.sceneLuminance != sceneLuminance ||
+        old.sceneLuminance !=
+            sceneLuminance ||
         old.preset != preset ||
         old.debugMode != debugMode ||
         old.isLiveMode != isLiveMode ||
-        old.leftCheekLuminance != leftCheekLuminance ||
-        old.rightCheekLuminance != rightCheekLuminance ||
+        old.leftCheekLuminance !=
+            leftCheekLuminance ||
+        old.rightCheekLuminance !=
+            rightCheekLuminance ||
         old.profile != profile ||
-        old.showBrows != showBrows ||
-        old.showEyeshadow != showEyeshadow ||
-        old.showEyeliner != showEyeliner ||
-        old.showBlush != showBlush ||
-        old.showContour != showContour ||
-        old.showLips != showLips ||
         old.makeupLayer != makeupLayer;
   }
 }

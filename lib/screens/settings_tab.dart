@@ -1,4 +1,3 @@
-// lib/screens/settings_tab.dart
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
@@ -9,6 +8,10 @@ import '../services/supabase_service.dart';
 import '../utils/logout_util.dart';
 import 'user_subscription_page.dart';
 import 'chat_list_screen.dart';
+import '../services/scan_quota_service.dart';
+import '../scan_result_page.dart';
+import '../instructions_page.dart';
+import '../look_engine.dart';
 
 class SettingsTab extends StatefulWidget {
   const SettingsTab({super.key});
@@ -59,7 +62,6 @@ class _SettingsTabState extends State<SettingsTab> {
   // Settings state
   bool _notificationsEnabled = true;
   String _selectedLanguage = 'English';
-  bool _faceRecognitionEnabled = true;
   bool _autoSaveLooks = true;
   bool _shareUsageData = true;
   bool _personalizedRecommendations = true;
@@ -154,13 +156,13 @@ class _SettingsTabState extends State<SettingsTab> {
           _currentPlanRenewsAt = DateTime.tryParse(
             active['current_period_end']?.toString() ?? '',
           );
-          _applyPlanCapabilities(plan);
+          _applyPlanCapabilities(plan, hasActiveSubscription: true);
         } else {
           _hasActiveSubscription = false;
           _currentPlanName = 'Free Plan';
           _currentPlanBadge = null;
           _currentPlanRenewsAt = null;
-          _applyPlanCapabilities(null);
+          _applyPlanCapabilities(null, hasActiveSubscription: false);
         }
       });
     } catch (e) {
@@ -170,7 +172,7 @@ class _SettingsTabState extends State<SettingsTab> {
           _subscriptionLoading = false;
           _hasActiveSubscription = false;
           _currentPlanName = 'Free Plan';
-          _applyPlanCapabilities(null);
+          _applyPlanCapabilities(null, hasActiveSubscription: false);
         });
       }
     }
@@ -179,49 +181,47 @@ class _SettingsTabState extends State<SettingsTab> {
   /// Resolves the user's plan tier and capability flags from the active
   /// subscription_plans row. When [plan] is null the user is treated as
   /// Regular (free).
-  void _applyPlanCapabilities(Map<String, dynamic>? plan) {
+  void _applyPlanCapabilities(
+    Map<String, dynamic>? plan, {
+    required bool hasActiveSubscription,
+  }) {
     final raw = (plan?['name'] ?? plan?['display_name'] ?? '')
         .toString()
         .toLowerCase();
+
+    if (!hasActiveSubscription) {
+      _planTier = 'regular';
+      _dailyScanLimit = 5;
+      _canSaveResults = false;
+      _canExportHd = false;
+      _removeWatermark = false;
+      return;
+    }
+
     if (raw.contains('premium') || raw.contains('lifetime')) {
       _planTier = 'premium';
-    } else if (raw.contains('pro')) {
+    } else {
       _planTier = 'pro';
-    } else {
-      _planTier = 'regular';
     }
-    _canSaveResults = plan?['can_save_results'] == true || _isPro || _isPremium;
-    _canExportHd = plan?['can_export_hd'] == true || _isPremium;
-    _removeWatermark = plan?['remove_watermark'] == true || _isPro || _isPremium;
-    final limit = plan?['daily_scan_limit'];
-    if (limit is int) {
-      _dailyScanLimit = limit;
-    } else if (limit is num) {
-      _dailyScanLimit = limit.toInt();
-    } else {
-      _dailyScanLimit = _isRegular ? 5 : -1;
-    }
-    // Pro/Premium are unlimited regardless of plan row.
-    if (!_isRegular) _dailyScanLimit = -1;
+
+    _dailyScanLimit = -1;
+    _canSaveResults = true;
+    _canExportHd = _planTier == 'premium';
+    _removeWatermark = true;
   }
 
   /// Loads today's scan count for the current user from `usage_tracking`.
   Future<void> _loadTodaysScans() async {
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) return;
     try {
-      final today = DateTime.now();
-      final dateStr =
-          '${today.year.toString().padLeft(4, '0')}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
-      final row = await Supabase.instance.client
-          .from('usage_tracking')
-          .select('scans_today')
-          .eq('user_id', user.id)
-          .eq('tracking_date', dateStr)
-          .maybeSingle();
+      final usage = await ScanQuotaService.instance.getUsage();
+
       if (!mounted) return;
+
       setState(() {
-        _scansUsedToday = (row?['scans_today'] as int?) ?? 0;
+        _planTier = _hasActiveSubscription ? _planTier : usage.tier;
+        _dailyScanLimit = _hasActiveSubscription ? -1 : usage.dailyLimit;
+        _scansUsedToday = usage.usedToday;
+        _canSaveResults = usage.canAutoSaveToCloud;
       });
     } catch (e) {
       debugPrint('Settings: failed to load scan usage: $e');
@@ -438,13 +438,6 @@ class _SettingsTabState extends State<SettingsTab> {
                     const Color(0xFFFF4D97),
                   ),
                   _buildSwitchItem(
-                    Icons.face_retouching_natural,
-                    'Face Recognition',
-                    _faceRecognitionEnabled,
-                    (value) => setState(() => _faceRecognitionEnabled = value),
-                    const Color(0xFF8B5CF6),
-                  ),
-                  _buildSwitchItem(
                     Icons.auto_awesome,
                     'Auto-Save Looks',
                     _autoSaveLooks,
@@ -471,7 +464,6 @@ class _SettingsTabState extends State<SettingsTab> {
 
                 // Upgrade promo only for Regular users
                 if (_isRegular) _buildUpgradeCard(),
-
 
                 _buildSection('Account Settings', [
                   _buildSettingItem(
@@ -647,7 +639,10 @@ class _SettingsTabState extends State<SettingsTab> {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const UserSubscriptionPage()),
     );
-    if (mounted) _loadCurrentSubscription();
+    if (mounted) {
+      await _loadCurrentSubscription();
+      await _loadTodaysScans();
+    }
   }
 
   Widget _buildSubscriptionPill() {
@@ -2565,8 +2560,9 @@ class _SavedLooksSheetState extends State<_SavedLooksSheet> {
     try {
       final rows = await _client
           .from('scans')
-          .select('id, look_name, image_url, image_path, skin_tone, '
-              'face_shape, created_at')
+          .select(
+            'id, look_name, image_path, image_url, skin_tone, face_shape, selected_preset, tutorial_steps, scan_snapshot, created_at',
+          )
           .eq('user_id', user.id)
           .order('created_at', ascending: false);
       if (!mounted) return;
@@ -2620,109 +2616,51 @@ class _SavedLooksSheetState extends State<_SavedLooksSheet> {
     }
   }
 
+  // REPLACED _openLook METHOD
   void _openLook(Map<String, dynamic> look) {
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        insetPadding: const EdgeInsets.all(16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ClipRRect(
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(20)),
-              child: AspectRatio(
-                aspectRatio: 1,
-                child: _LookImage(url: look['image_url']?.toString()),
-              ),
+    final snapshot = look['scan_snapshot'];
+
+    if (snapshot == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This saved look has no restore data yet. Please scan again.'),
+        ),
+      );
+      return;
+    }
+
+    final snap = Map<String, dynamic>.from(snapshot);
+
+    final faceProfile = FaceProfile.fromJson(
+      Map<String, dynamic>.from(snap['face_profile']),
+    );
+
+    final lookResult = LookResult.fromJson(
+      Map<String, dynamic>.from(snap['look_result']),
+    );
+
+    final preset = MakeupLookPreset.values.firstWhere(
+      (e) => e.name == snap['selected_preset'],
+      orElse: () => MakeupLookPreset.softGlam,
+    );
+
+    final restoredSteps = look['tutorial_steps'] is List
+        ? List<Map<String, dynamic>>.from(
+            (look['tutorial_steps'] as List).map(
+              (e) => Map<String, dynamic>.from(e),
             ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    (look['look_name'] ?? 'Saved Look').toString(),
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  if (look['created_at'] != null)
-                    Text(
-                      DateFormat('MMM d, yyyy • h:mm a').format(
-                        DateTime.parse(look['created_at'].toString()).toLocal(),
-                      ),
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 12,
-                      ),
-                    ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      if ((look['skin_tone']?.toString() ?? '').isNotEmpty)
-                        _MetaChip(
-                            icon: Icons.color_lens_outlined,
-                            label: 'Tone: ${look['skin_tone']}'),
-                      if ((look['face_shape']?.toString() ?? '').isNotEmpty)
-                        _MetaChip(
-                            icon: Icons.face_outlined,
-                            label: 'Shape: ${look['face_shape']}'),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () {
-                            Navigator.pop(ctx);
-                            _delete(look['id'].toString());
-                          },
-                          icon: const Icon(Icons.delete_outline,
-                              color: Colors.red),
-                          label: const Text(
-                            'Delete',
-                            style: TextStyle(color: Colors.red),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: Colors.red),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () => Navigator.pop(ctx),
-                          icon: const Icon(Icons.check),
-                          label: const Text('Done'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFFF4D97),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
+          )
+        : <Map<String, dynamic>>[];
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ScanResultPage(
+          scannedImagePath: snap['image_path'],
+          faceProfile: faceProfile,
+          look: lookResult,
+          selectedPreset: preset,
+          isRestoredSavedLook: true,
+          restoredAiSteps: restoredSteps,
         ),
       ),
     );

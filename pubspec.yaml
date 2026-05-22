@@ -12,28 +12,43 @@ dependencies:
     sdk: flutter
 
   flutter_dotenv: ^5.1.0
+
+  # CAMERA + LIVE FILTER
   camera: ^0.11.0+2
   google_mlkit_face_detection: ^0.12.0
+
+  # AI / NETWORK
   http: ^1.2.2
+
+  # UI / ANIMATION
   intl: ^0.19.0
   fl_chart: ^0.69.0
   flutter_animate: ^4.5.0
   shimmer: ^3.0.0
 
+  # CORE
   cupertino_icons: ^1.0.8
   supabase_flutter: ^2.12.0
-  url_launcher: ^6.3.1
+  shared_preferences: ^2.3.2
+
+  # AUTH
   google_sign_in: ^7.2.0
   sign_in_with_apple: ^7.0.1
+
+  # FILES / MEDIA
   image_picker: ^1.2.1
-  html: ^0.15.6
   file_picker: ^11.0.2
   file_selector: ^0.9.3
-  palette_generator: ^0.3.3+7
   image: ^4.8.0
+  palette_generator: ^0.3.3+7
+
+  # LOCATION
   geolocator: ^13.0.2
   geocoding: ^3.0.0
-  shared_preferences: ^2.3.2
+
+  # WEB / LINKS
+  url_launcher: ^6.3.1
+  html: ^0.15.6
 
   # Waybill printing (PDF + barcode + share/print)
   pdf: ^3.11.1
@@ -43,6 +58,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+
   flutter_lints: ^6.0.0
 
 flutter:

@@ -8,6 +8,7 @@ import '../look_engine.dart';
 import '../makeup_layer.dart';
 import '../painters/makeup_overlay_painter.dart';
 import '../utils.dart';
+import 'cached_makeup_layer.dart'; // ADDED THIS IMPORT
 
 class MakeupPreviewValues {
   final double globalIntensity;
@@ -53,7 +54,12 @@ class FacePreviewCard extends StatelessWidget {
   final LookResult? look;
   final FaceProfile? faceProfile;
   final MakeupLookPreset preset;
-  final ValueNotifier<MakeupPreviewValues> previewValues;
+  final ValueNotifier<double> globalOpacity;
+  final ValueNotifier<double> lipOpacity;
+  final ValueNotifier<double> blushOpacity;
+  final ValueNotifier<double> eyeOpacity;
+  final ValueNotifier<double> linerOpacity;
+  final ValueNotifier<double> browOpacity;
   final MakeupLayer makeupLayer;
 
   const FacePreviewCard({
@@ -65,7 +71,12 @@ class FacePreviewCard extends StatelessWidget {
     required this.look,
     required this.faceProfile,
     required this.preset,
-    required this.previewValues,
+    required this.globalOpacity,
+    required this.lipOpacity,
+    required this.blushOpacity,
+    required this.eyeOpacity,
+    required this.linerOpacity,
+    required this.browOpacity,
     this.makeupLayer = MakeupLayer.full,
   });
 
@@ -88,7 +99,12 @@ class FacePreviewCard extends StatelessWidget {
           look: look,
           faceProfile: faceProfile,
           preset: preset,
-          previewValues: previewValues,
+          globalOpacity: globalOpacity,
+          lipOpacity: lipOpacity,
+          blushOpacity: blushOpacity,
+          eyeOpacity: eyeOpacity,
+          linerOpacity: linerOpacity,
+          browOpacity: browOpacity,
           makeupLayer: makeupLayer,
         ),
       ),
@@ -104,7 +120,12 @@ class _PreviewLayer extends StatelessWidget {
   final LookResult? look;
   final FaceProfile? faceProfile;
   final MakeupLookPreset preset;
-  final ValueNotifier<MakeupPreviewValues> previewValues;
+  final ValueNotifier<double> globalOpacity;
+  final ValueNotifier<double> lipOpacity;
+  final ValueNotifier<double> blushOpacity;
+  final ValueNotifier<double> eyeOpacity;
+  final ValueNotifier<double> linerOpacity;
+  final ValueNotifier<double> browOpacity;
   final MakeupLayer makeupLayer;
 
   const _PreviewLayer({
@@ -115,7 +136,12 @@ class _PreviewLayer extends StatelessWidget {
     required this.look,
     required this.faceProfile,
     required this.preset,
-    required this.previewValues,
+    required this.globalOpacity,
+    required this.lipOpacity,
+    required this.blushOpacity,
+    required this.eyeOpacity,
+    required this.linerOpacity,
+    required this.browOpacity,
     required this.makeupLayer,
   });
 
@@ -140,49 +166,67 @@ class _PreviewLayer extends StatelessWidget {
                   fit: BoxFit.fill,
                 ),
               ),
-              RepaintBoundary(
-                child: ValueListenableBuilder<MakeupPreviewValues>(
-                  valueListenable: previewValues,
-                  builder: (context, values, _) {
-                    return CustomPaint(
-                      size: Size(imageWidth, imageHeight),
-                      painter: MakeupOverlayPainter(
-                        image: null,
-                        face: faceForOverlay!,
-                        lipstickColor: look!.lipstickColor,
-                        blushColor: look!.blushColor,
-                        eyeshadowColor: look!.eyeshadowColor,
-                        intensity: values.globalIntensity,
-                        lipstickOpacity: values.lipOpacity,
-                        blushOpacity: values.blushOpacity,
-                        contourOpacity: values.blushOpacity,
-                        eyeshadowOpacity: values.eyeOpacity,
-                        eyelinerOpacity: values.linerOpacity,
-                        browOpacity: values.browOpacity,
-                        faceShape: faceProfile?.faceShape ?? FaceShape.oval,
-                        preset: preset,
-                        debugMode: false,
-                        isLiveMode: false,
-                        eyelinerStyle: LookEngine.eyelinerStyleFromPreset(preset),
-                        lipFinish: LipFinish.glossy,
-                        skinColor: faceProfile != null
-                            ? Color.fromARGB(
-                                255,
-                                faceProfile!.avgR,
-                                faceProfile!.avgG,
-                                faceProfile!.avgB,
-                              )
-                            : null,
-                        sceneLuminance: 0.5,
-                        leftCheekLuminance: 0.5,
-                        rightCheekLuminance: 0.5,
-                        profile: faceProfile,
-                        makeupLayer: makeupLayer,
-                      ),
-                    );
-                  },
+              // REPLACED with CachedMakeupLayer widgets
+              if (canOverlay && faceForOverlay != null && look != null)
+                Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    CachedMakeupLayer(
+                      layer: MakeupLayer.brows,
+                      globalOpacity: globalOpacity,
+                      layerOpacity: browOpacity,
+                      face: faceForOverlay!,
+                      look: look!,
+                      faceProfile: faceProfile,
+                      preset: preset,
+                    ),
+                    CachedMakeupLayer(
+                      layer: MakeupLayer.eyeshadow,
+                      globalOpacity: globalOpacity,
+                      layerOpacity: eyeOpacity,
+                      face: faceForOverlay!,
+                      look: look!,
+                      faceProfile: faceProfile,
+                      preset: preset,
+                    ),
+                    CachedMakeupLayer(
+                      layer: MakeupLayer.eyeliner,
+                      globalOpacity: globalOpacity,
+                      layerOpacity: linerOpacity,
+                      face: faceForOverlay!,
+                      look: look!,
+                      faceProfile: faceProfile,
+                      preset: preset,
+                    ),
+                    CachedMakeupLayer(
+                      layer: MakeupLayer.blush,
+                      globalOpacity: globalOpacity,
+                      layerOpacity: blushOpacity,
+                      face: faceForOverlay!,
+                      look: look!,
+                      faceProfile: faceProfile,
+                      preset: preset,
+                    ),
+                    CachedMakeupLayer(
+                      layer: MakeupLayer.contour,
+                      globalOpacity: globalOpacity,
+                      layerOpacity: globalOpacity,
+                      face: faceForOverlay!,
+                      look: look!,
+                      faceProfile: faceProfile,
+                      preset: preset,
+                    ),
+                    CachedMakeupLayer(
+                      layer: MakeupLayer.lips,
+                      globalOpacity: globalOpacity,
+                      layerOpacity: lipOpacity,
+                      face: faceForOverlay!,
+                      look: look!,
+                      faceProfile: faceProfile,
+                      preset: preset,
+                    ),
+                  ],
                 ),
-              ),
             ],
           ),
         ),
