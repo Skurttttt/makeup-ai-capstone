@@ -14,6 +14,36 @@ class SupabaseService {
 
   SupabaseClient get client => Supabase.instance.client;
 
+  bool? _supportRequestsAvailable;
+  bool? _feedbacksAvailable;
+
+  /// Check whether `support_requests` table exists (cached).
+  Future<bool> _ensureSupportRequestsAvailable() async {
+    if (_supportRequestsAvailable != null) return _supportRequestsAvailable!;
+    try {
+      await client.from('support_requests').select('id').limit(1);
+      _supportRequestsAvailable = true;
+      return true;
+    } catch (e) {
+      _supportRequestsAvailable = false;
+      debugPrint('⚠️ support_requests table not available: $e');
+      return false;
+    }
+  }
+
+  Future<bool> _ensureFeedbacksAvailable() async {
+    if (_feedbacksAvailable != null) return _feedbacksAvailable!;
+    try {
+      await client.from('feedbacks').select('id').limit(1);
+      _feedbacksAvailable = true;
+      return true;
+    } catch (e) {
+      _feedbacksAvailable = false;
+      debugPrint('⚠️ feedbacks table not available: $e');
+      return false;
+    }
+  }
+
   // ==================== AUTHENTICATION ====================
 
   /// Sign up new user
@@ -746,22 +776,127 @@ class SupabaseService {
   // ==================== SUPPORT REQUESTS ====================
 
   /// Insert a support request from the client app.
-  Future<void> insertSupportRequest({
+  Future<Map<String, dynamic>?> insertSupportRequest({
     required String subject,
     required String message,
   }) async {
+    final ok = await _ensureSupportRequestsAvailable();
+    if (!ok) return null;
     try {
       final userId = client.auth.currentUser?.id;
       final email = client.auth.currentUser?.email;
-      await client.from('support_requests').insert({
+      final response = await client.from('support_requests').insert({
         if (userId != null) 'user_id': userId,
         if (email != null) 'email': email,
         'subject': subject.trim().isEmpty ? 'Support Request' : subject.trim(),
         'message': message.trim(),
-      });
+      }).select().single();
+
+      return Map<String, dynamic>.from(response);
     } catch (e) {
-      // Non-fatal: email fallback is still used
       debugPrint('⚠️ Failed to save support request: $e');
+      return null;
+    }
+  }
+
+  /// Insert a feedback entry from the client app.
+  Future<Map<String, dynamic>?> insertFeedback({
+    int? rating,
+    required String message,
+  }) async {
+    final ok = await _ensureFeedbacksAvailable();
+    if (!ok) return null;
+    try {
+      final userId = client.auth.currentUser?.id;
+      final email = client.auth.currentUser?.email;
+      final response = await client.from('feedbacks').insert({
+        if (userId != null) 'user_id': userId,
+        if (email != null) 'email': email,
+        if (rating != null) 'rating': rating,
+        'message': message.trim(),
+      }).select().single();
+
+      return Map<String, dynamic>.from(response);
+    } catch (e) {
+      debugPrint('⚠️ Failed to save feedback: $e');
+      return null;
+    }
+  }
+
+  /// Admin: fetch support requests for review
+  Future<List<Map<String, dynamic>>> getSupportRequests({int limit = 200}) async {
+    final ok = await _ensureSupportRequestsAvailable();
+    if (!ok) return <Map<String, dynamic>>[];
+    try {
+      final response = await client
+          .from('support_requests')
+          .select('id, created_at, subject, message, status, email, user_id, accounts(full_name, email)')
+          .order('created_at', ascending: false)
+          .limit(limit);
+
+      // Tag as support source
+      final list = List<Map<String, dynamic>>.from(response);
+      return list.map((m) => {'_source': 'support', ...m}).toList();
+    } catch (e) {
+      throw 'Failed to fetch support requests: $e';
+    }
+  }
+
+  /// Admin: fetch feedback entries
+  Future<List<Map<String, dynamic>>> getFeedbacks({int limit = 200}) async {
+    final ok = await _ensureFeedbacksAvailable();
+    if (!ok) return <Map<String, dynamic>>[];
+    try {
+      final response = await client
+          .from('feedbacks')
+          .select('id, created_at, rating, message, status, email, user_id, accounts(full_name, email)')
+          .order('created_at', ascending: false)
+          .limit(limit);
+
+      final list = List<Map<String, dynamic>>.from(response);
+      return list.map((m) => {'_source': 'feedback', ...m}).toList();
+    } catch (e) {
+      throw 'Failed to fetch feedbacks: $e';
+    }
+  }
+
+  /// Admin: update support request status (e.g. open, in_progress, resolved)
+  Future<Map<String, dynamic>> updateSupportRequestStatus({
+    required String requestId,
+    required String status,
+  }) async {
+    final ok = await _ensureSupportRequestsAvailable();
+    if (!ok) throw 'support_requests table not available';
+    try {
+      final response = await client
+          .from('support_requests')
+          .update({'status': status})
+          .eq('id', requestId)
+          .select()
+          .single();
+      return Map<String, dynamic>.from(response);
+    } catch (e) {
+      throw 'Failed to update support request status: $e';
+    }
+  }
+
+  /// Admin: update feedback status
+  Future<Map<String, dynamic>> updateFeedbackStatus({
+    required String feedbackId,
+    required String status,
+  }) async {
+    final ok = await _ensureFeedbacksAvailable();
+    if (!ok) throw 'feedbacks table not available';
+    try {
+      final response = await client
+          .from('feedbacks')
+          .update({'status': status})
+          .eq('id', feedbackId)
+          .select()
+          .single();
+      return Map<String, dynamic>.from(response);
+    } catch (e) {
+      throw 'Failed to update feedback status: $e';
     }
   }
 
@@ -814,6 +949,49 @@ class SupabaseService {
           .limit(15);
       for (final r in reqs) {
         all.add({'_type': 'support', ...Map<String, dynamic>.from(r)});
+      }
+    } catch (_) {}
+
+    // Feedbacks
+    try {
+      final fbs = await client
+          .from('feedbacks')
+          .select('id, created_at, rating, message, status, accounts(full_name, email)')
+          .gte('created_at', since)
+          .order('created_at', ascending: false)
+          .limit(15);
+      for (final f in fbs) {
+        all.add({'_type': 'feedback', ...Map<String, dynamic>.from(f)});
+      }
+    } catch (_) {}
+
+    // New accounts
+    try {
+      final accounts = await client
+          .from('accounts')
+          .select('id, created_at, full_name, email')
+          .gte('created_at', since)
+          .order('created_at', ascending: false)
+          .limit(15);
+      for (final a in accounts) {
+        all.add({'_type': 'account_created', ...Map<String, dynamic>.from(a)});
+      }
+    } catch (_) {}
+
+    // Audit logs (e.g., password changes)
+    try {
+      final logs = await client
+          .from('audit_logs')
+          .select('id, created_at, action, target, metadata, accounts(full_name, email)')
+          .gte('created_at', since)
+          .order('created_at', ascending: false)
+          .limit(30);
+      for (final l in logs) {
+        // Only include password change actions and other important items
+        final action = (l['action'] as String?) ?? '';
+        if (action.contains('password')) {
+          all.add({'_type': 'audit', ...Map<String, dynamic>.from(l)});
+        }
       }
     } catch (_) {}
 

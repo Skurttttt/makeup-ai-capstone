@@ -1390,22 +1390,16 @@ class _SettingsTabState extends State<SettingsTab> {
                               final subjectText = subjectController.text.trim();
                               final messageText = messageController.text.trim();
                               // Save to Supabase so admin gets notified
-                              await _supabaseService.insertSupportRequest(
+                              final inserted = await _supabaseService.insertSupportRequest(
                                 subject: subjectText,
                                 message: messageText,
                               );
-                              final subject = Uri.encodeComponent(
-                                  subjectText.isEmpty
-                                      ? 'App Support Request'
-                                      : subjectText);
-                              final body = Uri.encodeComponent(messageText);
-                              final uri = Uri.parse(
-                                  'mailto:support@beautyshop.com?subject=$subject&body=$body');
+                              if (!mounted) return;
                               Navigator.pop(context);
-                              if (await canLaunchUrl(uri)) {
-                                await launchUrl(uri);
+                              if (inserted != null && inserted['id'] != null) {
+                                _showSettingsMessage('Thanks — saved (id: ${inserted['id']}).');
                               } else {
-                                _showSettingsMessage('Email: support@beautyshop.com');
+                                _showSettingsMessage('Could not save support request — please try again or contact the admin.');
                               }
                             },
                             icon: const Icon(Icons.send),
@@ -2331,27 +2325,37 @@ class _SettingsTabState extends State<SettingsTab> {
                               ),
                             ),
                             onPressed: () async {
-                              final feedback =
-                                  feedbackController.text.trim();
+                              final feedback = feedbackController.text.trim();
                               if (feedback.isEmpty) {
                                 _showSettingsMessage(
                                   'Please enter your feedback first',
                                 );
                                 return;
                               }
-                              final uri = Uri.parse(
-                                'mailto:$_supportEmail'
-                                '?subject=${Uri.encodeComponent('App Feedback')}'
-                                '&body=${Uri.encodeComponent(feedback)}',
-                              );
+
+                              // Save the feedback to the backend so admins can review it
                               Navigator.pop(dialogContext);
-                              if (await canLaunchUrl(uri)) {
-                                await launchUrl(uri);
-                              } else {
+                              try {
+                                final inserted = await _supabaseService.insertSupportRequest(
+                                  subject: 'App Feedback',
+                                  message: feedback,
+                                );
+                                if (!mounted) return;
+                                if (inserted != null && inserted['id'] != null) {
+                                  _showSettingsMessage('Thanks — saved (id: ${inserted['id']}).');
+                                } else {
+                                  _showSettingsMessage('Could not save feedback — please try again or contact the admin.');
+                                }
+                              } catch (e) {
+                                // insertSupportRequest is forgiving, but catch in case
                                 _showSettingsMessage(
-                                  'Thanks! Email us at $_supportEmail',
+                                  'Could not send feedback: $e',
                                 );
                               }
+
+                              // Feedback saved; no automatic mail client fallback.
+                              // If you want to provide a manual "Open Email" option,
+                              // we can add a separate button instead.
                             },
                             icon: const Icon(Icons.send),
                             label: const Text('Submit'),
@@ -3119,6 +3123,14 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
       await Supabase.instance.client.auth.updateUser(
         UserAttributes(password: _newCtrl.text.trim()),
       );
+      // Log password change so admins can be notified
+      try {
+        await SupabaseService().logAdminAction(
+          action: 'password_changed',
+          target: 'accounts:${user.id ?? ''}',
+          metadata: {'method': 'in_app'},
+        );
+      } catch (_) {}
       widget.onMessage('Password updated successfully!');
       if (mounted) Navigator.pop(context);
     } on AuthException catch (e) {

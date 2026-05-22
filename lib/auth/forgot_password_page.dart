@@ -2,7 +2,6 @@
 
 import 'package:flutter/material.dart';
 import '../services/password_reset_service.dart';
-import 'wait_for_reset_confirmation_page.dart';
 
 class ForgotPasswordPage extends StatefulWidget {
   const ForgotPasswordPage({super.key});
@@ -33,11 +32,23 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
           _isLoading = false;
         });
         if (mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (_) => WaitForResetConfirmationPage(email: _emailController.text.trim()),
+          await showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Check your email'),
+              content: const Text(
+                'A reset link or code has been sent to your email. Please follow the instructions to reset your password.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('OK'),
+                ),
+              ],
             ),
           );
+          if (!mounted) return;
+          Navigator.of(context).pop();
         }
       } catch (e) {
         setState(() {

@@ -11,6 +11,7 @@ import 'admin_accounts_section.dart';
 import 'admin_subscriptions_section.dart';
 import 'admin_profits_section.dart';
 import 'admin_audit_logs_section.dart';
+import 'admin_support_section.dart';
 
 class AdminScreenNew extends StatefulWidget {
   const AdminScreenNew({super.key});
@@ -28,6 +29,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
   late RealtimeChannel _auditLogsChannel;
   late RealtimeChannel _ordersChannel;
   late RealtimeChannel _supportChannel;
+  late RealtimeChannel _feedbacksChannel;
 
   // ── Notifications ──────────────────────────────────────────────
   List<Map<String, dynamic>> _notifications = [];
@@ -173,6 +175,16 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
           callback: (payload) => _scheduleNotifRefresh(),
         )
         .subscribe();
+
+    _feedbacksChannel = _supabaseService.client
+        .channel('feedbacks_admin_changes')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'feedbacks',
+          callback: (payload) => _scheduleNotifRefresh(),
+        )
+        .subscribe();
   }
 
   @override
@@ -182,6 +194,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
     _supabaseService.client.removeChannel(_auditLogsChannel);
     _supabaseService.client.removeChannel(_ordersChannel);
     _supabaseService.client.removeChannel(_supportChannel);
+    _supabaseService.client.removeChannel(_feedbacksChannel);
     super.dispose();
   }
 
@@ -219,6 +232,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
       NavigationItem(Icons.card_membership_rounded, 'Subscriptions', 2),
       NavigationItem(Icons.trending_up_rounded, 'Profit', 3),
       NavigationItem(Icons.receipt_long_rounded, 'Audit Logs', 4),
+      NavigationItem(Icons.support_agent_rounded, 'Support/Feedbacks', 5),
     ];
 
     return Container(
@@ -497,6 +511,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
       'Subscription Management',
       'Revenue Analytics',
       'System Audit Logs',
+      'Support / Feedbacks',
     ];
 
     final compact = _isCompact;
@@ -762,6 +777,8 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
         return AdminProfitsSection(key: ValueKey(_refreshCounter));
       case 4:
         return AdminAuditLogsSection(key: ValueKey(_refreshCounter));
+      case 5:
+        return AdminSupportSection(key: ValueKey(_refreshCounter), initialTabIndex: 0);
       default:
         return const Center(child: Text('Section not found'));
     }
