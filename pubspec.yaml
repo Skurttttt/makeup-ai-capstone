@@ -38,6 +38,7 @@ dependencies:
   # FILES / MEDIA
   image_picker: ^1.2.1
   file_picker: ^11.0.2
+  file_selector: ^0.9.3
   image: ^4.8.0
   palette_generator: ^0.3.3+7
 

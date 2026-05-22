@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/supabase_service.dart';
 
 class ChangePasswordPage extends StatefulWidget {
   final String accessToken;
@@ -29,6 +30,14 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
       await Supabase.instance.client.auth.updateUser(
         UserAttributes(password: _passwordController.text),
       );
+      // Log password change so admins can be notified
+      try {
+        await SupabaseService().logAdminAction(
+          action: 'password_changed',
+          target: 'accounts:${Supabase.instance.client.auth.currentUser?.id ?? ''}',
+          metadata: {'method': 'deep_link'},
+        );
+      } catch (_) {}
       if (mounted) {
         showDialog(
           context: context,
