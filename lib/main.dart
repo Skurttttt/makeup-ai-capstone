@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -92,9 +93,73 @@ class _AuthGateState extends State<AuthGate> {
   Future<void> _redirect() async {
     await Future.delayed(Duration.zero);
     if (!mounted) return;
-
+    // Require login on web, but force admin UI as the destination.
     final prefs = await SharedPreferences.getInstance();
     final rememberMe = prefs.getBool('remember_me') ?? false;
+
+    if (kIsWeb) {
+      // If the user didn't choose 'remember me', force login page.
+      if (!rememberMe) {
+        try {
+          await Supabase.instance.client.auth.signOut();
+        } catch (_) {}
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const LoginSupabasePage()),
+        );
+        return;
+      }
+
+      // If there is a saved session, go to admin regardless of stored role.
+      final session = Supabase.instance.client.auth.currentSession;
+      if (session == null) {
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const LoginSupabasePage()),
+        );
+        return;
+      }
+
+      // Verify the user's role — only allow admins on web.
+      try {
+        final profile = await Supabase.instance.client
+            .from('accounts')
+            .select('role')
+            .eq('id', session.user.id)
+            .maybeSingle();
+        final role = profile != null && profile['role'] != null
+            ? (profile['role'] as String).toLowerCase()
+            : null;
+
+        if (role == 'admin' || role == 'super_admin') {
+          if (!mounted) return;
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const AdminScreenNew()),
+          );
+          return;
+        }
+      } catch (e) {
+        // If fetching role fails, fall through to sign-out path below.
+      }
+
+      // Not an admin: sign out and return to login with a message.
+      try {
+        await Supabase.instance.client.auth.signOut();
+      } catch (_) {}
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Only admin accounts may sign in to the web app.'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const LoginSupabasePage()),
+      );
+      return;
+    }
 
     if (!mounted) return;
 

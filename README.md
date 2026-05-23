@@ -1,4 +1,4 @@
-# flutter_application_1
+# FaceTuneBeauty
 
 A new Flutter project.
 
