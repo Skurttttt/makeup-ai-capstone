@@ -1,4 +1,3 @@
-// lib/look_engine.dart
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'skin_analyzer.dart';
@@ -161,6 +160,41 @@ class FaceProfile {
     if (ratio < 0.75) return FaceShape.oval;
     return FaceShape.square;
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'skinTone': skinTone.name,
+      'undertone': undertone.name,
+      'faceShape': faceShape.name,
+      'avgR': avgR,
+      'avgG': avgG,
+      'avgB': avgB,
+      'skinConfidence': skinConfidence,
+      'undertoneConfidence': undertoneConfidence,
+    };
+  }
+
+  factory FaceProfile.fromJson(Map<String, dynamic> json) {
+    return FaceProfile(
+      skinTone: SkinTone.values.firstWhere(
+        (e) => e.name == json['skinTone'],
+        orElse: () => SkinTone.medium,
+      ),
+      undertone: Undertone.values.firstWhere(
+        (e) => e.name == json['undertone'],
+        orElse: () => Undertone.neutral,
+      ),
+      faceShape: FaceShape.values.firstWhere(
+        (e) => e.name == json['faceShape'],
+        orElse: () => FaceShape.unknown,
+      ),
+      avgR: json['avgR'] ?? 0,
+      avgG: json['avgG'] ?? 0,
+      avgB: json['avgB'] ?? 0,
+      skinConfidence: (json['skinConfidence'] ?? 0).toDouble(),
+      undertoneConfidence: (json['undertoneConfidence'] ?? 0).toDouble(),
+    );
+  }
 }
 
 /// ✅ Instructions page model (kept)
@@ -178,6 +212,26 @@ class LookResult {
     required this.eyeshadowColor,
     required this.steps,
   });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'lookName': lookName,
+      'lipstickColor': lipstickColor.value,
+      'blushColor': blushColor.value,
+      'eyeshadowColor': eyeshadowColor.value,
+      'steps': steps,
+    };
+  }
+
+  factory LookResult.fromJson(Map<String, dynamic> json) {
+    return LookResult(
+      lookName: json['lookName'] ?? '',
+      lipstickColor: Color(json['lipstickColor']),
+      blushColor: Color(json['blushColor']),
+      eyeshadowColor: Color(json['eyeshadowColor']),
+      steps: List<String>.from(json['steps'] ?? []),
+    );
+  }
 }
 
 // ✅ Updated LookEngine class with all presets

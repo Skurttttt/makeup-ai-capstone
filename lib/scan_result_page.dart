@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -8,7 +9,6 @@ import 'home_screen.dart';
 import 'makeup_layer.dart';
 import 'instructions_page.dart';
 import 'look_engine.dart';
-import 'widgets/bottom_beauty_nav.dart';
 import 'widgets/face_preview_card.dart';
 import 'widgets/beauty_slider.dart';
 
@@ -28,6 +28,8 @@ class ScanResultPage extends StatefulWidget {
   final FaceProfile? faceProfile;
   final LookResult? look;
   final MakeupLookPreset selectedPreset;
+  final bool isRestoredSavedLook;
+  final List<Map<String, dynamic>>? restoredAiSteps;
 
   const ScanResultPage({
     super.key,
@@ -37,6 +39,8 @@ class ScanResultPage extends StatefulWidget {
     this.faceProfile,
     this.look,
     this.selectedPreset = MakeupLookPreset.softGlam,
+    this.isRestoredSavedLook = false,
+    this.restoredAiSteps,
   });
 
   @override
@@ -49,30 +53,38 @@ class _ScanResultPageState extends State<ScanResultPage> {
 
   MakeupControlArea _selectedArea = MakeupControlArea.general;
 
-  final ValueNotifier<MakeupPreviewValues> _previewValues =
-      ValueNotifier<MakeupPreviewValues>(
-    const MakeupPreviewValues(
-      globalIntensity: 1.0,
-      lipOpacity: 1.0,
-      blushOpacity: 1.0,
-      eyeOpacity: 1.0,
-      linerOpacity: 1.0,
-      browOpacity: 1.0,
-    ),
-  );
+  // Individual ValueNotifiers for each opacity type
+  final ValueNotifier<double> _globalOpacity = ValueNotifier<double>(1.0);
+  final ValueNotifier<double> _lipOpacity = ValueNotifier<double>(1.0);
+  final ValueNotifier<double> _blushOpacity = ValueNotifier<double>(1.0);
+  final ValueNotifier<double> _eyeOpacity = ValueNotifier<double>(1.0);
+  final ValueNotifier<double> _linerOpacity = ValueNotifier<double>(1.0);
+  final ValueNotifier<double> _browOpacity = ValueNotifier<double>(1.0);
 
   late final MakeupLookPreset _currentPreset;
 
   @override
   void initState() {
     super.initState();
+
     _currentPreset = widget.selectedPreset;
+
+    // Use already-detected face immediately.
+    // This avoids waiting for ML Kit again.
+    _previewFace = widget.detectedFace;
+
     _loadPreviewAndDetect();
   }
 
   @override
   void dispose() {
-    _previewValues.dispose();
+    _globalOpacity.dispose();
+    _lipOpacity.dispose();
+    _blushOpacity.dispose();
+    _eyeOpacity.dispose();
+    _linerOpacity.dispose();
+    _browOpacity.dispose();
+
     super.dispose();
   }
 
@@ -80,45 +92,47 @@ class _ScanResultPageState extends State<ScanResultPage> {
     final path = widget.scannedImagePath;
     if (path == null) return;
 
-    final bytes = await File(path).readAsBytes();
-    final codec = await ui.instantiateImageCodec(bytes, targetWidth: 720);
-    final frame = await codec.getNextFrame();
-
-    if (!mounted) return;
-
-    setState(() {
-      _uiImage = frame.image;
-      _previewFace = null;
-    });
-
     try {
-      final tmpFile = await _writeUiImageToTempPng(frame.image);
-      final face = await _detectFaceOnFile(tmpFile.path);
+      final bytes = await File(path).readAsBytes();
+
+      final codec = await ui.instantiateImageCodec(
+        bytes,
+        targetWidth: 720,
+      );
+
+      final frame = await codec.getNextFrame();
 
       if (!mounted) return;
 
-      setState(() => _previewFace = face);
-      tmpFile.delete().catchError((_) => tmpFile);
+      setState(() {
+        _uiImage = frame.image;
+        _previewFace = widget.detectedFace;
+      });
+
+      // IMPORTANT:
+      // If the scan already gave us a face, do not run ML Kit again.
+      if (widget.detectedFace != null) {
+        return;
+      }
+
+      // Fallback only for restored/saved looks or missing face data.
+      final face = await _detectFaceOnFile(path);
+
+      if (!mounted) return;
+
+      setState(() {
+        _previewFace = face;
+      });
     } catch (_) {
       if (!mounted) return;
-      setState(() => _previewFace = null);
+
+      setState(() {
+        _previewFace = widget.detectedFace;
+      });
     }
   }
 
-  Future<File> _writeUiImageToTempPng(ui.Image image) async {
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    if (byteData == null) {
-      throw Exception('Failed to encode preview image.');
-    }
-
-    final pngBytes = byteData.buffer.asUint8List();
-    final dir = await Directory.systemTemp.createTemp('ft_preview_');
-    final file = File('${dir.path}/preview.png');
-
-    await file.writeAsBytes(pngBytes, flush: true);
-    return file;
-  }
-
+  // Keep for fallback when needed
   Future<Face?> _detectFaceOnFile(String filePath) async {
     final detector = FaceDetector(
       options: FaceDetectorOptions(
@@ -139,20 +153,25 @@ class _ScanResultPageState extends State<ScanResultPage> {
     }
   }
 
-  double _valueForArea(MakeupPreviewValues values) {
+  ValueNotifier<double> _notifierForArea() {
     switch (_selectedArea) {
       case MakeupControlArea.lips:
-        return values.lipOpacity;
+        return _lipOpacity;
+
       case MakeupControlArea.eyebrows:
-        return values.browOpacity;
+        return _browOpacity;
+
       case MakeupControlArea.eyeshadow:
-        return values.eyeOpacity;
+        return _eyeOpacity;
+
       case MakeupControlArea.eyeliner:
-        return values.linerOpacity;
+        return _linerOpacity;
+
       case MakeupControlArea.blush:
-        return values.blushOpacity;
+        return _blushOpacity;
+
       case MakeupControlArea.general:
-        return values.globalIntensity;
+        return _globalOpacity;
     }
   }
 
@@ -191,39 +210,24 @@ class _ScanResultPageState extends State<ScanResultPage> {
   }
 
   void _updateAreaValue(double value) {
-    final current = _previewValues.value;
+    value = value.clamp(0.0, 1.0);
 
-    switch (_selectedArea) {
-      case MakeupControlArea.lips:
-        _previewValues.value = current.copyWith(lipOpacity: value);
-        break;
-      case MakeupControlArea.eyebrows:
-        _previewValues.value = current.copyWith(browOpacity: value);
-        break;
-      case MakeupControlArea.eyeshadow:
-        _previewValues.value = current.copyWith(eyeOpacity: value);
-        break;
-      case MakeupControlArea.eyeliner:
-        _previewValues.value = current.copyWith(linerOpacity: value);
-        break;
-      case MakeupControlArea.blush:
-        _previewValues.value = current.copyWith(blushOpacity: value);
-        break;
-      case MakeupControlArea.general:
-        _previewValues.value = current.copyWith(globalIntensity: value);
-        break;
+    final notifier = _notifierForArea();
+
+    if ((notifier.value - value).abs() < 0.006) {
+      return;
     }
+
+    notifier.value = value;
   }
 
   void _resetAll() {
-    _previewValues.value = const MakeupPreviewValues(
-      globalIntensity: 1.0,
-      lipOpacity: 1.0,
-      blushOpacity: 1.0,
-      eyeOpacity: 1.0,
-      linerOpacity: 1.0,
-      browOpacity: 1.0,
-    );
+    _globalOpacity.value = 1.0;
+    _lipOpacity.value = 1.0;
+    _blushOpacity.value = 1.0;
+    _eyeOpacity.value = 1.0;
+    _linerOpacity.value = 1.0;
+    _browOpacity.value = 1.0;
 
     setState(() {
       _selectedArea = MakeupControlArea.general;
@@ -238,9 +242,13 @@ class _ScanResultPageState extends State<ScanResultPage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFFFF7FA),
-      bottomNavigationBar: BottomBeautyNav(
-        currentIndex: 1,
-        onTap: (index) {
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: 1,
+        height: 68,
+        backgroundColor: Colors.white,
+        indicatorColor: const Color(0xFFFF4D97).withOpacity(0.12),
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        onDestinationSelected: (index) {
           Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(
@@ -249,6 +257,38 @@ class _ScanResultPageState extends State<ScanResultPage> {
             (route) => false,
           );
         },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.face_retouching_natural_outlined),
+            selectedIcon: Icon(Icons.face_retouching_natural),
+            label: 'Scan',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.shopping_bag_outlined),
+            selectedIcon: Icon(Icons.shopping_bag),
+            label: 'Market',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.receipt_long_outlined),
+            selectedIcon: Icon(Icons.receipt_long),
+            label: 'Orders',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.workspace_premium_outlined),
+            selectedIcon: Icon(Icons.workspace_premium),
+            label: 'Premium',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'Settings',
+          ),
+        ],
       ),
       body: SafeArea(
         bottom: false,
@@ -288,16 +328,23 @@ class _ScanResultPageState extends State<ScanResultPage> {
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            FacePreviewCard(
-                              uiImage: _uiImage,
-                              scannedImagePath: widget.scannedImagePath,
-                              canOverlay: canOverlay,
-                              faceForOverlay: faceForOverlay,
-                              look: widget.look,
-                              faceProfile: widget.faceProfile,
-                              preset: _currentPreset,
-                              previewValues: _previewValues,
-                              makeupLayer: MakeupLayer.full,
+                            RepaintBoundary(
+                              child: FacePreviewCard(
+                                uiImage: _uiImage,
+                                scannedImagePath: widget.scannedImagePath,
+                                canOverlay: canOverlay,
+                                faceForOverlay: faceForOverlay,
+                                look: widget.look,
+                                faceProfile: widget.faceProfile,
+                                preset: _currentPreset,
+                                globalOpacity: _globalOpacity,
+                                lipOpacity: _lipOpacity,
+                                blushOpacity: _blushOpacity,
+                                eyeOpacity: _eyeOpacity,
+                                linerOpacity: _linerOpacity,
+                                browOpacity: _browOpacity,
+                                makeupLayer: MakeupLayer.full,
+                              ),
                             ),
                             Positioned(
                               top: 12,
@@ -352,15 +399,13 @@ class _ScanResultPageState extends State<ScanResultPage> {
 
                       const SizedBox(height: 10),
 
-                      ValueListenableBuilder<MakeupPreviewValues>(
-                        valueListenable: _previewValues,
-                        builder: (context, values, _) {
-                          final selectedValue = _valueForArea(values);
-
+                      ValueListenableBuilder<double>(
+                        valueListenable: _notifierForArea(),
+                        builder: (_, sliderValue, __) {
                           return _SingleOpacityCard(
                             title: _titleForArea(),
                             subtitle: _subtitleForArea(),
-                            value: selectedValue,
+                            value: sliderValue,
                             onChanged: _updateAreaValue,
                           );
                         },
@@ -368,8 +413,7 @@ class _ScanResultPageState extends State<ScanResultPage> {
 
                       const SizedBox(height: 8),
 
-                      _ActionCards(
-                        onProduct: () {},
+                      _TutorialOnlyCard(
                         onTutorial: widget.look == null
                             ? null
                             : () {
@@ -382,6 +426,8 @@ class _ScanResultPageState extends State<ScanResultPage> {
                                       scannedImagePath: widget.scannedImagePath,
                                       detectedFace: faceForOverlay,
                                       selectedPreset: _currentPreset,
+                                      isRestoredSavedLook: widget.isRestoredSavedLook,
+                                      restoredAiSteps: widget.restoredAiSteps,
                                     ),
                                   ),
                                 );
@@ -642,112 +688,92 @@ class _SingleOpacityCard extends StatelessWidget {
   }
 }
 
-class _ActionCards extends StatelessWidget {
-  final VoidCallback onProduct;
+class _TutorialOnlyCard extends StatelessWidget {
   final VoidCallback? onTutorial;
 
-  const _ActionCards({
-    required this.onProduct,
+  const _TutorialOnlyCard({
     required this.onTutorial,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _ActionCard(
-            icon: Icons.shopping_bag_outlined,
-            title: 'Product',
-            subtitle: 'Recommended for you',
-            color: const Color(0xFFFF4D97),
-            background: const Color(0xFFFFEEF6),
-            onTap: onProduct,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _ActionCard(
-            icon: Icons.school_outlined,
-            title: 'Tutorial',
-            subtitle: 'Step by step guide',
-            color: const Color(0xFF7B4CE0),
-            background: const Color(0xFFF4EEFF),
-            onTap: onTutorial,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ActionCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final Color background;
-  final VoidCallback? onTap;
-
-  const _ActionCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.background,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
     return Opacity(
-      opacity: onTap == null ? 0.45 : 1,
+      opacity: onTutorial == null ? 0.45 : 1,
       child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: onTap,
+        borderRadius: BorderRadius.circular(22),
+        onTap: onTutorial,
         child: Container(
-          height: 58,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          width: double.infinity,
+          height: 68,
+          padding: const EdgeInsets.symmetric(horizontal: 18),
           decoration: BoxDecoration(
-            color: background,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: color.withOpacity(0.24)),
+            color: const Color(0xFFF4EEFF),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: const Color(0xFF7B4CE0).withOpacity(0.22),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF7B4CE0).withOpacity(0.08),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+              ),
+            ],
           ),
           child: Row(
             children: [
-              Icon(icon, color: color, size: 28),
-              const SizedBox(width: 9),
-              Expanded(
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.92),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.school_outlined,
+                  color: Color(0xFF7B4CE0),
+                  size: 24,
+                ),
+              ),
+
+              const SizedBox(width: 14),
+
+              const Expanded(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      title,
-                      style: TextStyle(
-                        color: color,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
+                      'Tutorial',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: color.withOpacity(0.8),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF171725),
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Open AI step-by-step makeup guide',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF777780),
                       ),
                     ),
                   ],
                 ),
               ),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: color,
-                size: 23,
+
+              const SizedBox(width: 8),
+
+              const Icon(
+                Icons.arrow_forward_ios_rounded,
+                color: Color(0xFF7B4CE0),
+                size: 18,
               ),
             ],
           ),

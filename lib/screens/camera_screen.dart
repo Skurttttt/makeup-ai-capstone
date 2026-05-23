@@ -1,4 +1,3 @@
-// lib/screens/camera_screen.dart
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'dart:math' show cos, sin;
@@ -7,6 +6,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; // ADDED THIS IMPORT
 
 import '../skin_analyzer.dart';
 import '../look_engine.dart';
@@ -15,6 +15,7 @@ import '../instructions_page.dart';
 import '../scan_result_page.dart';
 import '../services/scan_quota_service.dart';
 import 'user_subscription_page.dart';
+import '../home_screen.dart';
 
 class CameraScreen extends StatefulWidget {
   final CameraDescription camera;
@@ -420,45 +421,79 @@ class _FaceScanPageState extends State<FaceScanPage> {
     );
   }
 
-  Future<void> _showQuotaReachedDialog(ScanUsage usage) async {
-    final upgrade = await showDialog<bool>(
+  Future<void> _showQuotaReachedDialog(
+    ScanUsage usage,
+  ) async {
+    final next = usage.nextResetAt;
+
+    await showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: const [
-            Icon(Icons.bolt_rounded, color: Color(0xFFFF4D97)),
-            SizedBox(width: 10),
-            Expanded(child: Text('Daily scan limit reached')),
-          ],
-        ),
-        content: Text(
-          "You've used all ${usage.dailyLimit} of today's free scans. "
-          'Upgrade to Pro or Premium for unlimited face scans and '
-          'cloud-saved looks across your devices.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Maybe later'),
+      barrierDismissible: false,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF4D97),
-              foregroundColor: Colors.white,
+          title: const Row(
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                color: Color(0xFFFF4D97),
+              ),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Daily Scan Limit Reached',
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'You have reached your '
+            '${usage.dailyLimit} free scans for today.\n\n'
+            'Please wait 24 hours before '
+            'scanning again or upgrade your subscription.\n\n'
+            'Next scan available:\n'
+            '${next.month}/${next.day}/${next.year}',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+
+                Navigator.of(context)
+                    .pushAndRemoveUntil(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const HomeScreen(),
+                  ),
+                  (route) => false,
+                );
+              },
+              child: const Text('Okay'),
             ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('See plans'),
-          ),
-        ],
-      ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor:
+                    const Color(0xFFFF4D97),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                Navigator.pop(ctx);
+
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const UserSubscriptionPage(),
+                  ),
+                );
+              },
+              child: const Text('Upgrade'),
+            ),
+          ],
+        );
+      },
     );
-    if (upgrade == true && mounted) {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const UserSubscriptionPage()),
-      );
-    }
   }
 
   void _handlePreviewTap() {
@@ -578,20 +613,43 @@ class _FaceScanPageState extends State<FaceScanPage> {
       // This runs in the background — failures must not block the UI.
       // ignore: discarded_futures
       ScanQuotaService.instance.consumeScan();
+      
+      // ENHANCED AUTO-SAVE WITH TOJSON METHODS
       // ignore: discarded_futures
-      ScanQuotaService.instance.autoSaveScan(
-        lookName: _selectedLook.name,
-        imagePath: _capturedFile?.path,
-        skinTone: profile.skinTone.name,
-        faceShape: profile.faceShape.name,
-        faceData: {
-          'preset': _selectedLook.name,
-          'undertone': profile.undertone.name,
-          'scene_luminance': _sceneLuminance,
-          'left_cheek_lum': _leftCheekLum,
-          'right_cheek_lum': _rightCheekLum,
-        },
-      );
+      final usageForSave = await ScanQuotaService.instance.getUsage();
+
+      if (usageForSave.canAutoSaveToCloud) {
+        final snapshot = {
+          'face_profile': profile.toJson(),
+          'look_result': look.toJson(),
+          'selected_preset': _selectedLook.name,
+          'image_path': _capturedFile?.path,
+        };
+
+        await ScanQuotaService.instance.autoSaveScan(
+          lookName: _selectedLook.name,
+          imagePath: _capturedFile?.path,
+          skinTone: profile.skinTone.name,
+          faceShape: profile.faceShape.name,
+          selectedPreset: _selectedLook.name,
+          scanSnapshot: snapshot,
+          tutorialSteps: (look.steps)
+              .asMap()
+              .entries
+              .map((e) => {
+                    'step': e.key + 1,
+                    'instruction': e.value,
+                  })
+              .toList(),
+          faceData: {
+            'preset': _selectedLook.name,
+            'undertone': profile.undertone.name,
+            'scene_luminance': _sceneLuminance,
+            'left_cheek_lum': _leftCheekLum,
+            'right_cheek_lum': _rightCheekLum,
+          },
+        );
+      }
 
       if (mounted) {
         await Navigator.of(context).push(
