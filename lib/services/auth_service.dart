@@ -1,7 +1,7 @@
 // lib/services/auth_service.dart
 import 'package:flutter/material.dart';
 
-enum UserRole { admin, user, client }
+enum UserRole { admin, superAdmin, staff, user, client }
 
 class AuthService extends ChangeNotifier {
   UserRole _userRole = UserRole.user;
@@ -11,7 +11,8 @@ class AuthService extends ChangeNotifier {
   UserRole get userRole => _userRole;
   String? get userId => _userId;
   bool get isAuthenticated => _isAuthenticated;
-  bool get isAdmin => _userRole == UserRole.admin;
+  bool get isAdmin =>
+      _userRole == UserRole.admin || _userRole == UserRole.superAdmin;
 
   Future<void> login({
     required String email,

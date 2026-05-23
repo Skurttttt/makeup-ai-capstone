@@ -8,7 +8,7 @@ CREATE TABLE public.accounts (
   id uuid REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   email text UNIQUE NOT NULL,
   full_name text,
-  role text DEFAULT 'user' CHECK (role IN ('admin', 'user', 'client')),
+  role text DEFAULT 'user' CHECK (role IN ('admin', 'user', 'client', 'staff', 'super_admin')),
   avatar_url text,
   bio text,
   account_type text DEFAULT 'individual' CHECK (account_type IN ('individual', 'business')),
@@ -42,11 +42,24 @@ AS $$
   ) = 'admin';
 $$;
 
+-- Helper: super-admin check
+CREATE OR REPLACE FUNCTION public.is_super_admin()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT COALESCE(
+    (auth.jwt() -> 'app_metadata' ->> 'role')::text,
+    (auth.jwt() -> 'user_metadata' ->> 'role')::text,
+    ''
+  ) = 'super_admin';
+$$;
+
 -- Create policies for accounts
 CREATE POLICY "Users can view their own account"
   ON public.accounts
   FOR SELECT
-  USING (auth.uid() = id OR public.is_admin());
+  USING (auth.uid() = id OR public.is_admin() OR public.is_super_admin());
 
 CREATE POLICY "Users can insert their own account"
   ON public.accounts
@@ -57,6 +70,20 @@ CREATE POLICY "Users can update their own account"
   ON public.accounts
   FOR UPDATE
   USING (auth.uid() = id);
+
+-- Admins may update other accounts but must not change the `role` field
+CREATE POLICY "Admins can update accounts (no role change)"
+  ON public.accounts
+  FOR UPDATE
+  USING (public.is_admin())
+  WITH CHECK ((SELECT role FROM public.accounts WHERE id = NEW.id) = NEW.role);
+
+-- Super admin can update any account including changing roles
+CREATE POLICY "Super admin can update any account"
+  ON public.accounts
+  FOR UPDATE
+  USING (public.is_super_admin())
+  WITH CHECK (public.is_super_admin());
 
 -- 2. Create scans table
 CREATE TABLE public.scans (
@@ -165,8 +192,8 @@ CREATE POLICY "Anyone can view active plans"
 CREATE POLICY "Admins can manage plans"
   ON public.subscription_plans
   FOR ALL
-  USING (public.is_admin())
-  WITH CHECK (public.is_admin());
+  USING (public.is_admin() OR public.is_super_admin())
+  WITH CHECK (public.is_admin() OR public.is_super_admin());
 
 -- 5. Create user_subscriptions table (user purchases)
 CREATE TABLE public.user_subscriptions (
@@ -196,8 +223,8 @@ CREATE POLICY "Users can view their own subscriptions"
 CREATE POLICY "Admins can manage subscriptions"
   ON public.user_subscriptions
   FOR ALL
-  USING (public.is_admin())
-  WITH CHECK (public.is_admin());
+  USING (public.is_admin() OR public.is_super_admin())
+  WITH CHECK (public.is_admin() OR public.is_super_admin());
 
 -- Seed default Bumble-style tiers (safe re-run)
 INSERT INTO public.subscription_plans (

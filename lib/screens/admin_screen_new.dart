@@ -14,7 +14,8 @@ import 'admin_audit_logs_section.dart';
 import 'admin_support_section.dart';
 
 class AdminScreenNew extends StatefulWidget {
-  const AdminScreenNew({super.key});
+  final String currentUserRole;
+  const AdminScreenNew({super.key, this.currentUserRole = 'admin'});
 
   @override
   State<AdminScreenNew> createState() => _AdminScreenNewState();
@@ -46,6 +47,8 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
   bool get _showInlineSidebar =>
       MediaQuery.of(context).size.width >= Breakpoints.medium;
   bool get _isCompact => context.isCompact;
+
+  bool get _isSuperAdmin => widget.currentUserRole == 'super_admin';
 
   int _refreshCounter = 0;
 
@@ -770,7 +773,9 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
           onNavigate: (i) => setState(() => _currentSection = i),
         );
       case 1:
-        return AdminAccountsSection(key: ValueKey(_refreshCounter));
+        return AdminAccountsSection(
+            key: ValueKey(_refreshCounter),
+            isSuperAdmin: _isSuperAdmin);
       case 2:
         return AdminSubscriptionsSection(key: ValueKey(_refreshCounter));
       case 3:

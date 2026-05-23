@@ -108,10 +108,13 @@ class _BuyerOrdersScreenState extends State<BuyerOrdersScreen> {
   final _client = Supabase.instance.client;
 
   static const _filters = [
-    _FilterDef('all', 'All', Icons.apps_rounded),
-    _FilterDef('active', 'Active', Icons.local_fire_department_rounded),
-    _FilterDef('shipped', 'Shipping', Icons.local_shipping_rounded),
-    _FilterDef('delivered', 'Delivered', Icons.verified_rounded),
+    _FilterDef('all',       'All',              Icons.apps_rounded),
+    _FilterDef('to_ship',   'To ship',          Icons.inventory_2_outlined),
+    _FilterDef('shipped',   'Shipped',          Icons.local_shipping_rounded),
+    _FilterDef('completed', 'Completed',        Icons.check_circle_outline_rounded),
+    _FilterDef('pending',   'Pending',          Icons.hourglass_empty_rounded),
+    _FilterDef('canceled',  'Canceled',         Icons.cancel_outlined),
+    _FilterDef('failed',    'Failed delivery',  Icons.error_outline_rounded),
   ];
 
   String _selectedFilter = 'all';
@@ -151,7 +154,6 @@ class _BuyerOrdersScreenState extends State<BuyerOrdersScreen> {
             'products(name, image_url, business_id))',
           )
           .eq('buyer_id', uid)
-          .neq('status', 'canceled')
           .order('created_at', ascending: false);
 
       if (mounted) {
@@ -177,14 +179,15 @@ class _BuyerOrdersScreenState extends State<BuyerOrdersScreen> {
   }
 
   List<Map<String, dynamic>> _filtered(String f) {
-    if (f == 'all') return _orders;
-    if (f == 'active') {
-      return _orders
-          .where((o) => ['pending', 'paid', 'processing']
-              .contains(o['status']?.toString()))
-          .toList();
+    switch (f) {
+      case 'to_ship':   return _orders.where((o) => ['paid', 'processing'].contains(o['status']?.toString())).toList();
+      case 'shipped':   return _orders.where((o) => o['status']?.toString() == 'shipped').toList();
+      case 'completed': return _orders.where((o) => o['status']?.toString() == 'delivered').toList();
+      case 'pending':   return _orders.where((o) => o['status']?.toString() == 'pending').toList();
+      case 'canceled':  return _orders.where((o) => o['status']?.toString() == 'canceled').toList();
+      case 'failed':    return _orders.where((o) => o['status']?.toString() == 'failed').toList();
+      default:          return _orders; // 'all'
     }
-    return _orders.where((o) => o['status']?.toString() == f).toList();
   }
 
   int _countFor(String f) => _filtered(f).length;

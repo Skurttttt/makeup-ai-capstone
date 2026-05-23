@@ -11,6 +11,9 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'chat_screen.dart';
 import 'waybill_preview_screen.dart';
+import 'delivery_confirmation_page.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../services/supabase_service.dart';
 
 // ─── colour palette (matches client_dashboard_screen) ────────────────────────
 const _kPink = Color(0xFFFF4D8C);
@@ -74,13 +77,41 @@ String? _nextStatus(String current) {
     case 'pending':
       return 'processing'; // seller accepts unpaid/COD-pending order
     case 'paid':
-      return 'processing';
+      return 'shipped'; // open ship dialog directly (skip manual processing step)
     case 'processing':
       return 'shipped';
     case 'shipped':
       return 'delivered';
+    case 'failed':
+      return 'shipped'; // re-ship failed delivery
     default:
       return null;
+  }
+}
+
+String _tabLabel(String key) {
+  switch (key) {
+    case 'all':       return 'All';
+    case 'to_ship':   return 'To ship';
+    case 'shipped':   return 'Shipped';
+    case 'completed': return 'Completed';
+    case 'pending':   return 'Pending';
+    case 'canceled':  return 'Canceled';
+    case 'failed':    return 'Failed delivery';
+    default:          return key;
+  }
+}
+
+IconData _tabIcon(String key) {
+  switch (key) {
+    case 'all':       return Icons.shopping_bag_outlined;
+    case 'to_ship':   return Icons.inventory_2_outlined;
+    case 'shipped':   return Icons.local_shipping_rounded;
+    case 'completed': return Icons.check_circle_outline_rounded;
+    case 'pending':   return Icons.hourglass_empty_rounded;
+    case 'canceled':  return Icons.cancel_outlined;
+    case 'failed':    return Icons.error_outline_rounded;
+    default:          return Icons.inbox_outlined;
   }
 }
 
@@ -96,16 +127,17 @@ class ClientOrdersScreen extends StatefulWidget {
 class _ClientOrdersScreenState extends State<ClientOrdersScreen>
     with SingleTickerProviderStateMixin {
   final _client = Supabase.instance.client;
+  final _svc    = SupabaseService();
   late TabController _tabs;
 
   static const _tabStatuses = [
     'all',
-    'pending',
-    'paid',
-    'processing',
+    'to_ship',
     'shipped',
-    'delivered',
+    'completed',
+    'pending',
     'canceled',
+    'failed',
   ];
 
   List<Map<String, dynamic>> _orders = [];
@@ -113,10 +145,15 @@ class _ClientOrdersScreenState extends State<ClientOrdersScreen>
   String? _error;
   StreamSubscription? _sub;
 
+  /// Last courier the seller used — persisted across sessions.
+  String _preferredCourier = _couriers.first;
+
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: _tabStatuses.length, vsync: this);    _load();
+    _tabs = TabController(length: _tabStatuses.length, vsync: this);
+    _load();
+    _loadPreferredCourier();
     _subscribeRealtime();
   }
 
@@ -125,6 +162,20 @@ class _ClientOrdersScreenState extends State<ClientOrdersScreen>
     _tabs.dispose();
     _sub?.cancel();
     super.dispose();
+  }
+
+  Future<void> _loadPreferredCourier() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('preferred_courier');
+    if (saved != null && _couriers.contains(saved) && mounted) {
+      setState(() => _preferredCourier = saved);
+    }
+  }
+
+  Future<void> _savePreferredCourier(String courier) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('preferred_courier', courier);
+    if (mounted) setState(() => _preferredCourier = courier);
   }
 
   Future<void> _load() async {
@@ -198,8 +249,15 @@ class _ClientOrdersScreenState extends State<ClientOrdersScreen>
   }
 
   List<Map<String, dynamic>> _filtered(String tab) {
-    if (tab == 'all') return _orders;
-    return _orders.where((o) => o['status'] == tab).toList();
+    switch (tab) {
+      case 'to_ship':   return _orders.where((o) => ['paid', 'processing'].contains(o['status'])).toList();
+      case 'shipped':   return _orders.where((o) => o['status'] == 'shipped').toList();
+      case 'completed': return _orders.where((o) => o['status'] == 'delivered').toList();
+      case 'pending':   return _orders.where((o) => o['status'] == 'pending').toList();
+      case 'canceled':  return _orders.where((o) => o['status'] == 'canceled').toList();
+      case 'failed':    return _orders.where((o) => o['status'] == 'failed').toList();
+      default:          return _orders; // 'all'
+    }
   }
 
   // ── advance order status ──────────────────────────────────────────────────
@@ -230,6 +288,48 @@ class _ClientOrdersScreenState extends State<ClientOrdersScreen>
     'Other',
   ];
 
+  static const _courierAbbr = {
+    'J&T Express': 'J&T',
+    'LBC Express': 'LBC',
+    'Ninja Van': 'NINJA',
+    'Grab Express': 'GRAB',
+    'Lalamove': 'LALA',
+    'DHL': 'DHL',
+    'FedEx': 'FEDEX',
+    'SPX Express (Shopee)': 'SPX',
+    'Flash Express': 'FLASH',
+    'AP Cargo': 'APC',
+    'JRS Express': 'JRS',
+    'Other': '···',
+  };
+
+  static const _courierDays = <String, List<int>>{
+    'Grab Express': [0, 0],
+    'Lalamove': [0, 0],
+    'J&T Express': [2, 5],
+    'Ninja Van': [2, 5],
+    'FedEx': [2, 5],
+    'SPX Express (Shopee)': [2, 5],
+    'Flash Express': [2, 4],
+    'LBC Express': [3, 7],
+    'DHL': [3, 7],
+    'AP Cargo': [3, 7],
+    'JRS Express': [3, 7],
+    'Other': [3, 7],
+  };
+
+  String _estimatedDelivery(String courier) {
+    final range = _courierDays[courier] ?? [3, 7];
+    if (range[0] == 0) return 'Same day';
+    final now  = DateTime.now();
+    final from = now.add(Duration(days: range[0]));
+    final to   = now.add(Duration(days: range[1]));
+    final fmt  = DateFormat('MMM d');
+    return range[0] == range[1]
+        ? fmt.format(from)
+        : '${fmt.format(from)} – ${fmt.format(to)}';
+  }
+
   /// Generates a short unique tracking number: PREFIX-YYYYMMDD-XXXXXX
   String _generateTracking(String courier) {
     final prefix = courier.replaceAll(RegExp(r'[^A-Za-z]'), '').toUpperCase();
@@ -243,141 +343,618 @@ class _ClientOrdersScreenState extends State<ClientOrdersScreen>
 
   Future<void> _showShipDialog(Map<String, dynamic> order) async {
     String selectedCourier =
-        order['courier']?.toString().isNotEmpty == true
-            ? ((_couriers.contains(order['courier']?.toString()))
-                ? order['courier'].toString()
-                : _couriers.first)
-            : _couriers.first;
+        _couriers.contains(order['courier']?.toString())
+            ? order['courier'].toString()
+            : _preferredCourier;
 
-    final notesCtrl = TextEditingController(
-        text: order['seller_notes']?.toString() ?? '');
-
-    // Pre-fill tracking if already set, else auto-generate on first open
     final existingTracking = order['tracking_number']?.toString() ?? '';
     final trackCtrl = TextEditingController(
         text: existingTracking.isNotEmpty
             ? existingTracking
             : _generateTracking(selectedCourier));
+    final notesCtrl =
+        TextEditingController(text: order['seller_notes']?.toString() ?? '');
 
-    final ok = await showDialog<bool>(
+    bool isShipping = false;
+    String? generatedOtp;
+
+    await showModalBottomSheet(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlgState) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(
-            children: [
-              const Icon(Icons.local_shipping_rounded, color: _kPink),
-              const SizedBox(width: 10),
-              const Text('Mark as Shipped'),
-            ],
-          ),
-          content: SingleChildScrollView(
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      useRootNavigator: true,
+      builder: (bsCtx) => StatefulBuilder(
+        builder: (bsCtx, setS) {
+          final items = List<Map<String, dynamic>>.from(
+              order['order_items'] as List? ?? []);
+          final totalQty = items.fold<int>(
+              0, (s, i) => s + ((i['quantity'] as num?)?.toInt() ?? 0));
+          final bottomPad = MediaQuery.of(bsCtx).viewInsets.bottom;
+
+          return Container(
+            height: MediaQuery.of(bsCtx).size.height * 0.93,
+            padding: EdgeInsets.only(bottom: bottomPad),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius:
+                  BorderRadius.vertical(top: Radius.circular(24)),
+            ),
             child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── Courier dropdown ──────────────────────────────────
-                InputDecorator(
-                  decoration: InputDecoration(
-                    prefixIcon:
-                        const Icon(Icons.delivery_dining, color: _kPink),
-                    labelText: 'Courier',
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide:
-                          const BorderSide(color: _kPink, width: 2),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 4),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: selectedCourier,
-                      isExpanded: true,
-                      items: _couriers
-                          .map((c) => DropdownMenuItem(
-                              value: c, child: Text(c)))
-                          .toList(),
-                      onChanged: (val) {
-                        if (val == null) return;
-                        setDlgState(() {
-                          selectedCourier = val;
-                          // Regenerate tracking when courier changes
-                          // (unless user already edited it manually)
-                          trackCtrl.text = _generateTracking(val);
-                        });
-                      },
-                    ),
+                // ── drag handle ───────────────────────────────────
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 10),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                const SizedBox(height: 12),
-                // ── Tracking number (editable, auto-filled) ────────────
-                Row(
-                  children: [
-                    Expanded(
-                      child: _dialogField(
-                          trackCtrl, 'Tracking Number',
-                          Icons.pin_outlined),
-                    ),
-                    const SizedBox(width: 8),
-                    Tooltip(
-                      message: 'Regenerate',
-                      child: IconButton(
-                        onPressed: () => setDlgState(() =>
-                            trackCtrl.text =
-                                _generateTracking(selectedCourier)),
-                        icon: const Icon(Icons.refresh_rounded,
-                            color: _kPink),
-                        style: IconButton.styleFrom(
-                          backgroundColor: _kPinkSoft,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
+                // ── header ────────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: _kPinkSoft,
+                          borderRadius: BorderRadius.circular(12),
                         ),
+                        child: const Icon(
+                            Icons.local_shipping_rounded,
+                            color: _kPink,
+                            size: 22),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Ship Order',
+                              style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800)),
+                          Text(
+                            '#${order['id']?.toString().replaceAll('-', '').substring(0, 8).toUpperCase() ?? ''}',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade500),
+                          ),
+                        ],
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: () => Navigator.pop(bsCtx),
+                        icon: const Icon(Icons.close_rounded),
+                        style: IconButton.styleFrom(
+                            backgroundColor: Colors.grey.shade100),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 12),
-                _dialogField(
-                    notesCtrl, 'Notes to buyer (optional)',
-                    Icons.note_outlined,
-                    maxLines: 3),
+                const Divider(height: 1),
+                // ── body ──────────────────────────────────────────
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: generatedOtp != null
+                        // ── SUCCESS STATE ──────────────────────────
+                        ? _shipSuccessCard(
+                            otp: generatedOtp!,
+                            order: order,
+                            bsCtx: bsCtx)
+                        // ── FORM STATE ─────────────────────────────
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // buyer / address card
+                              _shipSectionLabel('Delivery Info'),
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF8F9FB),
+                                  borderRadius:
+                                      BorderRadius.circular(14),
+                                  border: Border.all(
+                                      color: Colors.grey.shade200),
+                                ),
+                                child: Column(
+                                  children: [
+                                    _shipInfoRow(
+                                        Icons.person_outline_rounded,
+                                        order['buyer_name']
+                                                ?.toString() ??
+                                            '—'),
+                                    if ((order['buyer_phone']
+                                                ?.toString()
+                                                .isNotEmpty ??
+                                            false)) ...[  
+                                      const SizedBox(height: 6),
+                                      _shipInfoRow(
+                                          Icons.phone_outlined,
+                                          order['buyer_phone']
+                                              .toString()),
+                                    ],
+                                    const SizedBox(height: 6),
+                                    _shipInfoRow(
+                                      Icons.location_on_outlined,
+                                      [
+                                        order['shipping_address'],
+                                        order['shipping_city'],
+                                        order[
+                                            'shipping_postal_code'],
+                                      ]
+                                          .where((v) =>
+                                              v != null &&
+                                              v
+                                                  .toString()
+                                                  .isNotEmpty)
+                                          .join(', '),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    _shipInfoRow(
+                                      Icons.inventory_2_outlined,
+                                      '$totalQty item${totalQty == 1 ? '' : 's'}',
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 22),
+
+                              // courier cards
+                              _shipSectionLabel('Select Courier'),
+                              const SizedBox(height: 10),
+                              SizedBox(
+                                height: 76,
+                                child: ListView.separated(
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: _couriers.length,
+                                  separatorBuilder: (_, __) =>
+                                      const SizedBox(width: 8),
+                                  itemBuilder: (_, i) {
+                                    final c = _couriers[i];
+                                    final sel = c == selectedCourier;
+                                    return GestureDetector(
+                                      onTap: () => setS(() {
+                                        selectedCourier = c;
+                                        trackCtrl.text =
+                                            _generateTracking(c);
+                                      }),
+                                      child: AnimatedContainer(
+                                        duration: const Duration(
+                                            milliseconds: 180),
+                                        width: 72,
+                                        decoration: BoxDecoration(
+                                          color: sel
+                                              ? _kPink
+                                              : Colors.grey.shade50,
+                                          borderRadius:
+                                              BorderRadius.circular(
+                                                  14),
+                                          border: Border.all(
+                                            color: sel
+                                                ? _kPinkDark
+                                                : Colors
+                                                    .grey.shade200,
+                                            width: sel ? 2 : 1,
+                                          ),
+                                          boxShadow: sel
+                                              ? [
+                                                  BoxShadow(
+                                                    color: _kPink
+                                                        .withOpacity(
+                                                            0.28),
+                                                    blurRadius: 10,
+                                                    offset:
+                                                        const Offset(
+                                                            0, 4),
+                                                  )
+                                                ]
+                                              : [],
+                                        ),
+                                        child: Center(
+                                          child: Text(
+                                            _courierAbbr[c] ??
+                                                c
+                                                    .substring(0, 3)
+                                                    .toUpperCase(),
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight:
+                                                  FontWeight.w800,
+                                              color: sel
+                                                  ? Colors.white
+                                                  : Colors
+                                                      .grey.shade700,
+                                            ),
+                                            textAlign:
+                                                TextAlign.center,
+                                            maxLines: 2,
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  const Icon(
+                                      Icons.schedule_rounded,
+                                      size: 14,
+                                      color: Colors.teal),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    'Est. delivery: ${_estimatedDelivery(selectedCourier)}',
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.teal,
+                                        fontWeight: FontWeight.w600),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 22),
+
+                              // tracking number
+                              _shipSectionLabel('Tracking Number'),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextField(
+                                      controller: trackCtrl,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: 0.8),
+                                      decoration: InputDecoration(
+                                        prefixIcon: const Icon(
+                                            Icons.pin_outlined,
+                                            color: _kPink),
+                                        border: OutlineInputBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(
+                                                    12)),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          borderSide:
+                                              const BorderSide(
+                                                  color: _kPink,
+                                                  width: 2),
+                                        ),
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                                horizontal: 14,
+                                                vertical: 14),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Tooltip(
+                                    message: 'Copy',
+                                    child: IconButton(
+                                      onPressed: () {
+                                        Clipboard.setData(ClipboardData(
+                                            text: trackCtrl.text));
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(const SnackBar(
+                                          content:
+                                              Text('Tracking copied!'),
+                                          duration:
+                                              Duration(seconds: 1),
+                                          behavior:
+                                              SnackBarBehavior.floating,
+                                        ));
+                                      },
+                                      icon: const Icon(
+                                          Icons.copy_rounded,
+                                          color: _kPink),
+                                      style: IconButton.styleFrom(
+                                        backgroundColor: _kPinkSoft,
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(
+                                                    10)),
+                                      ),
+                                    ),
+                                  ),
+                                  Tooltip(
+                                    message: 'Regenerate',
+                                    child: IconButton(
+                                      onPressed: () => setS(() =>
+                                          trackCtrl.text =
+                                              _generateTracking(
+                                                  selectedCourier)),
+                                      icon: const Icon(
+                                          Icons.refresh_rounded,
+                                          color: _kPink),
+                                      style: IconButton.styleFrom(
+                                        backgroundColor: _kPinkSoft,
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(
+                                                    10)),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 22),
+
+                              // notes
+                              _shipSectionLabel(
+                                  'Notes to Buyer (optional)'),
+                              const SizedBox(height: 8),
+                              TextField(
+                                controller: notesCtrl,
+                                maxLines: 3,
+                                decoration: InputDecoration(
+                                  hintText:
+                                      'e.g. Handle with care, fragile…',
+                                  prefixIcon: const Padding(
+                                    padding: EdgeInsets.only(bottom: 44),
+                                    child: Icon(Icons.note_outlined,
+                                        color: _kPink),
+                                  ),
+                                  border: OutlineInputBorder(
+                                      borderRadius:
+                                          BorderRadius.circular(12)),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                        color: _kPink, width: 2),
+                                  ),
+                                  contentPadding:
+                                      const EdgeInsets.all(14),
+                                ),
+                              ),
+                              const SizedBox(height: 28),
+
+                              // ship button
+                              SizedBox(
+                                width: double.infinity,
+                                height: 54,
+                                child: ElevatedButton.icon(
+                                  onPressed: isShipping
+                                      ? null
+                                      : () async {
+                                          if (trackCtrl.text
+                                              .trim()
+                                              .isEmpty) return;
+                                          setS(() => isShipping = true);
+                                          try {
+                                            final orderId =
+                                                order['id'] as String;
+                                            await _updateStatus(
+                                                orderId, 'shipped', {
+                                              'tracking_number':
+                                                  trackCtrl.text.trim(),
+                                              'courier': selectedCourier,
+                                              'seller_notes':
+                                                  notesCtrl.text.trim(),
+                                              'shipped_at': DateTime.now()
+                                                  .toIso8601String(),
+                                            });
+                                            // Remember this courier for next time
+                                            await _savePreferredCourier(
+                                                selectedCourier);
+                                            String? otp;
+                                            try {
+                                              otp = await _svc
+                                                  .generateDeliveryOtp(
+                                                      orderId: orderId);
+                                            } catch (_) {}
+                                            if (mounted) {
+                                              setS(() {
+                                                generatedOtp = otp ?? '—';
+                                                isShipping = false;
+                                              });
+                                            }
+                                          } catch (_) {
+                                            if (mounted) {
+                                              setS(() =>
+                                                  isShipping = false);
+                                            }
+                                          }
+                                        },
+                                  icon: isShipping
+                                      ? const SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Colors.white))
+                                      : const Icon(
+                                          Icons.local_shipping_rounded,
+                                          size: 20),
+                                  label: Text(
+                                    isShipping
+                                        ? 'Processing…'
+                                        : 'Ship Order',
+                                    style: const TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: _kPink,
+                                    foregroundColor: Colors.white,
+                                    disabledBackgroundColor:
+                                        _kPink.withOpacity(0.5),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(14)),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              Center(
+                                child: Text(
+                                  '✓ Tracking & delivery OTP auto-generated on ship',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade500),
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                            ],
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ── ship dialog helpers ───────────────────────────────────────────────────
+
+  Widget _shipSuccessCard({
+    required String otp,
+    required Map<String, dynamic> order,
+    required BuildContext bsCtx,
+  }) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF10B981), Color(0xFF059669)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Column(
+              children: [
+                const Icon(Icons.check_circle_rounded,
+                    color: Colors.white, size: 52),
+                const SizedBox(height: 10),
+                const Text('Order Shipped!',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800)),
+                const SizedBox(height: 4),
+                Text('Status updated & OTP generated automatically.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.85),
+                        fontSize: 13)),
               ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
+          const SizedBox(height: 16),
+          // OTP card
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+            decoration: BoxDecoration(
+              color: _kPinkSoft,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _kPinkLight),
             ),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.local_shipping_rounded, size: 18),
-              label: const Text('Ship It'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _kPink,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+            child: Row(
+              children: [
+                const Icon(Icons.pin_rounded, color: _kPink, size: 24),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Packing Slip OTP',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey.shade600,
+                              fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 2),
+                      Text(otp,
+                          style: const TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 7,
+                              color: _kPink)),
+                      Text('Print this on the packing slip.',
+                          style: TextStyle(
+                              fontSize: 11, color: Colors.grey.shade500)),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Clipboard.setData(ClipboardData(text: otp)),
+                  icon: const Icon(Icons.copy_rounded, color: _kPink),
+                  tooltip: 'Copy OTP',
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    Navigator.pop(bsCtx);
+                    await _printWaybill(order);
+                  },
+                  icon: const Icon(Icons.print_rounded, size: 18),
+                  label: const Text('Print Waybill'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _kPink,
+                    side: const BorderSide(color: _kPink),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
               ),
-              onPressed: () => Navigator.pop(ctx, true),
-            ),
-          ],
-        ),
-      ),
-    );
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.pop(bsCtx),
+                  icon: const Icon(Icons.check_rounded, size: 18),
+                  label: const Text('Done'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _kPink,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+        ],
+      );
 
-    if (ok == true && mounted) {
-      await _updateStatus(order['id'] as String, 'shipped', {
-        'tracking_number': trackCtrl.text.trim(),
-        'courier': selectedCourier,
-        'seller_notes': notesCtrl.text.trim(),
-        'shipped_at': DateTime.now().toIso8601String(),
-      });
-    }
-  }
+  Widget _shipSectionLabel(String text) => Text(
+        text,
+        style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF374151)),
+      );
+
+  Widget _shipInfoRow(IconData icon, String text) => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 15, color: Colors.grey.shade500),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(text,
+                style: const TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w500)),
+          ),
+        ],
+      );
 
   Widget _dialogField(
     TextEditingController ctrl,
@@ -472,6 +1049,28 @@ class _ClientOrdersScreenState extends State<ClientOrdersScreen>
     }
   }
 
+  // ── open delivery confirmation ──────────────────────────────────────────
+  Future<void> _openDeliveryConfirmation(Map<String, dynamic> order) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DeliveryConfirmationPage(
+          orderId:        order['id']?.toString() ?? '',
+          trackingNumber: order['tracking_number']?.toString(),
+          courierName:    order['courier']?.toString(),
+          buyerName:      order['buyer_name']?.toString(),
+          shippingAddress: [
+            order['shipping_address'],
+            order['shipping_city'],
+            order['shipping_postal_code'],
+          ].where((v) => v != null && v.toString().isNotEmpty).join(', '),
+        ),
+      ),
+    );
+    // Reload orders after returning (status may have auto-changed)
+    await _load();
+  }
+
   // ── cancel order ──────────────────────────────────────────────────────────
   // ── chat with customer ──────────────────────────────────────────────────
   Future<void> _openChat(Map<String, dynamic> order) async {
@@ -544,6 +1143,31 @@ class _ClientOrdersScreenState extends State<ClientOrdersScreen>
     }
   }
 
+  Future<void> _refundOrder(Map<String, dynamic> order) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Issue Refund?'),
+        content: const Text(
+            'Mark this order as refunded. The buyer will see the updated status. Continue?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('No')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: const Text('Refund', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await _updateStatus(order['id'] as String, 'refunded', {});
+    }
+  }
+
   // ── build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
@@ -578,23 +1202,19 @@ class _ClientOrdersScreenState extends State<ClientOrdersScreen>
             labelStyle: const TextStyle(
                 fontWeight: FontWeight.w700, fontSize: 13),
             tabs: _tabStatuses.map((s) {
-              final count = s == 'all'
-                  ? _orders.length
-                  : _orders.where((o) => o['status'] == s).length;
+              final count = _filtered(s).length;
               return Tab(
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(s == 'all' ? 'All' : _statusLabel(s)),
+                    Text(_tabLabel(s)),
                     if (count > 0) ...[
                       const SizedBox(width: 5),
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 1),
                         decoration: BoxDecoration(
-                          color: s == 'all'
-                              ? _kPink
-                              : _statusColor(s),
+                          color: _kPink,
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
@@ -638,6 +1258,9 @@ class _ClientOrdersScreenState extends State<ClientOrdersScreen>
                                   onCancel: () => _cancelOrder(list[i]),
                                   onChat: () => _openChat(list[i]),
                                   onPrintWaybill: () => _printWaybill(list[i]),
+                                  onConfirmDelivery: () => _openDeliveryConfirmation(list[i]),
+                                  onReship: () { _showShipDialog(list[i]); },
+                                  onRefund: () => _refundOrder(list[i]),
                                 ),
                           ),
                         );
@@ -659,9 +1282,7 @@ class _ClientOrdersScreenState extends State<ClientOrdersScreen>
                 decoration: const BoxDecoration(
                     color: _kPinkSoft, shape: BoxShape.circle),
                 child: Icon(
-                  tab == 'all'
-                      ? Icons.shopping_bag_outlined
-                      : _statusIcon(tab),
+                  _tabIcon(tab),
                   size: 40,
                   color: _kPinkLight,
                 ),
@@ -670,7 +1291,7 @@ class _ClientOrdersScreenState extends State<ClientOrdersScreen>
               Text(
                 tab == 'all'
                     ? 'No orders yet'
-                    : 'No ${_statusLabel(tab)} orders',
+                    : 'No ${_tabLabel(tab).toLowerCase()} orders',
                 style: TextStyle(
                   color: Colors.grey.shade500,
                   fontSize: 15,
@@ -717,6 +1338,9 @@ class _OrderCard extends StatelessWidget {
   final VoidCallback onCancel;
   final VoidCallback onChat;
   final VoidCallback onPrintWaybill;
+  final VoidCallback onConfirmDelivery;
+  final VoidCallback onReship;
+  final VoidCallback onRefund;
 
   const _OrderCard({
     required this.order,
@@ -724,6 +1348,9 @@ class _OrderCard extends StatelessWidget {
     required this.onCancel,
     required this.onChat,
     required this.onPrintWaybill,
+    required this.onConfirmDelivery,
+    required this.onReship,
+    required this.onRefund,
   });
 
   @override
@@ -731,9 +1358,10 @@ class _OrderCard extends StatelessWidget {
     final status = (order['status'] as String? ?? 'pending');
     final color = _statusColor(status);
     final next = _nextStatus(status);
-    final isTerminal = ['delivered', 'canceled', 'refunded', 'failed']
+    final isTerminal = ['delivered', 'canceled', 'refunded']
         .contains(status);
-    final canCancel = !isTerminal && status != 'shipped';
+    final isFailed = status == 'failed';
+    final canCancel = !isTerminal && !isFailed && status != 'shipped';
 
     final createdAt = DateTime.tryParse(
             order['created_at']?.toString() ?? '') ??
@@ -1026,29 +1654,63 @@ class _OrderCard extends StatelessWidget {
                     ),
                   ),
                 if (!isTerminal && status != 'pending') const SizedBox(width: 4),
-                if (canCancel)
-                  TextButton(
-                    onPressed: onCancel,
-                    style: TextButton.styleFrom(foregroundColor: Colors.red),
-                    child: const Text('Cancel',
-                        style: TextStyle(fontSize: 12)),
-                  ),
-                if (next != null) ...[
-                  const SizedBox(width: 8),
+                // Confirm delivery button — shown for shipped orders
+                if (status == 'shipped') ...[
                   ElevatedButton.icon(
-                    onPressed: onAdvance,
-                    icon: Icon(_nextIcon(next), size: 16),
-                    label: Text(_nextLabel(next),
-                        style: const TextStyle(fontSize: 12)),
+                    onPressed: onConfirmDelivery,
+                    icon: const Icon(Icons.verified_rounded, size: 16),
+                    label: const Text('Confirm Delivery',
+                        style: TextStyle(fontSize: 12)),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _statusColor(next),
+                      backgroundColor: Colors.green.shade600,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
+                          horizontal: 12, vertical: 10),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),
                     ),
                   ),
+                  const SizedBox(width: 8),
+                ],
+                if (isFailed) ...[
+                  TextButton(
+                    onPressed: onRefund,
+                    style: TextButton.styleFrom(foregroundColor: Colors.orange.shade700),
+                    child: const Text('Refund', style: TextStyle(fontSize: 12)),
+                  ),
+                  const SizedBox(width: 4),
+                  ElevatedButton.icon(
+                    onPressed: onReship,
+                    icon: const Icon(Icons.local_shipping_rounded, size: 16),
+                    label: const Text('Re-ship', style: TextStyle(fontSize: 12)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange.shade700,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ] else ...[
+                  if (canCancel)
+                    TextButton(
+                      onPressed: onCancel,
+                      style: TextButton.styleFrom(foregroundColor: Colors.red),
+                      child: const Text('Cancel', style: TextStyle(fontSize: 12)),
+                    ),
+                  if (next != null && status != 'shipped') ...[
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: onAdvance,
+                      icon: Icon(_nextIcon(next), size: 16),
+                      label: Text(_nextLabel(next), style: const TextStyle(fontSize: 12)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _statusColor(next),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ],
                 ],
               ],
             ),

@@ -25,6 +25,8 @@ class _SettingsTabState extends State<SettingsTab> {
 
   String _userEmail = '';
   String _userName = '';
+  String _userFirstName = '';
+  String _userLastName = '';
   String _userId = '';
   String _userPhone = '';
   String _userAddress = '';
@@ -97,11 +99,19 @@ class _SettingsTabState extends State<SettingsTab> {
         _userAddress = (meta['address'] as String? ?? '').trim();
         _userCity = (meta['city'] as String? ?? '').trim();
         _userPostalCode = (meta['postal_code'] as String? ?? '').trim();
+        _userFirstName = (meta['first_name'] as String? ?? '').trim();
+        _userLastName = (meta['last_name'] as String? ?? '').trim();
         _userName = fullName.trim().isNotEmpty
             ? fullName.trim()
             : name.trim().isNotEmpty
             ? name.trim()
             : 'Beauty Enthusiast';
+        // Back-fill first/last from full_name if not stored separately
+        if (_userFirstName.isEmpty && _userName.isNotEmpty && _userName != 'Beauty Enthusiast') {
+          final parts = _userName.split(' ');
+          _userFirstName = parts.first;
+          _userLastName = parts.length > 1 ? parts.sublist(1).join(' ') : '';
+        }
         _avatarUrl = (meta['avatar_url'] as String?) ?? null;
         _avatarBytes = null;
       });
@@ -1593,6 +1603,8 @@ class _SettingsTabState extends State<SettingsTab> {
   }
 
   void _showEditProfileDialog() {
+    final firstNameController = TextEditingController(text: _userFirstName);
+    final lastNameController = TextEditingController(text: _userLastName);
     final nameController = TextEditingController(text: _userName);
     final emailController = TextEditingController(text: _userEmail);
     final phoneController = TextEditingController(text: _userPhone);
@@ -1677,14 +1689,16 @@ class _SettingsTabState extends State<SettingsTab> {
             }
 
             Future<void> handleSave() async {
-              final newName = nameController.text.trim();
+              final newFirst = firstNameController.text.trim();
+              final newLast = lastNameController.text.trim();
+              final newName = '$newFirst $newLast'.trim();
               final newPhone = phoneController.text.trim();
               final newAddress = addressController.text.trim();
               final newCity = cityController.text.trim();
               final newPostal = postalController.text.trim();
-              if (newName.isEmpty) {
+              if (newFirst.isEmpty) {
                 ScaffoldMessenger.of(sheetContext).showSnackBar(
-                  const SnackBar(content: Text('Name cannot be empty')),
+                  const SnackBar(content: Text('First name cannot be empty')),
                 );
                 return;
               }
@@ -1694,6 +1708,8 @@ class _SettingsTabState extends State<SettingsTab> {
                   UserAttributes(
                     data: {
                       'full_name': newName,
+                      'first_name': newFirst,
+                      'last_name': newLast,
                       'phone_number': newPhone,
                       'phone': newPhone,
                       'address': newAddress,
@@ -1705,6 +1721,8 @@ class _SettingsTabState extends State<SettingsTab> {
                 if (mounted) {
                   setState(() {
                     _userName = newName;
+                    _userFirstName = newFirst;
+                    _userLastName = newLast;
                     _userPhone = newPhone;
                     _userAddress = newAddress;
                     _userCity = newCity;
@@ -1870,6 +1888,14 @@ class _SettingsTabState extends State<SettingsTab> {
                         child: Column(
                           children: [
                             _buildEditField(controller: nameController, label: 'Full Name', icon: Icons.person_outline),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Expanded(child: _buildEditField(controller: firstNameController, label: 'First Name', icon: Icons.badge_outlined)),
+                                const SizedBox(width: 12),
+                                Expanded(child: _buildEditField(controller: lastNameController, label: 'Last Name', icon: Icons.badge_outlined)),
+                              ],
+                            ),
                             const SizedBox(height: 14),
                             _buildEditField(controller: emailController, label: 'Email', icon: Icons.email_outlined, enabled: false),
                             const SizedBox(height: 14),
@@ -2263,105 +2289,135 @@ class _SettingsTabState extends State<SettingsTab> {
 
   void _showFeedbackDialog() {
     final feedbackController = TextEditingController();
+    int selectedRating = 0;
 
     showDialog(
       context: context,
-      builder: (dialogContext) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: SizedBox(
-          width: 480,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _gradientDialogHeader(
-                context: dialogContext,
-                icon: Icons.feedback_outlined,
-                title: 'Send Feedback',
-              ),
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'We\'d love to hear what you think.',
-                      style: TextStyle(color: Colors.black54, fontSize: 13),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: feedbackController,
-                      maxLines: 5,
-                      decoration: InputDecoration(
-                        hintText: 'Share your thoughts...',
-                        filled: true,
-                        fillColor: const Color(0xFFFFF9FB),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => Dialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: SizedBox(
+            width: 480,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _gradientDialogHeader(
+                  context: dialogContext,
+                  icon: Icons.feedback_outlined,
+                  title: 'Send Feedback',
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "We'd love to hear what you think.",
+                        style:
+                            TextStyle(color: Colors.black54, fontSize: 13),
+                      ),
+                      const SizedBox(height: 16),
+                      // ── Star rating ──────────────────────────────────
+                      const Text('How would you rate your experience?',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w600, fontSize: 13)),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: List.generate(5, (i) {
+                          final star = i + 1;
+                          return GestureDetector(
+                            onTap: () =>
+                                setDialogState(() => selectedRating = star),
+                            child: Icon(
+                              star <= selectedRating
+                                  ? Icons.star_rounded
+                                  : Icons.star_outline_rounded,
+                              color: star <= selectedRating
+                                  ? const Color(0xFFFFB400)
+                                  : Colors.grey.shade400,
+                              size: 36,
+                            ),
+                          );
+                        }),
+                      ),
+                      const SizedBox(height: 16),
+                      // ── Message ──────────────────────────────────────
+                      TextField(
+                        controller: feedbackController,
+                        maxLines: 5,
+                        decoration: InputDecoration(
+                          hintText: 'Share your thoughts...',
+                          filled: true,
+                          fillColor: const Color(0xFFFFF9FB),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10)),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () => Navigator.pop(dialogContext),
-                            child: const Text('Cancel'),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFFF4D97),
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () =>
+                                  Navigator.pop(dialogContext),
+                              child: const Text('Cancel'),
                             ),
-                            onPressed: () async {
-                              final feedback = feedbackController.text.trim();
-                              if (feedback.isEmpty) {
-                                _showSettingsMessage(
-                                  'Please enter your feedback first',
-                                );
-                                return;
-                              }
-
-                              // Save the feedback to the backend so admins can review it
-                              Navigator.pop(dialogContext);
-                              try {
-                                final inserted = await _supabaseService.insertSupportRequest(
-                                  subject: 'App Feedback',
-                                  message: feedback,
-                                );
-                                if (!mounted) return;
-                                if (inserted != null && inserted['id'] != null) {
-                                  _showSettingsMessage('Thanks — saved (id: ${inserted['id']}).');
-                                } else {
-                                  _showSettingsMessage('Could not save feedback — please try again or contact the admin.');
-                                }
-                              } catch (e) {
-                                // insertSupportRequest is forgiving, but catch in case
-                                _showSettingsMessage(
-                                  'Could not send feedback: $e',
-                                );
-                              }
-
-                              // Feedback saved; no automatic mail client fallback.
-                              // If you want to provide a manual "Open Email" option,
-                              // we can add a separate button instead.
-                            },
-                            icon: const Icon(Icons.send),
-                            label: const Text('Submit'),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor:
+                                    const Color(0xFFFF4D97),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(10)),
+                              ),
+                              onPressed: () async {
+                                final message =
+                                    feedbackController.text.trim();
+                                if (message.isEmpty) {
+                                  _showSettingsMessage(
+                                      'Please enter your feedback first');
+                                  return;
+                                }
+                                Navigator.pop(dialogContext);
+                                try {
+                                  final inserted =
+                                      await _supabaseService.insertFeedback(
+                                    rating: selectedRating > 0
+                                        ? selectedRating
+                                        : null,
+                                    message: message,
+                                  );
+                                  if (!mounted) return;
+                                  if (inserted != null &&
+                                      inserted['id'] != null) {
+                                    _showSettingsMessage(
+                                        'Thanks for your feedback!');
+                                  } else {
+                                    _showSettingsMessage(
+                                        'Could not save feedback — please try again.');
+                                  }
+                                } catch (e) {
+                                  if (!mounted) return;
+                                  _showSettingsMessage(
+                                      'Could not send feedback: $e');
+                                }
+                              },
+                              icon: const Icon(Icons.send),
+                              label: const Text('Submit'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -3011,6 +3067,7 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
   bool _showConfirm = false;
   bool _isLoading = false;
   double _strength = 0;
+  String? _errorMsg;
 
   @override
   void dispose() {
@@ -3045,40 +3102,44 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() => _isLoading = true);
+    setState(() { _isLoading = true; _errorMsg = null; });
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user?.email == null) {
-        widget.onMessage('Unable to verify user');
+        setState(() => _errorMsg = 'No authenticated user found. Please log in again.');
         return;
       }
-      // Re-authenticate with current password first
-      await Supabase.instance.client.auth.signInWithPassword(
-        email: user!.email!,
-        password: _currentCtrl.text.trim(),
-      );
+      // Verify current password by re-authenticating
+      try {
+        await Supabase.instance.client.auth.signInWithPassword(
+          email: user!.email!,
+          password: _currentCtrl.text.trim(),
+        );
+      } on AuthException {
+        setState(() => _errorMsg = 'Current password is incorrect.');
+        return;
+      }
       // Update to new password
       await Supabase.instance.client.auth.updateUser(
         UserAttributes(password: _newCtrl.text.trim()),
       );
-      // Log password change so admins can be notified
+      // Log password change
       try {
         await SupabaseService().logAdminAction(
           action: 'password_changed',
-          target: 'accounts:${user.id ?? ''}',
+          target: 'accounts:${user.id}',
           metadata: {'method': 'in_app'},
         );
       } catch (_) {}
-      widget.onMessage('Password updated successfully!');
-      if (mounted) Navigator.pop(context);
+      // Close sheet first, then show success snackbar on the parent
+      if (mounted) {
+        Navigator.pop(context);
+        widget.onMessage('Password updated successfully! ✓');
+      }
     } on AuthException catch (e) {
-      widget.onMessage(
-        e.message.contains('Invalid') || e.message.contains('invalid')
-            ? 'Current password is incorrect.'
-            : 'Error: ${e.message}',
-      );
+      setState(() => _errorMsg = e.message.isNotEmpty ? e.message : 'Authentication error. Please try again.');
     } catch (e) {
-      widget.onMessage('Error: $e');
+      setState(() => _errorMsg = 'Something went wrong. Please try again.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -3216,7 +3277,34 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
                   return null;
                 },
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 20),
+
+              // Inline error banner
+              if (_errorMsg != null) ...[  
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.error_outline_rounded, color: Colors.red.shade600, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _errorMsg!,
+                          style: TextStyle(color: Colors.red.shade700, fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
 
               // Update button
               SizedBox(

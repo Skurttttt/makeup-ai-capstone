@@ -21,6 +21,7 @@ class AdminSupportSection extends StatefulWidget {
 class _AdminSupportSectionState extends State<AdminSupportSection> {
   final SupabaseService _supabase = SupabaseService();
   bool _loading = true;
+  String? _error;
   List<Map<String, dynamic>> _requests = [];
 
   @override
@@ -30,7 +31,10 @@ class _AdminSupportSectionState extends State<AdminSupportSection> {
   }
 
   Future<void> _loadRequests() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final supports = await _supabase.getSupportRequests();
       final feedbacks = await _supabase.getFeedbacks();
@@ -41,7 +45,7 @@ class _AdminSupportSectionState extends State<AdminSupportSection> {
         _loading = false;
       });
     } catch (e) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() { _loading = false; _error = e.toString(); });
     }
   }
 
@@ -106,69 +110,150 @@ class _AdminSupportSectionState extends State<AdminSupportSection> {
       itemBuilder: (context, i) {
         final r = items[i];
         final id = r['id']?.toString() ?? '';
-        final subject = r['subject']?.toString() ?? 'Support';
+        final source = (r['_source'] as String?) ?? 'support';
+        final subject = r['subject']?.toString() ??
+            (source == 'feedback' ? 'App Feedback' : 'Support Request');
         final message = r['message']?.toString() ?? '';
         final status = r['status']?.toString() ?? 'open';
         final created = r['created_at']?.toString();
-        final email = (r['accounts']?['email'] as String?) ?? r['email'] as String? ?? '';
+        final email =
+            (r['accounts']?['email'] as String?) ?? r['email'] as String? ?? '';
         final userName = (r['accounts']?['full_name'] as String?) ?? '';
+        final rating = (r['rating'] as num?)?.toInt();
         DateTime? dt;
         if (created != null) dt = DateTime.tryParse(created);
 
+        final statusColor = switch (status) {
+          'resolved' => Colors.green,
+          'in_progress' => Colors.orange,
+          'closed' => Colors.grey,
+          _ => Colors.blue,
+        };
+
         return ListTile(
-          title: Text(subject, style: const TextStyle(fontWeight: FontWeight.w700)),
+          title: Row(
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: source == 'feedback'
+                      ? Colors.purple.withOpacity(0.12)
+                      : Colors.teal.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  source == 'feedback' ? 'FEEDBACK' : 'SUPPORT',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    color: source == 'feedback'
+                        ? Colors.purple.shade700
+                        : Colors.teal.shade700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(subject,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                    overflow: TextOverflow.ellipsis),
+              ),
+            ],
+          ),
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
+              if (rating != null)
+                Row(
+                  children: [
+                    ...List.generate(
+                        5,
+                        (i) => Icon(
+                              i < rating
+                                  ? Icons.star_rounded
+                                  : Icons.star_outline_rounded,
+                              size: 14,
+                              color: i < rating
+                                  ? const Color(0xFFFFB400)
+                                  : Colors.grey.shade300,
+                            )),
+                    const SizedBox(width: 4),
+                    Text('$rating/5',
+                        style: const TextStyle(
+                            fontSize: 11, color: Color(0xFFFF8A00))),
+                  ],
+                ),
+              if (rating != null) const SizedBox(height: 4),
               Text(message, maxLines: 3, overflow: TextOverflow.ellipsis),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Row(
                 children: [
-                  if (userName.isNotEmpty) Text(userName, style: TextStyle(color: Colors.grey[600])),
+                  if (userName.isNotEmpty)
+                    Text(userName,
+                        style: TextStyle(color: Colors.grey[600])),
                   if (email.isNotEmpty) ...[
                     if (userName.isNotEmpty) const SizedBox(width: 8),
                     InkWell(
                       onTap: () async {
-                        final uri = Uri.parse('mailto:$email?subject=${Uri.encodeComponent(subject)}');
+                        final uri = Uri.parse(
+                            'mailto:$email?subject=${Uri.encodeComponent(subject)}');
                         if (await canLaunchUrl(uri)) await launchUrl(uri);
                       },
-                      child: Text(email, style: TextStyle(color: Theme.of(context).colorScheme.primary)),
+                      child: Text(email,
+                          style: TextStyle(
+                              color:
+                                  Theme.of(context).colorScheme.primary)),
                     ),
                   ],
                   const SizedBox(width: 12),
-                  if (dt != null) Text(DateFormat('MMM d • HH:mm').format(dt), style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                  if (dt != null)
+                    Text(DateFormat('MMM d • HH:mm').format(dt),
+                        style: TextStyle(
+                            color: Colors.grey[500], fontSize: 12)),
                 ],
               ),
             ],
           ),
           trailing: PopupMenuButton<String>(
             onSelected: (v) {
-              final src = (r['_source'] as String?) ?? 'support';
               if (v == 'reply') {
-                final uri = Uri.parse('mailto:$email?subject=${Uri.encodeComponent('Re: $subject')}');
+                final uri = Uri.parse(
+                    'mailto:$email?subject=${Uri.encodeComponent('Re: $subject')}');
                 launchUrl(uri);
               } else if (v == 'export') {
                 _exportAsPdf(r);
               } else {
-                _updateStatusForSource(id, v, src);
+                _updateStatusForSource(id, v, source);
               }
             },
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'open', child: Text('Mark Open')),
-              const PopupMenuItem(value: 'in_progress', child: Text('Mark In Progress')),
-              const PopupMenuItem(value: 'resolved', child: Text('Mark Resolved')),
+              const PopupMenuItem(
+                  value: 'in_progress', child: Text('Mark In Progress')),
+              const PopupMenuItem(
+                  value: 'resolved', child: Text('Mark Resolved')),
               const PopupMenuDivider(),
-              const PopupMenuItem(value: 'reply', child: Text('Reply via Email')),
+              if (email.isNotEmpty)
+                const PopupMenuItem(
+                    value: 'reply', child: Text('Reply via Email')),
               const PopupMenuItem(value: 'export', child: Text('Export PDF')),
             ],
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(8),
-                color: status == 'resolved' ? Colors.green.withOpacity(0.12) : Colors.grey.withOpacity(0.08),
+                color: statusColor.withOpacity(0.1),
               ),
-              child: Text(status.toUpperCase(), style: TextStyle(fontWeight: FontWeight.w700, color: status == 'resolved' ? Colors.green : Colors.grey[800])),
+              child: Text(
+                status.toUpperCase().replaceAll('_', ' '),
+                style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                    color: statusColor),
+              ),
             ),
           ),
         );
@@ -202,7 +287,27 @@ class _AdminSupportSectionState extends State<AdminSupportSection> {
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
-                : DefaultTabController(
+                : _error != null
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.error_outline_rounded,
+                                size: 40, color: Colors.red),
+                            const SizedBox(height: 8),
+                            Text(_error!,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: Colors.red)),
+                            const SizedBox(height: 12),
+                            ElevatedButton.icon(
+                              onPressed: _loadRequests,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      )
+                    : DefaultTabController(
                     length: 2,
                     initialIndex: widget.initialTabIndex,
                     child: Column(
