@@ -12,7 +12,7 @@ AS $$
     SELECT 1 
     FROM public.accounts 
     WHERE id = auth.uid() 
-    AND role = 'admin'
+    AND role IN ('admin', 'super_admin')
   );
 $$;
 

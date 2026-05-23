@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   id uuid REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   email text UNIQUE NOT NULL,
   full_name text,
-  role text DEFAULT 'user' CHECK (role IN ('admin', 'user', 'client')),
+  role text DEFAULT 'user' CHECK (role IN ('admin', 'user', 'client', 'staff', 'super_admin')),
   avatar_url text,
   bio text,
   phone text,
@@ -57,7 +57,7 @@ CREATE POLICY "Admin can view all profiles"
   USING (
     EXISTS (
       SELECT 1 FROM public.profiles
-      WHERE id = auth.uid() AND role = 'admin'
+      WHERE id = auth.uid() AND role IN ('admin', 'super_admin')
     )
   );
 
@@ -68,7 +68,7 @@ CREATE POLICY "Admin can update any profile"
   USING (
     EXISTS (
       SELECT 1 FROM public.profiles
-      WHERE id = auth.uid() AND role = 'admin'
+      WHERE id = auth.uid() AND role IN ('admin', 'super_admin')
     )
   );
 
@@ -120,7 +120,7 @@ CREATE POLICY "Admin can view all scans"
   USING (
     EXISTS (
       SELECT 1 FROM public.profiles
-      WHERE id = auth.uid() AND role = 'admin'
+      WHERE id = auth.uid() AND role IN ('admin', 'super_admin')
     )
   );
 

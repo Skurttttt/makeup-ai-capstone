@@ -1,5 +1,6 @@
 // lib/services/supabase_service.dart
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -114,6 +115,19 @@ class SupabaseService {
     String role = 'user',
   }) async {
     try {
+      // Prevent admins/super_admins from creating plain 'user' accounts programmatically
+      final currentUid = client.auth.currentUser?.id;
+      if (currentUid != null && role == 'user') {
+        try {
+          final caller = await client.from('accounts').select('role').eq('id', currentUid).single();
+          final callerRole = caller['role']?.toString();
+          if (callerRole == 'admin' || callerRole == 'super_admin') {
+            throw 'Admins cannot create role "user" accounts; users must register through the app.';
+          }
+        } catch (e) {
+          // If lookup fails, allow continuation if it's the same user registering.
+        }
+      }
       final response = await client.from('accounts').insert({
         'id': userId,
         'email': email,
@@ -242,6 +256,185 @@ class SupabaseService {
       return response.first;
     } catch (e) {
       throw 'Failed to add favorite: $e';
+    }
+  }
+
+  // ==================== DELIVERY PROOF ====================
+
+  /// Upload a photo proof of delivery.
+  /// Automatically awards score_photo (+0.25) and score_gps (+0.25 if GPS provided).
+  /// The DB trigger auto-verifies if combined confidence >= 0.75.
+  Future<Map<String, dynamic>> uploadDeliveryProof({
+    required String userId,
+    required String fileName,
+    required Uint8List fileBytes,
+    String? orderId,
+    String? trackingNumber,
+    double? exifLat,
+    double? exifLng,
+    String? exifTimestamp,
+  }) async {
+    try {
+      final safeTs = DateTime.now().toUtc().millisecondsSinceEpoch;
+      final path = '$userId/delivery_proofs/${safeTs}_$fileName';
+
+      await client.storage.from('delivery-proofs').uploadBinary(
+            path,
+            fileBytes,
+            fileOptions: const FileOptions(cacheControl: '3600', upsert: false),
+          );
+
+      final publicUrl = client.storage.from('delivery-proofs').getPublicUrl(path);
+
+      // score_photo is always awarded; score_gps only if GPS was provided
+      final scorePhoto = 0.25;
+      final scoreGps   = (exifLat != null && exifLng != null) ? 0.25 : 0.0;
+
+      final existing = orderId != null
+          ? await client
+              .from('delivery_proofs')
+              .select('id')
+              .eq('order_id', orderId)
+              .maybeSingle()
+          : null;
+
+      Map<String, dynamic> result;
+      if (existing != null) {
+        // Update existing proof row rather than creating a duplicate
+        result = await client
+            .from('delivery_proofs')
+            .update({
+              'image_path': path,
+              'image_url': publicUrl,
+              'exif_lat': exifLat,
+              'exif_lng': exifLng,
+              'exif_timestamp': exifTimestamp,
+              'score_photo': scorePhoto,
+              'score_gps': scoreGps,
+            })
+            .eq('id', existing['id'])
+            .select()
+            .single();
+      } else {
+        result = await client
+            .from('delivery_proofs')
+            .insert({
+              'order_id': orderId,
+              'tracking_number': trackingNumber,
+              'user_id': userId,
+              'image_path': path,
+              'image_url': publicUrl,
+              'exif_lat': exifLat,
+              'exif_lng': exifLng,
+              'exif_timestamp': exifTimestamp,
+              'score_photo': scorePhoto,
+              'score_gps': scoreGps,
+            })
+            .select()
+            .single();
+      }
+
+      return Map<String, dynamic>.from(result);
+    } catch (e) {
+      throw 'Failed to upload delivery proof: $e';
+    }
+  }
+
+  /// One-tap customer confirmation (no photo needed).
+  /// Awards score_confirm (+0.20) via DB function.
+  Future<void> confirmDelivery({
+    required String orderId,
+    required String userId,
+  }) async {
+    try {
+      await client.rpc('confirm_delivery', params: {
+        'p_order_id': orderId,
+        'p_user_id': userId,
+      });
+    } catch (e) {
+      throw 'Failed to confirm delivery: $e';
+    }
+  }
+
+  /// Verify an OTP code from the packing slip.
+  /// Awards score_otp (+0.40) via DB function and returns true/false.
+  Future<bool> verifyDeliveryOtp({
+    required String orderId,
+    required String code,
+  }) async {
+    try {
+      final result = await client.rpc('verify_delivery_otp', params: {
+        'p_order_id': orderId,
+        'p_code': code,
+      });
+      return result == true;
+    } catch (e) {
+      throw 'Failed to verify OTP: $e';
+    }
+  }
+
+  /// Generate and store an OTP for an order (call when order is created/shipped).
+  Future<String> generateDeliveryOtp({required String orderId}) async {
+    try {
+      // 6-digit numeric OTP, valid for 7 days
+      final code = (100000 + (DateTime.now().millisecondsSinceEpoch % 900000))
+          .toString();
+      await client.from('delivery_otps').insert({
+        'order_id': orderId,
+        'code': code,
+        'expires_at': DateTime.now().toUtc().add(const Duration(days: 7)).toIso8601String(),
+      });
+      return code;
+    } catch (e) {
+      throw 'Failed to generate OTP: $e';
+    }
+  }
+
+  /// Get delivery proof for a specific order.
+  Future<Map<String, dynamic>?> getDeliveryProofForOrder(String orderId) async {
+    try {
+      final response = await client
+          .from('delivery_proofs')
+          .select()
+          .eq('order_id', orderId)
+          .maybeSingle();
+      return response != null ? Map<String, dynamic>.from(response) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Get delivery proofs for a user (or all if admin).
+  Future<List<Map<String, dynamic>>> getDeliveryProofs({String? userId}) async {
+    try {
+      var query = client.from('delivery_proofs').select('*, accounts(full_name, email)');
+      if (userId != null) query = query.eq('user_id', userId);
+      final response = await query.order('created_at', ascending: false);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      throw 'Failed to fetch delivery proofs: $e';
+    }
+  }
+
+  /// Admin manually updates status of a proof (verify / reject).
+  Future<Map<String, dynamic>> updateDeliveryProofStatus({
+    required String proofId,
+    required String status,
+    String? rejectionReason,
+  }) async {
+    try {
+      final response = await client
+          .from('delivery_proofs')
+          .update({
+            'status': status,
+            if (rejectionReason != null) 'rejection_reason': rejectionReason,
+          })
+          .eq('id', proofId)
+          .select()
+          .single();
+      return Map<String, dynamic>.from(response);
+    } catch (e) {
+      throw 'Failed to update delivery proof: $e';
     }
   }
 

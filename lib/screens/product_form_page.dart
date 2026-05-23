@@ -610,7 +610,12 @@ class _ProductFormPageState extends State<ProductFormPage> {
         Navigator.pop(context, true);
       }
     } catch (e) {
-      _showSnackBar('Error saving product: $e', isError: true);
+      final msg = e.toString();
+      if (msg.contains('violates foreign key constraint') || msg.contains('order_items_product_id_fkey')) {
+        _showSnackBar('Cannot update product while it is referenced by order items. Remove dependent order items first or enable cascading deletes in the database.', isError: true);
+      } else {
+        _showSnackBar('Error saving product: $e', isError: true);
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }

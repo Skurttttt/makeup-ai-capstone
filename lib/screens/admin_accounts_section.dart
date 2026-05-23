@@ -14,7 +14,8 @@ import 'admin_shared.dart';
 import '../widgets/admin_dialog.dart';
 
 class AdminAccountsSection extends StatefulWidget {
-  const AdminAccountsSection({super.key});
+  final bool isSuperAdmin;
+  const AdminAccountsSection({super.key, this.isSuperAdmin = false});
 
   @override
   State<AdminAccountsSection> createState() => _AdminAccountsSectionState();
@@ -169,15 +170,18 @@ class _AdminAccountsSectionState extends State<AdminAccountsSection> {
           buildAdaptiveCardGrid(
             minWidth: 160,
             children: [
-              buildSummaryCard('Total Users', '${_users.length}',
+              buildSummaryCard('Total Accounts', '${_users.length}',
                   Icons.people_rounded, AdminTheme.accentColor),
               buildSummaryCard('Active Subscribers', '$subscriberCount',
                   Icons.verified_rounded, AdminTheme.successColor),
-              buildSummaryCard('Admins', '$adminCount',
+              buildSummaryCard('Admins / Super',
+                  '${_users.where((u) => u['role'] == 'admin' || u['role'] == 'super_admin').length}',
                   Icons.shield_rounded, AdminTheme.warningColor),
-              buildSummaryCard(
-                  'Regular Users',
-                  '${_users.where((u) => u['role'] == 'user').length}',
+              buildSummaryCard('Staff',
+                  '${_users.where((u) => u['role'] == 'staff').length}',
+                  Icons.badge_rounded, AdminTheme.successColor),
+              buildSummaryCard('Users / Clients',
+                  '${_users.where((u) => u['role'] == 'user' || u['role'] == 'client').length}',
                   Icons.person_rounded,
                   AdminTheme.textSecondary),
             ],
@@ -209,6 +213,7 @@ class _AdminAccountsSectionState extends State<AdminAccountsSection> {
                   DropdownMenuItem(value: 'all', child: Text('All Roles')),
                   DropdownMenuItem(value: 'admin', child: Text('Admin')),
                   DropdownMenuItem(value: 'user', child: Text('User')),
+                      DropdownMenuItem(value: 'staff', child: Text('Staff')),
                 ],
                 onChanged: (v) => setState(() {
                   _roleFilter = v ?? _roleFilter;
@@ -502,17 +507,25 @@ class _AdminAccountsSectionState extends State<AdminAccountsSection> {
             // Actions
             Column(
               children: [
-                buildTableActionButton(
-                    Icons.edit_rounded,
-                    'Edit',
-                    AdminTheme.accentColor,
-                    () => _showEditAccountDialog(user)),
-                const SizedBox(height: 6),
-                buildTableActionButton(
-                    Icons.delete_rounded,
-                    'Delete',
-                    AdminTheme.dangerColor,
-                    () => _showDeleteAccountDialog(user)),
+                if (widget.isSuperAdmin ||
+                    (user['role']?.toString() ?? '') != 'super_admin') ...[
+                  buildTableActionButton(
+                      Icons.edit_rounded,
+                      'Edit',
+                      AdminTheme.accentColor,
+                      () => _showEditAccountDialog(user)),
+                  const SizedBox(height: 6),
+                  buildTableActionButton(
+                      Icons.delete_rounded,
+                      'Delete',
+                      AdminTheme.dangerColor,
+                      () => _showDeleteAccountDialog(user)),
+                ] else
+                  Tooltip(
+                    message: 'Super Admin — restricted',
+                    child: Icon(Icons.lock_rounded,
+                        size: 18, color: Colors.grey.shade400),
+                  ),
               ],
             ),
           ],
@@ -543,7 +556,7 @@ class _AdminAccountsSectionState extends State<AdminAccountsSection> {
     final nameController = TextEditingController();
     final emailController = TextEditingController();
     final passwordController = TextEditingController();
-    String role = 'user';
+    String role = 'staff';
     bool isLoading = false;
     bool showPassword = false;
     String? selectedPlanId;
@@ -895,13 +908,12 @@ class _AdminAccountsSectionState extends State<AdminAccountsSection> {
                             children: [
                               Expanded(
                                 child: _buildRoleCard(
-                                  icon: Icons.person_rounded,
-                                  title: 'User',
-                                  subtitle: 'Regular access',
-                                  isSelected: role == 'user',
-                                  onTap: () =>
-                                      setDialogState(() => role = 'user'),
-                                  color: const Color(0xFF3B82F6),
+                                  icon: Icons.people_rounded,
+                                  title: 'Staff',
+                                  subtitle: 'Staff access',
+                                  isSelected: role == 'staff',
+                                  onTap: () => setDialogState(() => role = 'staff'),
+                                  color: const Color(0xFF10B981),
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -911,8 +923,7 @@ class _AdminAccountsSectionState extends State<AdminAccountsSection> {
                                   title: 'Admin',
                                   subtitle: 'Full access',
                                   isSelected: role == 'admin',
-                                  onTap: () =>
-                                      setDialogState(() => role = 'admin'),
+                                  onTap: () => setDialogState(() => role = 'admin'),
                                   color: const Color(0xFFF59E0B),
                                 ),
                               ),
@@ -1009,7 +1020,7 @@ class _AdminAccountsSectionState extends State<AdminAccountsSection> {
                       Expanded(
                         flex: 2,
                         child: ElevatedButton(
-                          onPressed: isLoading
+                                onPressed: isLoading
                               ? null
                               : () async {
                                   if (!formKey.currentState!.validate())
@@ -1030,6 +1041,19 @@ class _AdminAccountsSectionState extends State<AdminAccountsSection> {
                                       }
                                       setDialogState(
                                           () => isLoading = false);
+                                      return;
+                                    }
+
+                                    // Prevent creating plain 'user' accounts via admin UI
+                                    if (role == 'user') {
+                                      if (context.mounted) {
+                                        showAdminSnackBar(
+                                          context,
+                                          'Cannot create role "user" from admin panel. Users must register through the app.',
+                                          isError: true,
+                                        );
+                                      }
+                                      setDialogState(() => isLoading = false);
                                       return;
                                     }
 
@@ -1344,227 +1368,291 @@ class _AdminAccountsSectionState extends State<AdminAccountsSection> {
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => adminAlertDialog(
-          backgroundColor: AdminTheme.cardColor,
-          borderRadius: 16,
-          title: Row(children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: AdminTheme.accentColor.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(Icons.edit_rounded,
-                  color: AdminTheme.accentColor, size: 22),
+        builder: (context, setDialogState) => Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 520),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 40,
+                  offset: const Offset(0, 20),
+                ),
+              ],
             ),
-            const SizedBox(width: 14),
-            const Text('Edit Account',
-                style: TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.w700)),
-          ]),
-          content: Form(
-            key: formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                TextFormField(
-                  controller: nameController,
-                  decoration: InputDecoration(
-                    labelText: 'Full Name',
-                    prefixIcon:
-                        const Icon(Icons.person_outline_rounded),
-                    filled: true,
-                    fillColor: AdminTheme.backgroundColor,
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 14),
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                            color: AdminTheme.borderColor)),
-                    enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                            color: AdminTheme.borderColor)),
-                  ),
-                  validator: (v) =>
-                      v == null || v.trim().isEmpty
-                          ? 'Name is required'
-                          : null,
-                ),
-                const SizedBox(height: 12),
+                // Header with gradient
                 Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AdminTheme.backgroundColor,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AdminTheme.borderColor),
+                  padding: const EdgeInsets.all(24),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF4F46E5), Color(0xFF7C3AED)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(24),
+                      topRight: Radius.circular(24),
+                    ),
                   ),
-                  child: Row(children: [
-                    const Icon(Icons.email_outlined,
-                        size: 18, color: AdminTheme.textSecondary),
-                    const SizedBox(width: 8),
-                    Expanded(
-                        child: Text(
-                            'Email: ${account['email']}',
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.3),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.edit_rounded,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Edit Account',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Update account details',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.white70,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close_rounded),
+                        color: Colors.white70,
+                        iconSize: 22,
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.white.withOpacity(0.1),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Content
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Form(
+                      key: formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildInputLabel('Full Name'),
+                          const SizedBox(height: 8),
+                          TextFormField(
+                            controller: nameController,
                             style: const TextStyle(
-                                color: AdminTheme.textSecondary,
-                                fontSize: 14))),
-                  ]),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: role,
-                  decoration: InputDecoration(
-                    labelText: 'Role',
-                    prefixIcon: const Icon(Icons.badge_outlined),
-                    filled: true,
-                    fillColor: AdminTheme.backgroundColor,
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 12),
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                            color: AdminTheme.borderColor)),
-                    enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                            color: AdminTheme.borderColor)),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            decoration: _buildInputDecoration(
+                              hintText: 'e.g., John Doe',
+                              prefixIcon: Icons.person_outline_rounded,
+                            ),
+                            validator: (v) => v == null || v.trim().isEmpty
+                                ? 'Name is required'
+                                : null,
+                          ),
+                          const SizedBox(height: 12),
+                          _buildInputLabel('Email'),
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF9FAFB),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.grey.shade300),
+                            ),
+                            child: Text(account['email']?.toString() ?? ''),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Role cards
+                          _buildInputLabel('Account Role'),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildRoleCard(
+                                  icon: Icons.people_rounded,
+                                  title: 'Staff',
+                                  subtitle: 'Staff access',
+                                  isSelected: role == 'staff',
+                                  onTap: () => setDialogState(() => role = 'staff'),
+                                  color: const Color(0xFF10B981),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _buildRoleCard(
+                                  icon: Icons.admin_panel_settings_rounded,
+                                  title: 'Admin',
+                                  subtitle: 'Full access',
+                                  isSelected: role == 'admin',
+                                  onTap: () => setDialogState(() => role = 'admin'),
+                                  color: const Color(0xFFF59E0B),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+
+                          if (_plans.isNotEmpty) ...[
+                            _buildInputLabel('Subscription Plan'),
+                            const SizedBox(height: 8),
+                            DropdownButtonFormField<String>(
+                              value: selectedPlanId,
+                              decoration: _buildInputDecoration(
+                                  prefixIcon: Icons.card_membership_rounded,
+                                  hintText: 'Select a plan'),
+                              items: [
+                                DropdownMenuItem<String>(
+                                  value: null,
+                                  child: Text('No plan (Free)',
+                                      style: TextStyle(
+                                          color: Colors.grey.shade600)),
+                                ),
+                                ..._plans.map((p) => DropdownMenuItem<String>(
+                                      value: p['id']?.toString(),
+                                      child: Text(p['display_name'] ?? p['name'] ?? 'Plan'),
+                                    )),
+                              ],
+                              onChanged: (v) => setDialogState(() => selectedPlanId = v),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
-                  items: const [
-                    DropdownMenuItem(
-                        value: 'user', child: Text('User')),
-                    DropdownMenuItem(
-                        value: 'admin', child: Text('Admin')),
-                  ],
-                  onChanged: (v) =>
-                      setDialogState(() => role = v ?? 'user'),
                 ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: selectedPlanId,
-                  decoration: InputDecoration(
-                    labelText: 'Subscription Plan',
-                    prefixIcon: const Icon(
-                        Icons.card_membership_rounded),
-                    filled: true,
-                    fillColor: AdminTheme.backgroundColor,
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 12),
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                            color: AdminTheme.borderColor)),
-                    enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                            color: AdminTheme.borderColor)),
+
+                // Footer
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      top: BorderSide(color: Colors.grey.shade200),
+                    ),
                   ),
-                  items: [
-                    const DropdownMenuItem(
-                        value: null, child: Text('No plan')),
-                    ..._plans.map((p) => DropdownMenuItem(
-                        value: p['id']?.toString(),
-                        child: Text(p['display_name'] ??
-                            p['name'] ??
-                            p['id']?.toString()))),
-                  ],
-                  onChanged: (v) =>
-                      setDialogState(() => selectedPlanId = v),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: isLoading ? null : () => Navigator.pop(context),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            side: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          child: const Text('Cancel', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Color(0xFF6B7280))),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton(
+                          onPressed: isLoading
+                              ? null
+                              : () async {
+                                  if (!formKey.currentState!.validate()) return;
+                                  setDialogState(() => isLoading = true);
+                                  try {
+                                    await _supabaseService.updateUserProfile(
+                                        userId: userId,
+                                        updates: {
+                                          'full_name': nameController.text.trim(),
+                                          'role': role,
+                                        });
+
+                                    // handle subscription updates same as before
+                                    if (selectedPlanId != null) {
+                                      if (userSubs.isNotEmpty) {
+                                        final subId = userSubs.first['id']?.toString() ?? '';
+                                        if (subId.isNotEmpty) {
+                                          await _supabaseService.updateSubscription(
+                                              subscriptionId: subId,
+                                              updates: {
+                                                'plan_id': selectedPlanId,
+                                                'status': 'active',
+                                                'current_period_end': DateTime.now().add(const Duration(days: 30)).toIso8601String(),
+                                              });
+                                        }
+                                      } else {
+                                        await _supabaseService.createUserSubscription(
+                                            accountId: userId,
+                                            planId: selectedPlanId!,
+                                            status: 'active',
+                                            currentPeriodEnd: DateTime.now().add(const Duration(days: 30)));
+                                      }
+                                    }
+
+                                    if (context.mounted) {
+                                      Navigator.pop(context);
+                                      _loadData();
+                                      showAdminSnackBar(context, 'Account updated successfully', isError: false);
+                                    }
+                                  } catch (e) {
+                                    if (context.mounted) showAdminSnackBar(context, 'Error: $e', isError: true);
+                                  } finally {
+                                    if (context.mounted) setDialogState(() => isLoading = false);
+                                  }
+                                },
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            backgroundColor: const Color(0xFF4F46E5),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            elevation: 0,
+                          ),
+                          child: isLoading
+                              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
+                              : const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                  Icon(Icons.save_rounded, size: 18),
+                                  SizedBox(width: 8),
+                                  Text('Save Changes', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                                ]),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
-          actionsAlignment: MainAxisAlignment.end,
-          actions: [
-            TextButton(
-                onPressed: isLoading
-                    ? null
-                    : () => Navigator.pop(context),
-                style: TextButton.styleFrom(
-                    foregroundColor: AdminTheme.dangerColor),
-                child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: isLoading
-                  ? null
-                  : () async {
-                      if (!formKey.currentState!.validate())
-                        return;
-                      setDialogState(() => isLoading = true);
-                      try {
-                        await _supabaseService.updateUserProfile(
-                            userId: userId,
-                            updates: {
-                              'full_name':
-                                  nameController.text.trim(),
-                              'role': role,
-                            });
-
-                        // assign or update subscription if selected
-                        if (selectedPlanId != null) {
-                          if (userSubs.isNotEmpty) {
-                            final subId =
-                                userSubs.first['id']?.toString() ??
-                                    '';
-                            if (subId.isNotEmpty) {
-                              await _supabaseService
-                                  .updateSubscription(
-                                      subscriptionId: subId,
-                                      updates: {
-                                    'plan_id': selectedPlanId,
-                                    'status': 'active',
-                                    'current_period_end':
-                                        DateTime.now()
-                                            .add(const Duration(
-                                                days: 30))
-                                            .toIso8601String(),
-                                  });
-                            }
-                          } else {
-                            await _supabaseService
-                                .createUserSubscription(
-                                    accountId: userId,
-                                    planId: selectedPlanId!,
-                                    status: 'active',
-                                    currentPeriodEnd: DateTime.now()
-                                        .add(const Duration(
-                                            days: 30)));
-                          }
-                        }
-
-                        if (context.mounted) {
-                          Navigator.pop(context);
-                          _loadData();
-                          showAdminSnackBar(context,
-                              'Account updated successfully',
-                              isError: false);
-                        }
-                      } catch (e) {
-                        if (context.mounted) {
-                          showAdminSnackBar(context, 'Error: $e',
-                              isError: true);
-                        }
-                      } finally {
-                        if (context.mounted) {
-                          setDialogState(() => isLoading = false);
-                        }
-                      }
-                    },
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: AdminTheme.accentColor,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8))),
-              child: isLoading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
-                  : const Text('Save'),
-            ),
-          ],
         ),
       ),
     );

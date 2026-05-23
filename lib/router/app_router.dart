@@ -17,7 +17,11 @@ class AppRouter {
           return MaterialPageRoute(builder: (_) => const LoginSupabasePage());
         }
         if (authService.isAdmin) {
-          return MaterialPageRoute(builder: (_) => const AdminScreenNew());
+          return MaterialPageRoute(
+              builder: (_) => AdminScreenNew(
+                  currentUserRole: authService.userRole == UserRole.superAdmin
+                      ? 'super_admin'
+                      : 'admin'));
         }
         return MaterialPageRoute(builder: (_) => const HomeScreen());
 
@@ -34,7 +38,11 @@ class AppRouter {
         if (!authService.isAdmin) {
           return MaterialPageRoute(builder: (_) => const LoginSupabasePage());
         }
-        return MaterialPageRoute(builder: (_) => const AdminScreenNew());
+        return MaterialPageRoute(
+            builder: (_) => AdminScreenNew(
+                currentUserRole: authService.userRole == UserRole.superAdmin
+                    ? 'super_admin'
+                    : 'admin'));
 
       default:
         return MaterialPageRoute(

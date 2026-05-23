@@ -81,8 +81,9 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
       // Log the login event
       try {
         final supabaseService = SupabaseService();
+        final r = role?.toLowerCase() ?? '';
         await supabaseService.logAdminAction(
-          action: role?.toLowerCase() == 'admin' ? 'admin_login' : 'user_login',
+          action: (r == 'admin' || r == 'super_admin') ? 'admin_login' : 'user_login',
           target: 'auth',
           metadata: {
             'email': user!.email,
@@ -101,15 +102,20 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
       if (!mounted) return;
 
       // Route based on role
-      if (role?.toLowerCase() == 'admin') {
+      final r = role?.toLowerCase() ?? 'user';
+      if (r == 'admin' || r == 'super_admin') {
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const AdminScreenNew()),
+          MaterialPageRoute(
+              builder: (_) => AdminScreenNew(currentUserRole: r)),
         );
-      } else if (accountType == 'business' || role?.toLowerCase() == 'client') {
+      } else if (r == 'staff' ||
+          r == 'client' ||
+          accountType == 'business') {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const ClientScreen()),
         );
       } else {
+        // user → home
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const HomeScreen()),
         );

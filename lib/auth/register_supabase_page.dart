@@ -15,9 +15,13 @@ class RegisterSupabasePage extends StatefulWidget {
 
 class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _addressController = TextEditingController();
+  final _cityController = TextEditingController();
+  final _postalController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _supabaseService = SupabaseService();
@@ -29,9 +33,13 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
 
   @override
   void dispose() {
-    _nameController.dispose();
+    _firstNameController.dispose();
+    _lastNameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
+    _addressController.dispose();
+    _cityController.dispose();
+    _postalController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -58,7 +66,13 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
 
     try {
       final email = _emailController.text.trim();
-      final fullName = _nameController.text.trim();
+      final firstName = _firstNameController.text.trim();
+      final lastName = _lastNameController.text.trim();
+      final fullName = '$firstName $lastName'.trim();
+      final phone = _phoneController.text.trim();
+      final address = _addressController.text.trim();
+      final city = _cityController.text.trim();
+      final postal = _postalController.text.trim();
       final password = _passwordController.text;
 
       // Check if email already exists
@@ -87,14 +101,20 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
         password: password,
         data: {
           'full_name': fullName,
-          'phone': _phoneController.text.trim(),
+          'first_name': firstName,
+          'last_name': lastName,
+          'phone': phone,
+          'phone_number': phone,
+          'address': address,
+          'city': city,
+          'postal_code': postal,
           'account_type': 'individual',
           'client_type': 'individual',
         },
       );
 
-      // Write phone + name into accounts row directly (in case the trigger
-      // didn't pick it up from metadata).
+      // Write all profile fields into accounts row directly (in case the
+      // trigger didn't pick them up from metadata).
       try {
         final newUser = authRes.user;
         if (newUser != null) {
@@ -102,11 +122,11 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
             'id': newUser.id,
             'email': email,
             'full_name': fullName,
-            'phone': _phoneController.text.trim(),
+            'phone': phone,
           }, onConflict: 'id');
         }
       } catch (_) {
-        // Trigger may already have inserted the row \u2014 ignore.
+        // Trigger may already have inserted the row — ignore.
       }
 
       if (!mounted) return;
@@ -136,6 +156,31 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  InputDecoration _inputDecoration(String label, IconData icon,
+      {String? hint}) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      prefixIcon: Icon(icon, color: const Color(0xFFFF4D97)),
+      prefixIconConstraints:
+          const BoxConstraints(minWidth: 48, minHeight: 48),
+      border:
+          OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey[300]!)),
+      focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFFF4D97), width: 2)),
+      errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.red)),
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      labelStyle: const TextStyle(fontSize: 14),
+    );
   }
 
   @override
@@ -203,63 +248,54 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Full Name Field
-                    TextFormField(
-                      controller: _nameController,
-                      enabled: !_isLoading,
-                      textInputAction: TextInputAction.next,
-                      decoration: InputDecoration(
-                        labelText: 'Full Name',
-                        hintText: 'John Doe',
-                        prefixIcon: const Icon(
-                          Icons.person_outline,
-                          color: Color(0xFFFF4D97),
-                        ),
-                        prefixIconConstraints: const BoxConstraints(
-                          minWidth: 48,
-                          minHeight: 48,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: Color(0xFFFF4D97),
-                            width: 2,
-                          ),
-                        ),
-                        errorBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: Colors.red,
-                            width: 1,
-                          ),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 16,
-                        ),
-                        labelStyle: const TextStyle(fontSize: 14),
-                      ),
-                      style: const TextStyle(fontSize: 16),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter your full name';
-                        }
-                        if (value.length < 3) {
-                          return 'Name must be at least 3 characters';
-                        }
-                        return null;
-                      },
+                    // Personal info section header
+                    Row(
+                      children: [
+                        Container(width: 3, height: 16, decoration: BoxDecoration(color: const Color(0xFFFF4D97), borderRadius: BorderRadius.circular(2))),
+                        const SizedBox(width: 8),
+                        Text('Personal Info', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey[700])),
+                      ],
                     ),
 
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
+
+                    // First Name + Last Name row
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _firstNameController,
+                            enabled: !_isLoading,
+                            textInputAction: TextInputAction.next,
+                            decoration: _inputDecoration('First Name', Icons.person_outline, hint: 'Juan'),
+                            style: const TextStyle(fontSize: 16),
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) return 'Required';
+                              if (v.trim().length < 2) return 'Too short';
+                              return null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _lastNameController,
+                            enabled: !_isLoading,
+                            textInputAction: TextInputAction.next,
+                            decoration: _inputDecoration('Last Name', Icons.person_outline, hint: 'Dela Cruz'),
+                            style: const TextStyle(fontSize: 16),
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) return 'Required';
+                              if (v.trim().length < 2) return 'Too short';
+                              return null;
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 12),
 
                     // Email Field
                     TextFormField(
@@ -267,45 +303,7 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
                       keyboardType: TextInputType.emailAddress,
                       enabled: !_isLoading,
                       textInputAction: TextInputAction.next,
-                      decoration: InputDecoration(
-                        labelText: 'Email Address',
-                        hintText: 'example@email.com',
-                        prefixIcon: const Icon(
-                          Icons.email_outlined,
-                          color: Color(0xFFFF4D97),
-                        ),
-                        prefixIconConstraints: const BoxConstraints(
-                          minWidth: 48,
-                          minHeight: 48,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: Color(0xFFFF4D97),
-                            width: 2,
-                          ),
-                        ),
-                        errorBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: Colors.red,
-                            width: 1,
-                          ),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 16,
-                        ),
-                        labelStyle: const TextStyle(fontSize: 14),
-                      ),
+                      decoration: _inputDecoration('Email Address', Icons.email_outlined, hint: 'example@email.com'),
                       style: const TextStyle(fontSize: 16),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
@@ -318,7 +316,7 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
                       },
                     ),
 
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
 
                     // Phone Number Field
                     TextFormField(
@@ -330,45 +328,7 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
                         FilteringTextInputFormatter.allow(
                             RegExp(r'[0-9+\- ]')),
                       ],
-                      decoration: InputDecoration(
-                        labelText: 'Phone Number',
-                        hintText: '+63 912 345 6789',
-                        prefixIcon: const Icon(
-                          Icons.phone_outlined,
-                          color: Color(0xFFFF4D97),
-                        ),
-                        prefixIconConstraints: const BoxConstraints(
-                          minWidth: 48,
-                          minHeight: 48,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: Color(0xFFFF4D97),
-                            width: 2,
-                          ),
-                        ),
-                        errorBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: Colors.red,
-                            width: 1,
-                          ),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 16,
-                        ),
-                        labelStyle: const TextStyle(fontSize: 14),
-                      ),
+                      decoration: _inputDecoration('Phone Number', Icons.phone_outlined, hint: '+63 912 345 6789'),
                       style: const TextStyle(fontSize: 16),
                       validator: (value) {
                         if (value == null || value.trim().isEmpty) {
@@ -384,71 +344,90 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
 
                     const SizedBox(height: 16),
 
+                    // Address section header
+                    Row(
+                      children: [
+                        Container(width: 3, height: 16, decoration: BoxDecoration(color: const Color(0xFFFF4D97), borderRadius: BorderRadius.circular(2))),
+                        const SizedBox(width: 8),
+                        Text('Address (optional)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey[700])),
+                      ],
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // Address Field
+                    TextFormField(
+                      controller: _addressController,
+                      enabled: !_isLoading,
+                      textInputAction: TextInputAction.next,
+                      maxLines: 2,
+                      decoration: _inputDecoration('Street Address', Icons.location_on_outlined),
+                      style: const TextStyle(fontSize: 16),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // City + Postal row
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: TextFormField(
+                            controller: _cityController,
+                            enabled: !_isLoading,
+                            textInputAction: TextInputAction.next,
+                            decoration: _inputDecoration('City', Icons.location_city_outlined),
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _postalController,
+                            enabled: !_isLoading,
+                            keyboardType: TextInputType.number,
+                            textInputAction: TextInputAction.next,
+                            decoration: _inputDecoration('Postal', Icons.markunread_mailbox_outlined),
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Password section header
+                    Row(
+                      children: [
+                        Container(width: 3, height: 16, decoration: BoxDecoration(color: const Color(0xFFFF4D97), borderRadius: BorderRadius.circular(2))),
+                        const SizedBox(width: 8),
+                        Text('Security', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey[700])),
+                      ],
+                    ),
+
+                    const SizedBox(height: 12),
+
                     // Password Field
                     TextFormField(
                       controller: _passwordController,
                       obscureText: _obscurePassword,
                       enabled: !_isLoading,
                       textInputAction: TextInputAction.next,
-                      decoration: InputDecoration(
-                        labelText: 'Password',
-                        hintText: 'At least 6 characters',
-                        prefixIcon: const Icon(
-                          Icons.lock_outlined,
-                          color: Color(0xFFFF4D97),
-                        ),
-                        prefixIconConstraints: const BoxConstraints(
-                          minWidth: 48,
-                          minHeight: 48,
-                        ),
-                        suffixIcon: Container(
-                          constraints: const BoxConstraints(
-                            minWidth: 48,
-                            minHeight: 48,
+                      decoration: _inputDecoration(
+                        'Password', Icons.lock_outlined,
+                        hint: 'At least 6 characters',
+                      ).copyWith(
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                            color: Colors.grey[600],
+                            size: 22,
                           ),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            icon: Icon(
-                              _obscurePassword
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
-                              color: Colors.grey[600],
-                              size: 22,
-                            ),
-                            onPressed: () {
-                              setState(
-                                () => _obscurePassword = !_obscurePassword,
-                              );
-                            },
-                          ),
+                          onPressed: () =>
+                              setState(() => _obscurePassword = !_obscurePassword),
                         ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: Color(0xFFFF4D97),
-                            width: 2,
-                          ),
-                        ),
-                        errorBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: Colors.red,
-                            width: 1,
-                          ),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 16,
-                        ),
-                        labelStyle: const TextStyle(fontSize: 14),
                       ),
                       style: const TextStyle(fontSize: 16),
                       validator: (value) {
@@ -462,7 +441,7 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
                       },
                     ),
 
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
 
                     // Confirm Password Field
                     TextFormField(
@@ -470,66 +449,22 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
                       obscureText: _obscureConfirmPassword,
                       enabled: !_isLoading,
                       textInputAction: TextInputAction.done,
-                      decoration: InputDecoration(
-                        labelText: 'Confirm Password',
-                        hintText: 'Re-enter your password',
-                        prefixIcon: const Icon(
-                          Icons.lock_outlined,
-                          color: Color(0xFFFF4D97),
-                        ),
-                        prefixIconConstraints: const BoxConstraints(
-                          minWidth: 48,
-                          minHeight: 48,
-                        ),
-                        suffixIcon: Container(
-                          constraints: const BoxConstraints(
-                            minWidth: 48,
-                            minHeight: 48,
+                      decoration: _inputDecoration(
+                        'Confirm Password', Icons.lock_outlined,
+                        hint: 'Re-enter your password',
+                      ).copyWith(
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscureConfirmPassword
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                            color: Colors.grey[600],
+                            size: 22,
                           ),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            icon: Icon(
-                              _obscureConfirmPassword
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
-                              color: Colors.grey[600],
-                              size: 22,
-                            ),
-                            onPressed: () {
-                              setState(
-                                () => _obscureConfirmPassword =
-                                    !_obscureConfirmPassword,
-                              );
-                            },
-                          ),
+                          onPressed: () => setState(() =>
+                              _obscureConfirmPassword =
+                                  !_obscureConfirmPassword),
                         ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: Color(0xFFFF4D97),
-                            width: 2,
-                          ),
-                        ),
-                        errorBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: Colors.red,
-                            width: 1,
-                          ),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 16,
-                        ),
-                        labelStyle: const TextStyle(fontSize: 14),
                       ),
                       style: const TextStyle(fontSize: 16),
                       validator: (value) {

@@ -894,53 +894,188 @@ class _ClientScreenState extends State<ClientScreen> {
     final name = (productName ?? 'this product').toString();
     if (id == null || id.isEmpty) return;
 
-    final confirm = await showDialog<bool>(
+    // Check whether this product is referenced by any orders
+    bool hasOrders = false;
+    try {
+      final rows = await Supabase.instance.client
+          .from('order_items')
+          .select('id')
+          .eq('product_id', id)
+          .limit(1);
+      hasOrders = (rows as List).isNotEmpty;
+    } catch (_) {
+      hasOrders = true; // safer to assume it has orders on error
+    }
+
+    if (!mounted) return;
+
+    final action = await showModalBottomSheet<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Delete Product'),
-        content: Text(
-          'Are you sure you want to delete "$name"? This action cannot be undone.',
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.errorColor,
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2)),
+              ),
             ),
-            child: const Text('Delete'),
-          ),
-        ],
+            const SizedBox(height: 20),
+            Row(children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                    color: Colors.red.shade50, shape: BoxShape.circle),
+                child: Icon(Icons.delete_outline_rounded,
+                    color: Colors.red.shade400, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Remove Product',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w700)),
+                    Text(name,
+                        style: TextStyle(
+                            fontSize: 13, color: Colors.grey.shade600),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                  ],
+                ),
+              ),
+            ]),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                  color: hasOrders
+                      ? Colors.red.shade50
+                      : Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: hasOrders
+                          ? Colors.red.shade200
+                          : Colors.orange.shade200)),
+              child: Row(children: [
+                Icon(Icons.info_outline_rounded,
+                    size: 16,
+                    color: hasOrders
+                        ? Colors.red.shade700
+                        : Colors.orange.shade700),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    hasOrders
+                        ? 'This product has order history and cannot be permanently deleted. Use Archive to hide it from the marketplace.'
+                        : 'Archiving hides the product but keeps order history intact.',
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: hasOrders
+                            ? Colors.red.shade800
+                            : Colors.orange.shade800),
+                  ),
+                ),
+              ]),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => Navigator.pop(ctx, 'archive'),
+                icon: const Icon(Icons.archive_outlined, size: 18),
+                label: const Text('Archive (Recommended)'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.orange.shade700,
+                  side: BorderSide(color: Colors.orange.shade400),
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: hasOrders ? null : () => Navigator.pop(ctx, 'delete'),
+                icon: const Icon(Icons.delete_forever_rounded, size: 18),
+                label: const Text('Delete Permanently'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor:
+                      hasOrders ? Colors.grey.shade300 : Colors.red.shade500,
+                  foregroundColor:
+                      hasOrders ? Colors.grey.shade500 : Colors.white,
+                  disabledBackgroundColor: Colors.grey.shade200,
+                  disabledForegroundColor: Colors.grey.shade400,
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton(
+                onPressed: () => Navigator.pop(ctx, 'cancel'),
+                child: Text('Cancel',
+                    style: TextStyle(color: Colors.grey.shade600)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
 
-    if (confirm == true) {
-      try {
-        await Supabase.instance.client.from('products').delete().eq('id', id);
+    if (action == null || action == 'cancel') return;
+
+    try {
+      if (action == 'archive') {
+        await Supabase.instance.client
+            .from('products')
+            .update({'is_active': false}).eq('id', id);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Product deleted'),
-              backgroundColor: AppTheme.successColor,
-            ),
-          );
-          // Force the products stream to re-subscribe so the deleted row
-          // disappears immediately even if realtime hasn't pushed yet.
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Product archived'),
+            backgroundColor: Colors.orange,
+          ));
           setState(() => _productsRefreshTick++);
         }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error: $e'),
-              backgroundColor: AppTheme.errorColor,
-            ),
-          );
-        }
+        return;
+      }
+
+      // Delete permanently — only reachable when hasOrders == false
+      await Supabase.instance.client
+          .from('products')
+          .delete()
+          .eq('id', id);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Product deleted permanently'),
+          backgroundColor: Colors.green,
+        ));
+        setState(() => _productsRefreshTick++);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: AppTheme.errorColor,
+        ));
       }
     }
   }
