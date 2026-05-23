@@ -820,7 +820,7 @@ class _BuyerOrderCardState extends State<_BuyerOrderCard> {
                 ),
               ),
             ),
-          if (status == 'delivered')
+          if (status == 'delivered') ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
               child: SizedBox(
@@ -842,6 +842,28 @@ class _BuyerOrderCardState extends State<_BuyerOrderCard> {
                 ),
               ),
             ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => _viewDeliveryProof(
+                      context, order['id']?.toString() ?? ''),
+                  icon: const Icon(Icons.verified_rounded, size: 18),
+                  label: const Text('View Delivery Proof',
+                      style: TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w700)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF10B981),
+                    side: const BorderSide(color: Color(0xFF10B981)),
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            ),
+          ],
 
           // ── pay now + cancel buttons (pending only) ───────────────────
           if (status == 'pending') ...[
@@ -947,6 +969,15 @@ class _BuyerOrderCardState extends State<_BuyerOrderCard> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _OrderDetailsSheet(order: order),
+    );
+  }
+
+  void _viewDeliveryProof(BuildContext context, String orderId) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _DeliveryProofSheet(orderId: orderId),
     );
   }
 
@@ -2255,6 +2286,252 @@ class _RateItemCard extends StatelessWidget {
               isDense: true,
             ),
             style: const TextStyle(fontSize: 13),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Delivery Proof Sheet ─────────────────────────────────────────────────────
+class _DeliveryProofSheet extends StatefulWidget {
+  final String orderId;
+  const _DeliveryProofSheet({required this.orderId});
+
+  @override
+  State<_DeliveryProofSheet> createState() => _DeliveryProofSheetState();
+}
+
+class _DeliveryProofSheetState extends State<_DeliveryProofSheet> {
+  late final Future<Map<String, dynamic>?> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = SupabaseService().getDeliveryProofForOrder(widget.orderId);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.verified_rounded,
+                    color: Color(0xFF10B981), size: 22),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Delivery Proof',
+                        style: TextStyle(
+                            fontSize: 17, fontWeight: FontWeight.w800)),
+                    Text('Photo taken by the courier / seller',
+                        style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close_rounded),
+                style: IconButton.styleFrom(
+                    backgroundColor: Colors.grey.shade100),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          FutureBuilder<Map<String, dynamic>?>(
+            future: _future,
+            builder: (context, snap) {
+              if (snap.connectionState == ConnectionState.waiting) {
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(32),
+                    child: CircularProgressIndicator(
+                        color: Color(0xFF10B981)),
+                  ),
+                );
+              }
+              final proof = snap.data;
+              if (proof == null || proof['image_url'] == null) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.photo_camera_outlined,
+                            size: 56, color: Colors.grey.shade300),
+                        const SizedBox(height: 12),
+                        Text('No proof uploaded yet',
+                            style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey.shade500)),
+                        const SizedBox(height: 4),
+                        Text('The seller has not uploaded a delivery photo.',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade400)),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              final imageUrl = proof['image_url'].toString();
+              final createdAt =
+                  DateTime.tryParse(proof['created_at']?.toString() ?? '');
+              final confidence =
+                  ((proof['score_photo'] as num? ?? 0) +
+                          (proof['score_gps'] as num? ?? 0) +
+                          (proof['score_otp'] as num? ?? 0) +
+                          (proof['score_confirm'] as num? ?? 0) +
+                          (proof['score_carrier'] as num? ?? 0))
+                      .clamp(0.0, 1.0);
+              final status = proof['status']?.toString() ?? 'pending';
+              final isVerified =
+                  status == 'verified' || status == 'auto_verified';
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isVerified
+                          ? const Color(0xFF10B981).withOpacity(0.1)
+                          : Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                          color: isVerified
+                              ? const Color(0xFF10B981).withOpacity(0.3)
+                              : Colors.orange.shade200),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isVerified
+                              ? Icons.check_circle_rounded
+                              : Icons.pending_rounded,
+                          size: 16,
+                          color: isVerified
+                              ? const Color(0xFF10B981)
+                              : Colors.orange.shade700,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          isVerified
+                              ? 'Verified Delivery'
+                              : 'Pending Verification',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: isVerified
+                                ? const Color(0xFF10B981)
+                                : Colors.orange.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Image.network(
+                      imageUrl,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (_, child, progress) =>
+                          progress == null
+                              ? child
+                              : AspectRatio(
+                                  aspectRatio: 4 / 3,
+                                  child: Container(
+                                    color: Colors.grey.shade100,
+                                    child: const Center(
+                                      child: CircularProgressIndicator(
+                                          color: Color(0xFF10B981)),
+                                    ),
+                                  ),
+                                ),
+                      errorBuilder: (_, __, ___) => AspectRatio(
+                        aspectRatio: 4 / 3,
+                        child: Container(
+                          color: Colors.grey.shade100,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.broken_image_rounded,
+                                  size: 40, color: Colors.grey.shade400),
+                              const SizedBox(height: 8),
+                              Text('Could not load image',
+                                  style: TextStyle(
+                                      color: Colors.grey.shade500,
+                                      fontSize: 13)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      if (createdAt != null) ...[
+                        Icon(Icons.schedule_rounded,
+                            size: 14, color: Colors.grey.shade500),
+                        const SizedBox(width: 4),
+                        Text(
+                          DateFormat('MMM d, yyyy · h:mm a')
+                              .format(createdAt.toLocal()),
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey.shade600),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
+                      Icon(Icons.shield_rounded,
+                          size: 14, color: Colors.grey.shade500),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Confidence: ${(confidence * 100).toStringAsFixed(0)}%',
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.grey.shade600),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
           ),
         ],
       ),

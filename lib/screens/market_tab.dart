@@ -1264,7 +1264,6 @@ class _MarketTabState extends State<MarketTab>
                             ),
                           ],
                         ),
-                        ),
                     FutureBuilder<Map<String, dynamic>>(
                       future: _fetchProductRatingSummary(
                           product['id'].toString()),

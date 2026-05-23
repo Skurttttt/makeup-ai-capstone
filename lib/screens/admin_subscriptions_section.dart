@@ -132,37 +132,8 @@ class _AdminSubscriptionsSectionState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Header ──
-          buildSectionHeader(
-            context,
-            'Subscription Management',
-            actions: [
-              ElevatedButton.icon(
-                onPressed: () => _showAssignSubscriptionDialog(_plans),
-                icon: const Icon(Icons.person_add_rounded, size: 18),
-                label: const Text('Assign'),
-                style: primaryButtonStyle(AdminTheme.accentColor),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton.icon(
-                onPressed: _showAddPlanDialog,
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Add Plan'),
-                style: primaryButtonStyle(AdminTheme.successColor),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                onPressed: _loadData,
-                tooltip: 'Refresh',
-                icon: const Icon(Icons.refresh_rounded),
-                style: IconButton.styleFrom(
-                  backgroundColor: AdminTheme.cardColor,
-                  side: const BorderSide(color: AdminTheme.borderColor),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
+          // In-page section header removed — top bar shows section title
+          const SizedBox(height: 12),
 
           // ── KPI Cards ──
           buildAdaptiveCardGrid(
@@ -181,7 +152,19 @@ class _AdminSubscriptionsSectionState
           const SizedBox(height: 32),
 
           // ── Plans Table ──
-          buildSectionHeader(context, 'Subscription Plans', isSubsection: true),
+          buildSectionHeader(
+            context,
+            'Subscription Plans',
+            isSubsection: true,
+            actions: [
+              ElevatedButton.icon(
+                onPressed: () => _showAssignSubscriptionDialog(_plans),
+                icon: const Icon(Icons.person_add_rounded, size: 16),
+                label: const Text('Assign'),
+                style: primaryButtonStyle(AdminTheme.accentColor),
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
           if (plans.isEmpty)
             _buildEmptyState('No subscription plans configured',
@@ -573,7 +556,8 @@ class _AdminSubscriptionsSectionState
 
   // ==================== PLAN DIALOGS ====================
 
-  void _showAddPlanDialog() {
+  // ignore: unused_element
+  void _showAddPlanDialog_removed() {
     final formKey = GlobalKey<FormState>();
     final nameController = TextEditingController();
     final displayNameController = TextEditingController();

@@ -1672,6 +1672,22 @@ class _OrderCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                 ],
+                // View proof button — shown for delivered orders
+                if (status == 'delivered') ...[
+                  IconButton(
+                    onPressed: onConfirmDelivery,
+                    tooltip: 'View delivery proof',
+                    icon: const Icon(Icons.verified_rounded, size: 20),
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.green.shade50,
+                      foregroundColor: Colors.green.shade700,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.all(8),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                ],
                 if (isFailed) ...[
                   TextButton(
                     onPressed: onRefund,

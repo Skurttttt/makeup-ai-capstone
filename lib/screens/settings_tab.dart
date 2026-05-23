@@ -70,7 +70,7 @@ class _SettingsTabState extends State<SettingsTab> {
 
   // Support contact info (centralized)
   static const String _supportEmail = 'support@beautyshop.com';
-  static const String _appPackageId = 'com.example.flutter_application_1';
+  static const String _appPackageId = 'com.facetunebeauty.app';
 
   int _savedLooksCount = 0;
 
