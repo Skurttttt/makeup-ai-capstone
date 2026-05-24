@@ -3,8 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/supabase_service.dart';
 
 class ChangePasswordPage extends StatefulWidget {
-  final String accessToken;
-  const ChangePasswordPage({super.key, required this.accessToken});
+  final String? accessToken;
+  const ChangePasswordPage({super.key, this.accessToken});
 
   @override
   State<ChangePasswordPage> createState() => _ChangePasswordPageState();
@@ -25,8 +25,10 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
     try {
-      // Set the session using the access token from the deep link
-      await Supabase.instance.client.auth.setSession(widget.accessToken);
+      // Set the session using the access token from the deep link (web only)
+      if (widget.accessToken != null && widget.accessToken!.isNotEmpty) {
+        await Supabase.instance.client.auth.setSession(widget.accessToken!);
+      }
       await Supabase.instance.client.auth.updateUser(
         UserAttributes(password: _passwordController.text),
       );

@@ -1,5 +1,6 @@
 // lib/auth/forgot_password_page.dart
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -29,7 +30,9 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       try {
         await Supabase.instance.client.auth.resetPasswordForEmail(
           _emailController.text.trim(),
-          redirectTo: 'https://vercel-deploy-ten-red.vercel.app/reset-password',
+          redirectTo: kIsWeb
+              ? 'https://vercel-deploy-ten-red.vercel.app/reset-password'
+              : 'facetune://reset-password',
         );
         setState(() {
           _isLoading = false;
