@@ -10,13 +10,19 @@ import '../utils.dart';
 
 class CachedMakeupLayer extends StatefulWidget {
   final MakeupLayer layer;
-  final ValueNotifier<double> globalOpacity;
-  final ValueNotifier<double> layerOpacity;
+
+  // Matches current face_preview_card.dart: it passes double values.
+  final double globalOpacity;
+  final double layerOpacity;
 
   final Face face;
   final LookResult look;
   final FaceProfile? faceProfile;
   final MakeupLookPreset preset;
+
+  final Color? customLipColor;
+  final Color? customBlushColor;
+  final Color? customEyeshadowColor;
 
   const CachedMakeupLayer({
     super.key,
@@ -27,6 +33,9 @@ class CachedMakeupLayer extends StatefulWidget {
     required this.look,
     required this.faceProfile,
     required this.preset,
+    this.customLipColor,
+    this.customBlushColor,
+    this.customEyeshadowColor,
   });
 
   @override
@@ -45,13 +54,18 @@ class _CachedMakeupLayerState extends State<CachedMakeupLayer> {
     super.dispose();
   }
 
+  Color get _lipColor => widget.customLipColor ?? widget.look.lipstickColor;
+  Color get _blushColor => widget.customBlushColor ?? widget.look.blushColor;
+  Color get _eyeshadowColor =>
+      widget.customEyeshadowColor ?? widget.look.eyeshadowColor;
+
   int _signature(Size size) {
     return Object.hash(
       widget.layer,
       widget.face,
-      widget.look.lipstickColor,
-      widget.look.blushColor,
-      widget.look.eyeshadowColor,
+      _lipColor.value,
+      _blushColor.value,
+      _eyeshadowColor.value,
       widget.faceProfile?.faceShape,
       widget.preset,
       size.width.round(),
@@ -74,24 +88,18 @@ class _CachedMakeupLayerState extends State<CachedMakeupLayer> {
     _isRendering = true;
 
     final recorder = ui.PictureRecorder();
-    final canvas = Canvas(
-      recorder,
-      Offset.zero & size,
-    );
+    final canvas = Canvas(recorder, Offset.zero & size);
 
     MakeupOverlayPainter(
       image: null,
-
       face: widget.face,
-
-      lipstickColor: widget.look.lipstickColor,
-      blushColor: widget.look.blushColor,
-      eyeshadowColor: widget.look.eyeshadowColor,
+      lipstickColor: _lipColor,
+      blushColor: _blushColor,
+      eyeshadowColor: _eyeshadowColor,
 
       // Render once at full strength.
-      // Slider will only fade this cached image.
+      // Opacity is applied to the cached image only.
       intensity: 1.0,
-
       lipstickOpacity: 1.0,
       blushOpacity: 1.0,
       contourOpacity: 1.0,
@@ -99,29 +107,17 @@ class _CachedMakeupLayerState extends State<CachedMakeupLayer> {
       eyelinerOpacity: 1.0,
       browOpacity: 1.0,
 
-      faceShape:
-          widget.faceProfile?.faceShape ??
-          FaceShape.unknown,
-
+      faceShape: widget.faceProfile?.faceShape ?? FaceShape.unknown,
       preset: widget.preset,
-
-      eyelinerStyle:
-          LookEngine.eyelinerStyleFromPreset(
-        widget.preset,
-      ),
-
+      eyelinerStyle: LookEngine.eyelinerStyleFromPreset(widget.preset),
       lipFinish: LipFinish.glossy,
-
       skinColor: null,
       sceneLuminance: 0.5,
-
       profile: widget.faceProfile,
-
       makeupLayer: widget.layer,
     ).paint(canvas, size);
 
     final picture = recorder.endRecording();
-
     final image = await picture.toImage(
       size.width.ceil(),
       size.height.ceil(),
@@ -148,13 +144,13 @@ class _CachedMakeupLayerState extends State<CachedMakeupLayer> {
   }
 
   double _opacity() {
-    final global = widget.globalOpacity.value.clamp(0.0, 1.0);
+    final global = widget.globalOpacity.clamp(0.0, 1.0);
 
     if (widget.layer == MakeupLayer.contour) {
       return global;
     }
 
-    return (global * widget.layerOpacity.value).clamp(0.0, 1.0);
+    return (global * widget.layerOpacity).clamp(0.0, 1.0);
   }
 
   @override
@@ -167,9 +163,7 @@ class _CachedMakeupLayerState extends State<CachedMakeupLayer> {
         );
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            _renderLayer(size);
-          }
+          if (mounted) _renderLayer(size);
         });
 
         final image = _cachedLayer;
@@ -178,21 +172,13 @@ class _CachedMakeupLayerState extends State<CachedMakeupLayer> {
           return const SizedBox.expand();
         }
 
-        return AnimatedBuilder(
-          animation: Listenable.merge([
-            widget.globalOpacity,
-            widget.layerOpacity,
-          ]),
-          builder: (_, __) {
-            return Opacity(
-              opacity: _opacity(),
-              child: RawImage(
-                image: image,
-                fit: BoxFit.fill,
-                filterQuality: FilterQuality.low,
-              ),
-            );
-          },
+        return Opacity(
+          opacity: _opacity(),
+          child: RawImage(
+            image: image,
+            fit: BoxFit.fill,
+            filterQuality: FilterQuality.low,
+          ),
         );
       },
     );
