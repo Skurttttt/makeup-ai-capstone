@@ -2005,36 +2005,11 @@ class _MarketTabState extends State<MarketTab>
     try {
       final rows = await Supabase.instance.client
           .from('product_reviews')
-          .select('rating, comment, created_at, buyer_id')
+          .select(
+              'rating, comment, created_at, buyer_id, accounts(full_name, first_name)')
           .eq('product_id', productId)
           .order('created_at', ascending: false);
-      final list = List<Map<String, dynamic>>.from(rows as List);
-      final buyerIds = list
-          .map((r) => r['buyer_id']?.toString())
-          .whereType<String>()
-          .toSet()
-          .toList();
-      Map<String, String> nameMap = {};
-      if (buyerIds.isNotEmpty) {
-        try {
-          final accounts = await Supabase.instance.client
-              .from('accounts')
-              .select('id, full_name')
-              .inFilter('id', buyerIds);
-          for (final a in (accounts as List)) {
-            final id = a['id']?.toString();
-            if (id == null) continue;
-            final name = a['full_name']?.toString();
-            nameMap[id] = (name != null && name.isNotEmpty) ? name : 'Customer';
-          }
-        } catch (_) {}
-      }
-      return list
-          .map((r) => {
-                ...r,
-                'buyer_name': nameMap[r['buyer_id']?.toString()] ?? 'Customer',
-              })
-          .toList();
+      return List<Map<String, dynamic>>.from(rows as List);
     } catch (_) {
       return [];
     }
@@ -2065,7 +2040,10 @@ class _ReviewItemCard extends StatelessWidget {
     final comment = review['comment']?.toString();
     final createdAt =
         DateTime.tryParse(review['created_at']?.toString() ?? '');
-    final buyerName = review['buyer_name']?.toString() ?? 'Customer';
+    final accountJoin = review['accounts'] as Map?;
+    final buyerName = accountJoin?['full_name']?.toString() ??
+        accountJoin?['first_name']?.toString() ??
+        'Customer';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -2179,36 +2157,11 @@ class _ReviewsSheetState extends State<_ReviewsSheet> {
     try {
       final rows = await Supabase.instance.client
           .from('product_reviews')
-          .select('rating, comment, created_at, buyer_id')
+          .select(
+              'rating, comment, created_at, buyer_id, accounts(full_name, first_name)')
           .eq('product_id', widget.product['id'].toString())
           .order('created_at', ascending: false);
-      final list = List<Map<String, dynamic>>.from(rows as List);
-      final buyerIds = list
-          .map((r) => r['buyer_id']?.toString())
-          .whereType<String>()
-          .toSet()
-          .toList();
-      Map<String, String> nameMap = {};
-      if (buyerIds.isNotEmpty) {
-        try {
-          final accounts = await Supabase.instance.client
-              .from('accounts')
-              .select('id, full_name')
-              .inFilter('id', buyerIds);
-          for (final a in (accounts as List)) {
-            final id = a['id']?.toString();
-            if (id == null) continue;
-            final name = a['full_name']?.toString();
-            nameMap[id] = (name != null && name.isNotEmpty) ? name : 'Customer';
-          }
-        } catch (_) {}
-      }
-      return list
-          .map((r) => {
-                ...r,
-                'buyer_name': nameMap[r['buyer_id']?.toString()] ?? 'Customer',
-              })
-          .toList();
+      return List<Map<String, dynamic>>.from(rows as List);
     } catch (_) {
       return [];
     }

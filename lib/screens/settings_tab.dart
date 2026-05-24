@@ -360,11 +360,18 @@ class _SettingsTabState extends State<SettingsTab> {
                         child: CircleAvatar(
                           radius: 34,
                           backgroundColor: Colors.white.withOpacity(0.25),
-                          child: const Icon(
-                            Icons.person,
-                            size: 36,
-                            color: Colors.white,
-                          ),
+                          backgroundImage: _avatarBytes != null
+                              ? MemoryImage(_avatarBytes!) as ImageProvider
+                              : (_avatarUrl != null && _avatarUrl!.isNotEmpty)
+                                  ? NetworkImage(_avatarUrl!)
+                                  : null,
+                          child: (_avatarBytes == null && (_avatarUrl == null || _avatarUrl!.isEmpty))
+                              ? const Icon(
+                                  Icons.person,
+                                  size: 36,
+                                  color: Colors.white,
+                                )
+                              : null,
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -1643,9 +1650,10 @@ class _SettingsTabState extends State<SettingsTab> {
               setSheetState(() => _isUploadingAvatar = true);
               try {
                 final bytes = await pickedFile.readAsBytes();
-                final safeName = pickedFile.name.replaceAll(RegExp(r'[^A-Za-z0-9_.-]'), '_');
-                final extension = RegExp(r'\.(\w+)\$').firstMatch(pickedFile.name)?.group(1)?.toLowerCase() ?? 'png';
-                final fileName = '${DateTime.now().millisecondsSinceEpoch}_$safeName.$extension';
+                final ext = pickedFile.name.contains('.')
+                    ? pickedFile.name.split('.').last.toLowerCase()
+                    : 'png';
+                final fileName = '${DateTime.now().millisecondsSinceEpoch}_avatar.$ext';
                 final storagePath = '${user.id}/avatars/$fileName';
 
                 await Supabase.instance.client.storage.from('scan-images').uploadBinary(
