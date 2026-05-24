@@ -148,6 +148,10 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
             'full_name': fullName,
             'phone': phone,
           }, onConflict: 'id');
+
+          // Ensure the new user has the free subscription with its limits.
+          // This is a fallback in case the DB trigger hasn't run yet.
+          await _supabaseService.assignFreeSubscription(newUser.id);
         }
       } catch (_) {
         // Trigger may already have inserted the row — ignore.

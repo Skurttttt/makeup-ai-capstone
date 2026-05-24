@@ -1373,6 +1373,7 @@ class _AdminAccountsSectionState extends State<AdminAccountsSection> {
         ? (userSubs.first['plan_id']?.toString() ??
             userSubs.first['subscription_plans']?['id']?.toString())
         : null;
+    bool cancelSub = false;
 
     showDialog(
       context: context,
@@ -1547,12 +1548,6 @@ class _AdminAccountsSectionState extends State<AdminAccountsSection> {
                                   prefixIcon: Icons.card_membership_rounded,
                                   hintText: 'Select a plan'),
                               items: [
-                                DropdownMenuItem<String>(
-                                  value: null,
-                                  child: Text('No plan (Free)',
-                                      style: TextStyle(
-                                          color: Colors.grey.shade600)),
-                                ),
                                 ..._plans.map((p) => DropdownMenuItem<String>(
                                       value: p['id']?.toString(),
                                       child: Text(p['display_name'] ?? p['name'] ?? 'Plan'),
@@ -1560,6 +1555,68 @@ class _AdminAccountsSectionState extends State<AdminAccountsSection> {
                               ],
                               onChanged: (v) => setDialogState(() => selectedPlanId = v),
                             ),
+                          ],
+                          if (userSubs.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            cancelSub
+                                ? Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFFF7ED),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: const Color(0xFFF97316)),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            const Icon(Icons.warning_amber_rounded,
+                                                color: Color(0xFFF97316), size: 20),
+                                            const SizedBox(width: 8),
+                                            const Expanded(
+                                              child: Text(
+                                                'No Refund — Subscription Will Be Cancelled',
+                                                style: TextStyle(
+                                                    fontWeight: FontWeight.w700,
+                                                    color: Color(0xFFC2410C),
+                                                    fontSize: 13),
+                                              ),
+                                            ),
+                                            TextButton(
+                                              onPressed: () => setDialogState(() => cancelSub = false),
+                                              child: const Text('Undo',
+                                                  style: TextStyle(
+                                                      color: Color(0xFF6B7280),
+                                                      fontSize: 13)),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        const Text(
+                                          'The subscription will be cancelled immediately with no refund. The account will revert to the Free plan.',
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              color: Color(0xFF9A3412)),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                : SizedBox(
+                                    width: double.infinity,
+                                    child: OutlinedButton.icon(
+                                      onPressed: () => setDialogState(() => cancelSub = true),
+                                      icon: const Icon(Icons.cancel_outlined, size: 18),
+                                      label: const Text('Cancel Subscription'),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: const Color(0xFFDC2626),
+                                        side: const BorderSide(color: Color(0xFFDC2626)),
+                                        padding: const EdgeInsets.symmetric(vertical: 12),
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(12)),
+                                      ),
+                                    ),
+                                  ),
                           ],
                         ],
                       ),
@@ -1608,7 +1665,14 @@ class _AdminAccountsSectionState extends State<AdminAccountsSection> {
                                         });
 
                                     // handle subscription updates same as before
-                                    if (selectedPlanId != null) {
+                                    if (cancelSub && userSubs.isNotEmpty) {
+                                      final subId = userSubs.first['id']?.toString() ?? '';
+                                      if (subId.isNotEmpty) {
+                                        await _supabaseService.updateSubscription(
+                                            subscriptionId: subId,
+                                            updates: {'status': 'cancelled'});
+                                      }
+                                    } else if (selectedPlanId != null) {
                                       if (userSubs.isNotEmpty) {
                                         final subId = userSubs.first['id']?.toString() ?? '';
                                         if (subId.isNotEmpty) {

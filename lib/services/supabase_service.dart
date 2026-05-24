@@ -773,6 +773,45 @@ class SupabaseService {
     }
   }
 
+  /// Ensures a new user has a free subscription.
+  /// Called right after sign-up as a belt-and-suspenders fallback to the DB
+  /// trigger. Safe to call even if the trigger already ran — it skips
+  /// insertion when an active subscription already exists.
+  Future<void> assignFreeSubscription(String userId) async {
+    try {
+      // Look up the free plan
+      final plans = await client
+          .from('subscription_plans')
+          .select('id, name, daily_scan_limit')
+          .eq('name', 'free')
+          .limit(1);
+      if (plans.isEmpty) return; // free plan not seeded yet
+      final freePlanId = plans.first['id'].toString();
+
+      // Check if the user already has any subscription (trigger may have run)
+      final existing = await client
+          .from('user_subscriptions')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('status', 'active')
+          .limit(1);
+      if (existing.isNotEmpty) return; // already assigned
+
+      // Create the free subscription
+      await client.from('user_subscriptions').insert({
+        'user_id': userId,
+        'plan_id': freePlanId,
+        'status': 'active',
+        'payment_method': 'free',
+        // Free plan never expires
+        'current_period_end':
+            DateTime.now().add(const Duration(days: 36500)).toIso8601String(),
+      });
+    } catch (_) {
+      // Never fail registration because of subscription assignment
+    }
+  }
+
   /// Create user subscription from plan
   Future<Map<String, dynamic>> createUserSubscription({
     required String accountId,
