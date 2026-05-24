@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:io';
 import '../services/supabase_service.dart';
 import '../utils/export_helper.dart';
 import '../utils/responsive.dart';
@@ -130,6 +131,7 @@ class _AdminAccountsSectionState extends State<AdminAccountsSection> {
     final paginated =
         filtered.skip(_page * _pageSize).take(_pageSize).toList();
 
+    final adminCount = _users.where((u) => u['role'] == 'admin').length;
     final subscriberCount = subMap.values
         .where((s) => s['status']?.toString() == 'active')
         .length;
@@ -178,8 +180,8 @@ class _AdminAccountsSectionState extends State<AdminAccountsSection> {
               buildSummaryCard('Staff',
                   '${_users.where((u) => u['role'] == 'staff').length}',
                   Icons.badge_rounded, AdminTheme.successColor),
-              buildSummaryCard('Users',
-                  '${_users.where((u) => u['role'] == 'user').length}',
+              buildSummaryCard('Users / Clients',
+                  '${_users.where((u) => u['role'] == 'user' || u['role'] == 'client').length}',
                   Icons.person_rounded,
                   AdminTheme.textSecondary),
             ],
@@ -228,7 +230,7 @@ class _AdminAccountsSectionState extends State<AdminAccountsSection> {
               });
             },
             showExport: true,
-            onExport: () => _exportAccounts(_users),
+            onExport: () => _exportAccounts(filtered),
             isExporting: _isExporting,
             exportProgress: _exportProgress,
           ),
@@ -1722,35 +1724,23 @@ class _AdminAccountsSectionState extends State<AdminAccountsSection> {
     });
     try {
       final buffer = StringBuffer();
-      // UTF-8 BOM so Excel opens without garbling
-      buffer.write('\uFEFF');
-      buffer.writeln('Name,Email,Role,Plan,Created');
-      final subMap = _userSubMap;
+      buffer.writeln('Name,Email,Role,Created');
       for (var i = 0; i < accounts.length; i++) {
         final a = accounts[i];
-        final sub = subMap[a['id']?.toString()];
-        final planName = sub?['subscription_plans']?['display_name']?.toString() ??
-            sub?['subscription_plans']?['name']?.toString() ?? '';
-        buffer.writeln([
-          _csvField(a['full_name']?.toString() ?? ''),
-          _csvField(a['email']?.toString() ?? ''),
-          _csvField(a['role']?.toString() ?? ''),
-          _csvField(planName),
-          _csvField(a['created_at']?.toString() ?? ''),
-        ].join(','));
+        buffer.writeln(
+            '${a['full_name']},${a['email']},${a['role']},${a['created_at']}');
         if (mounted) {
           setState(() => _exportProgress = (i + 1) / accounts.length);
         }
       }
-      await Future.delayed(const Duration(milliseconds: 300));
-      final ts = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+      await Future.delayed(const Duration(milliseconds: 500));
       final savedPath =
-          await saveCsvFile('accounts_all_$ts.csv', buffer.toString());
+          await saveCsvFile('accounts_export.csv', buffer.toString());
       if (mounted) {
         if (savedPath != null) {
-          final filename = savedPath.split(RegExp(r'[\\/]')).last;
+          final filename = savedPath.split(Platform.pathSeparator).last;
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Exported ${accounts.length} accounts → $filename'),
+            content: Text('Exported $filename'),
             action: SnackBarAction(label: 'Open', onPressed: () async {
               try {
                 await launchUrl(Uri.file(savedPath));
@@ -1758,7 +1748,8 @@ class _AdminAccountsSectionState extends State<AdminAccountsSection> {
             }),
           ));
         } else {
-          showAdminSnackBar(context, 'Export cancelled', isError: false);
+          showAdminSnackBar(context, 'Accounts exported (download started)',
+              isError: false);
         }
       }
     } catch (e) {
@@ -1773,10 +1764,5 @@ class _AdminAccountsSectionState extends State<AdminAccountsSection> {
         });
       }
     }
-  }
-
-  String _csvField(String? value) {
-    final v = (value ?? '').replaceAll('"', '""');
-    return '"$v"';
   }
 }

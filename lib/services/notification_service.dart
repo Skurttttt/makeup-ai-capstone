@@ -58,17 +58,16 @@ class NotificationService extends ChangeNotifier {
       StreamController<AppNotification>.broadcast();
   Stream<AppNotification> get onNewNotification => _newController.stream;
 
-  StreamSubscription<List<Map<String, dynamic>>>? _orderItemsSub;
   StreamSubscription<List<Map<String, dynamic>>>? _conversationsSub;
   StreamSubscription<List<Map<String, dynamic>>>? _buyerOrdersSub;
+  Timer? _orderItemsTimer;
   Timer? _lowStockTimer;
 
   // De-dupe sets for realtime streams (which re-emit the full table on init).
   final Set<String> _seenOrderItemIds = {};
   final Map<String, DateTime> _seenConversationStamps = {};
   final Map<String, String> _seenOrderStatuses = {};
-  // Maps product_id -> 'low' | 'out' so we can re-alert when state escalates.
-  final Map<String, String> _seenStockAlerts = {};
+  final Set<String> _seenLowStockIds = {};
   bool _orderItemsBootstrapped = false;
   bool _conversationsBootstrapped = false;
   bool _buyerOrdersBootstrapped = false;
@@ -100,10 +99,10 @@ class NotificationService extends ChangeNotifier {
 
   Future<void> stop() async {
     _started = false;
-    await _orderItemsSub?.cancel();
+    _orderItemsTimer?.cancel();
     await _conversationsSub?.cancel();
     await _buyerOrdersSub?.cancel();
-    _orderItemsSub = null;
+    _orderItemsTimer = null;
     _conversationsSub = null;
     _buyerOrdersSub = null;
     _lowStockTimer?.cancel();
@@ -111,7 +110,7 @@ class NotificationService extends ChangeNotifier {
     _seenOrderItemIds.clear();
     _seenConversationStamps.clear();
     _seenOrderStatuses.clear();
-    _seenStockAlerts.clear();
+    _seenLowStockIds.clear();
     _orderItemsBootstrapped = false;
     _conversationsBootstrapped = false;
     _buyerOrdersBootstrapped = false;
@@ -155,29 +154,40 @@ class NotificationService extends ChangeNotifier {
   void _subscribeOrderItems() {
     final bid = _id;
     if (bid == null) return;
-    _orderItemsSub = _client
-        .from('order_items')
-        .stream(primaryKey: ['id'])
-        .eq('business_id', bid)
-        .listen(
-          (rows) async {
-            if (!_orderItemsBootstrapped) {
-              for (final r in rows) {
-                final id = r['id']?.toString();
-                if (id != null) _seenOrderItemIds.add(id);
-              }
-              _orderItemsBootstrapped = true;
-              return;
-            }
-            for (final row in rows) {
-              final id = row['id']?.toString();
-              if (id == null || _seenOrderItemIds.contains(id)) continue;
-              _seenOrderItemIds.add(id);
-              await _emitOrderNotification(row);
-            }
-          },
-          onError: (_) {},
-        );
+    // Bootstrap after a short delay, then poll every 30 s (plain HTTP — no
+    // Realtime publication dependency, same pattern as _checkLowStock).
+    Future.delayed(const Duration(seconds: 3), () => _pollOrderItems(bid));
+    _orderItemsTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _pollOrderItems(bid),
+    );
+  }
+
+  Future<void> _pollOrderItems(String bid) async {
+    if (!_started || _id != bid) return;
+    try {
+      final rows = await _client
+          .from('order_items')
+          .select()
+          .eq('business_id', bid)
+          .order('created_at', ascending: false)
+          .limit(50);
+      if (!_orderItemsBootstrapped) {
+        // First call: record all existing IDs so we don't re-notify old orders.
+        for (final r in rows) {
+          final id = r['id']?.toString();
+          if (id != null) _seenOrderItemIds.add(id);
+        }
+        _orderItemsBootstrapped = true;
+        return;
+      }
+      for (final row in rows) {
+        final id = row['id']?.toString();
+        if (id == null || _seenOrderItemIds.contains(id)) continue;
+        _seenOrderItemIds.add(id);
+        _emitOrderNotification(row);
+      }
+    } catch (_) {}
   }
 
   Future<void> _emitOrderNotification(Map<String, dynamic> item) async {
@@ -277,17 +287,14 @@ class NotificationService extends ChangeNotifier {
           .eq('business_id', bid)
           .lte('stock_quantity', 5);
 
-      final currentLowIds = <String>{};
+      final currentLow = <String>{};
       for (final row in rows) {
         final id = row['id']?.toString();
         if (id == null) continue;
-        currentLowIds.add(id);
+        currentLow.add(id);
+        if (_seenLowStockIds.contains(id)) continue;
+        _seenLowStockIds.add(id);
         final stock = (row['stock_quantity'] as num?)?.toInt() ?? 0;
-        final state = stock == 0 ? 'out' : 'low';
-        final prevState = _seenStockAlerts[id];
-        // Fire alert on first sight OR when escalating from low → out of stock.
-        if (prevState == state) continue;
-        _seenStockAlerts[id] = state;
         final name = (row['name'] ?? 'Product').toString();
         _push(AppNotification(
           id: 'low_${id}_${DateTime.now().millisecondsSinceEpoch}',
@@ -300,7 +307,7 @@ class NotificationService extends ChangeNotifier {
           meta: {'product_id': id},
         ));
       }
-      _seenStockAlerts.removeWhere((id, _) => !currentLowIds.contains(id));
+      _seenLowStockIds.removeWhere((id) => !currentLow.contains(id));
     } catch (_) {}
   }
 

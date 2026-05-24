@@ -349,7 +349,7 @@ class _ClientScreenState extends State<ClientScreen> {
   }
 
   void _logout() {
-    showLogoutConfirmationDialog(context, role: 'staff');
+    showLogoutConfirmationDialog(context, role: 'client');
   }
 
   Future<void> _refreshClientData() async {

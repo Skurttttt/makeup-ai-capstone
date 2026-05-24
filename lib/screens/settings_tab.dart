@@ -6,11 +6,11 @@ import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
 import '../services/supabase_service.dart';
 import '../utils/logout_util.dart';
-import '../services/theme_notifier.dart';
 import 'user_subscription_page.dart';
 import 'chat_list_screen.dart';
 import '../services/scan_quota_service.dart';
 import '../scan_result_page.dart';
+import '../instructions_page.dart';
 import '../look_engine.dart';
 
 class SettingsTab extends StatefulWidget {
@@ -63,7 +63,6 @@ class _SettingsTabState extends State<SettingsTab> {
 
   // Settings state
   bool _notificationsEnabled = true;
-  bool _darkMode = false;
   String _selectedLanguage = 'English';
   bool _autoSaveLooks = true;
   bool _shareUsageData = true;
@@ -121,7 +120,7 @@ class _SettingsTabState extends State<SettingsTab> {
   }
 
   void _loadSettings() {
-    _darkMode = ThemeNotifier.instance.isDark;
+    // Load settings from shared preferences or local storage
   }
 
   Future<void> _loadCurrentSubscription() async {
@@ -544,16 +543,6 @@ class _SettingsTabState extends State<SettingsTab> {
                     _selectedLanguage,
                     () => _showLanguageDialog(),
                     const Color(0xFF06B6D4),
-                  ),
-                  _buildSwitchItem(
-                    Icons.dark_mode_rounded,
-                    'Dark Mode',
-                    _darkMode,
-                    (value) {
-                      setState(() => _darkMode = value);
-                      ThemeNotifier.instance.toggle(value);
-                    },
-                    const Color(0xFF6366F1),
                   ),
                   _buildSettingItem(
                     Icons.storage,
@@ -3023,37 +3012,6 @@ class _LookImage extends StatelessWidget {
   }
 }
 
-class _MetaChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  const _MetaChip({required this.icon, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFF4D97).withOpacity(0.08),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: const Color(0xFFFF4D97)),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 11,
-              color: Color(0xFFFF4D97),
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 // ── Change Password Bottom Sheet ──────────────────────────────────────────────
 

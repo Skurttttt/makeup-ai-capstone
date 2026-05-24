@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/chat_service.dart';
-import '../services/theme_notifier.dart';
 
 class ClientSettingsScreen extends StatefulWidget {
   final Map<String, dynamic> clientData;
@@ -40,7 +39,6 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen>
   @override
   void initState() {
     super.initState();
-    _darkMode = ThemeNotifier.instance.isDark;
     _loadOnlineStatus();
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 800),
@@ -488,7 +486,6 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen>
             value: _darkMode,
             onChanged: (val) {
               setState(() => _darkMode = val);
-              ThemeNotifier.instance.toggle(val);
               _showSuccessMessage('Dark Mode ${val ? "enabled" : "disabled"} 🌙');
             },
           ),
