@@ -406,7 +406,6 @@ class ChatService {
           'Show bestsellers',
           'Track my order',
           'How to pay',
-          'Shade match',
         ],
       );
     }
@@ -642,7 +641,6 @@ class ChatService {
         'Show bestsellers',
         'Track my order',
         'How to pay',
-        'Shade match',
       ],
     );
   }

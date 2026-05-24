@@ -109,13 +109,10 @@ class ScanQuotaService {
                 .toString()
                 .toLowerCase();
 
-        if (raw.contains('premium') ||
-            raw.contains('lifetime')) {
-          tier = 'premium';
-        } else if (raw.contains('pro') ||
-            raw.contains('weekly') ||
+        if (raw.contains('premium') || raw.contains('lifetime') ||
+            raw.contains('pro') || raw.contains('weekly') ||
             raw.contains('monthly')) {
-          tier = 'pro';
+          tier = 'premium';
         }
 
         canSave =

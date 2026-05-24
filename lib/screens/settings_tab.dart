@@ -8,6 +8,8 @@ import '../services/supabase_service.dart';
 import '../utils/logout_util.dart';
 import 'user_subscription_page.dart';
 import 'chat_list_screen.dart';
+import 'chat_screen.dart';
+import '../services/chat_service.dart';
 import '../services/scan_quota_service.dart';
 import '../scan_result_page.dart';
 import '../instructions_page.dart';
@@ -44,7 +46,7 @@ class _SettingsTabState extends State<SettingsTab> {
   DateTime? _currentPlanRenewsAt;
   bool _hasActiveSubscription = false;
 
-  // Plan tier: 'regular' | 'pro' | 'premium'
+  // Plan tier: 'regular' | 'premium'
   String _planTier = 'regular';
   // ignore: unused_field
   bool _canSaveResults = false;
@@ -55,7 +57,6 @@ class _SettingsTabState extends State<SettingsTab> {
   int _dailyScanLimit = 5;
   int _scansUsedToday = 0;
   bool get _isRegular => _planTier == 'regular';
-  bool get _isPro => _planTier == 'pro';
   bool get _isPremium => _planTier == 'premium';
   bool get _hasUnlimitedScans => _dailyScanLimit < 0;
   int get _scansRemaining =>
@@ -208,10 +209,17 @@ class _SettingsTabState extends State<SettingsTab> {
       return;
     }
 
-    if (raw.contains('premium') || raw.contains('lifetime')) {
+    if (raw.contains('premium') || raw.contains('lifetime') ||
+        raw.contains('pro') || raw.contains('weekly') || raw.contains('monthly')) {
       _planTier = 'premium';
     } else {
-      _planTier = 'pro';
+      // Free/basic plan — treat as regular despite having a subscription row
+      _planTier = 'regular';
+      _dailyScanLimit = 5;
+      _canSaveResults = false;
+      _canExportHd = false;
+      _removeWatermark = false;
+      return;
     }
 
     _dailyScanLimit = -1;
@@ -228,8 +236,8 @@ class _SettingsTabState extends State<SettingsTab> {
       if (!mounted) return;
 
       setState(() {
-        _planTier = _hasActiveSubscription ? _planTier : usage.tier;
-        _dailyScanLimit = _hasActiveSubscription ? -1 : usage.dailyLimit;
+        _planTier = usage.tier;
+        _dailyScanLimit = usage.dailyLimit;
         _scansUsedToday = usage.usedToday;
         _canSaveResults = usage.canAutoSaveToCloud;
       });
@@ -270,10 +278,8 @@ class _SettingsTabState extends State<SettingsTab> {
     switch (_planTier) {
       case 'premium':
         return 'PREMIUM';
-      case 'pro':
-        return 'PRO';
       default:
-        return 'REGULAR';
+        return 'FREE';
     }
   }
 
@@ -281,11 +287,48 @@ class _SettingsTabState extends State<SettingsTab> {
     switch (_planTier) {
       case 'premium':
         return const Color(0xFF9C27B0);
-      case 'pro':
-        return const Color(0xFFFF4D97);
       default:
         return const Color(0xFF78909C);
     }
+  }
+
+  Future<void> _openSellerChat() async {
+    final svc = ChatService.instance;
+    final sellerId = await svc.getDefaultSellerId();
+    if (sellerId == null) {
+      // Fallback: show list if seller can't be resolved
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ChatListScreen()),
+      );
+      return;
+    }
+    // Get seller display name
+    String sellerName = 'Shop';
+    try {
+      final acc = await Supabase.instance.client
+          .from('accounts')
+          .select('business_name, full_name')
+          .eq('id', sellerId)
+          .maybeSingle();
+      if (acc != null) {
+        sellerName = (acc['business_name']?.toString() ?? acc['full_name']?.toString() ?? 'Shop').trim();
+        if (sellerName.isEmpty) sellerName = 'Shop';
+      }
+    } catch (_) {}
+    final convo = await svc.getOrCreateConversation(sellerId: sellerId);
+    if (convo == null) return;
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatScreen(
+          conversationId: convo['id'].toString(),
+          otherDisplayName: sellerName,
+        ),
+      ),
+    );
   }
 
   void _saveSettings() {
@@ -504,13 +547,8 @@ class _SettingsTabState extends State<SettingsTab> {
                   _buildSettingItem(
                     Icons.chat_bubble_outline,
                     'My Messages',
-                    'Chat with sellers',
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ChatListScreen(),
-                      ),
-                    ),
+                    'Chat with the shop',
+                    () => _openSellerChat(),
                     const Color(0xFFFF4D97),
                   ),
                   _buildSwitchItem(
@@ -884,7 +922,7 @@ class _SettingsTabState extends State<SettingsTab> {
                     const SizedBox(width: 12),
                     const Expanded(
                       child: Text(
-                        'Go unlimited with Pro & Premium',
+                        'Go unlimited with Premium',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 16,
@@ -898,7 +936,7 @@ class _SettingsTabState extends State<SettingsTab> {
                 _upgradePerk(Icons.all_inclusive,
                     'Unlimited face scans — no waiting until midnight'),
                 _upgradePerk(Icons.cloud_done_outlined,
-                    'Auto-saved looks synced across devices'),
+                    'Save & sync your looks — not available on free'),
                 _upgradePerk(Icons.high_quality_outlined,
                     'HD downloads & no watermark (Premium)'),
                 _upgradePerk(Icons.support_agent,

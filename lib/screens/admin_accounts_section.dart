@@ -364,6 +364,7 @@ class _AdminAccountsSectionState extends State<AdminAccountsSection> {
     final subStatus = sub?['status']?.toString() ?? 'inactive';
     final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
     final isAdmin = role == 'admin';
+    final isOnline = user['is_online'] == true;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -497,6 +498,14 @@ class _AdminAccountsSectionState extends State<AdminAccountsSection> {
                             Icons.calendar_today_outlined,
                             'Joined ${DateFormat('MMM yyyy').format(createdAt)}',
                             AdminTheme.textSecondary),
+                      _infoChip(
+                          isOnline
+                              ? Icons.circle
+                              : Icons.circle_outlined,
+                          isOnline ? 'Online' : 'Offline',
+                          isOnline
+                              ? AdminTheme.successColor
+                              : AdminTheme.textSecondary),
                     ],
                   ),
                 ],
