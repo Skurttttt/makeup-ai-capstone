@@ -178,15 +178,23 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
                     // Logo
                     Center(
                       child: Container(
-                        padding: const EdgeInsets.all(16),
+                        width: 130,
+                        height: 130,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: const Color(0xFFFF4D97).withOpacity(0.1),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFFF4D97).withOpacity(0.25),
+                              blurRadius: 20,
+                              spreadRadius: 4,
+                            ),
+                          ],
                         ),
-                        child: const Icon(
-                          Icons.face_retouching_natural,
-                          size: 64,
-                          color: Color(0xFFFF4D97),
+                        child: ClipOval(
+                          child: Image.asset(
+                            'assets/images/brand_logo.png',
+                            fit: BoxFit.cover,
+                          ),
                         ),
                       ),
                     ),
