@@ -30,6 +30,30 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
   bool _obscureConfirmPassword = true;
   bool _acceptTerms = false;
   bool _isLoading = false;
+  double _passwordStrength = 0;
+
+  void _onPasswordChanged(String v) {
+    double s = 0;
+    if (v.length >= 8) s += 0.25;
+    if (v.contains(RegExp(r'[A-Z]'))) s += 0.25;
+    if (v.contains(RegExp(r'[0-9]'))) s += 0.25;
+    if (v.contains(RegExp(r'[!@#\$%^&*(),.?":{}|<>]'))) s += 0.25;
+    setState(() => _passwordStrength = s);
+  }
+
+  Color get _strengthColor {
+    if (_passwordStrength <= 0.25) return Colors.red;
+    if (_passwordStrength <= 0.5) return Colors.orange;
+    if (_passwordStrength <= 0.75) return Colors.yellow.shade700;
+    return Colors.green;
+  }
+
+  String get _strengthLabel {
+    if (_passwordStrength <= 0.25) return 'Weak';
+    if (_passwordStrength <= 0.5) return 'Fair';
+    if (_passwordStrength <= 0.75) return 'Good';
+    return 'Strong';
+  }
 
   @override
   void dispose() {
@@ -438,9 +462,10 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
                       obscureText: _obscurePassword,
                       enabled: !_isLoading,
                       textInputAction: TextInputAction.next,
+                      onChanged: _onPasswordChanged,
                       decoration: _inputDecoration(
                         'Password', Icons.lock_outlined,
-                        hint: 'At least 6 characters',
+                        hint: 'Min. 8 chars with uppercase, number & symbol',
                       ).copyWith(
                         suffixIcon: IconButton(
                           icon: Icon(
@@ -459,12 +484,62 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
                         if (value == null || value.isEmpty) {
                           return 'Please enter a password';
                         }
-                        if (value.length < 6) {
-                          return 'Password must be at least 6 characters';
+                        if (value.length < 8) {
+                          return 'Password must be at least 8 characters';
+                        }
+                        if (!value.contains(RegExp(r'[A-Z]'))) {
+                          return 'Add at least one uppercase letter';
+                        }
+                        if (!value.contains(RegExp(r'[0-9]'))) {
+                          return 'Add at least one number';
+                        }
+                        if (!value.contains(RegExp(r'[!@#\$%^&*(),.?":{}|<>]'))) {
+                          return 'Add at least one symbol (e.g. !@#\$)';
                         }
                         return null;
                       },
                     ),
+
+                    // Password strength bar
+                    if (_passwordController.text.isNotEmpty) ...[  
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: _passwordStrength,
+                                minHeight: 6,
+                                backgroundColor: Colors.grey[200],
+                                valueColor: AlwaysStoppedAnimation<Color>(_strengthColor),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            _strengthLabel,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: _strengthColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          'Min. 8 characters with uppercase, lowercase, number & symbol for a strong password.',
+                          style: TextStyle(fontSize: 11, color: Colors.blueGrey),
+                        ),
+                      ),
+                    ],
 
                     const SizedBox(height: 12),
 

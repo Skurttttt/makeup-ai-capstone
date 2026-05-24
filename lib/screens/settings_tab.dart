@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io'; // ADDED IMPORT
 import '../services/supabase_service.dart';
 import '../utils/logout_util.dart';
 import 'user_subscription_page.dart';
@@ -361,18 +360,11 @@ class _SettingsTabState extends State<SettingsTab> {
                         child: CircleAvatar(
                           radius: 34,
                           backgroundColor: Colors.white.withOpacity(0.25),
-                          backgroundImage: _avatarBytes != null
-                              ? MemoryImage(_avatarBytes!) as ImageProvider
-                              : (_avatarUrl != null && _avatarUrl!.isNotEmpty)
-                                  ? NetworkImage(_avatarUrl!)
-                                  : null,
-                          child: (_avatarBytes == null && (_avatarUrl == null || _avatarUrl!.isEmpty))
-                              ? const Icon(
-                                  Icons.person,
-                                  size: 36,
-                                  color: Colors.white,
-                                )
-                              : null,
+                          child: const Icon(
+                            Icons.person,
+                            size: 36,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -1651,10 +1643,9 @@ class _SettingsTabState extends State<SettingsTab> {
               setSheetState(() => _isUploadingAvatar = true);
               try {
                 final bytes = await pickedFile.readAsBytes();
-                final ext = pickedFile.name.contains('.')
-                    ? pickedFile.name.split('.').last.toLowerCase()
-                    : 'png';
-                final fileName = '${DateTime.now().millisecondsSinceEpoch}_avatar.$ext';
+                final safeName = pickedFile.name.replaceAll(RegExp(r'[^A-Za-z0-9_.-]'), '_');
+                final extension = RegExp(r'\.(\w+)\$').firstMatch(pickedFile.name)?.group(1)?.toLowerCase() ?? 'png';
+                final fileName = '${DateTime.now().millisecondsSinceEpoch}_$safeName.$extension';
                 final storagePath = '${user.id}/avatars/$fileName';
 
                 await Supabase.instance.client.storage.from('scan-images').uploadBinary(
@@ -2893,7 +2884,6 @@ class _SavedLooksSheetState extends State<_SavedLooksSheet> {
   }
 }
 
-// UPDATED _LookCard with imageUrl and imagePath support
 class _LookCard extends StatelessWidget {
   final Map<String, dynamic> look;
   final VoidCallback onTap;
@@ -2909,9 +2899,7 @@ class _LookCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final name = (look['look_name'] ?? 'Saved Look').toString();
     final created = look['created_at']?.toString();
-    final imageUrl = look['image_url']?.toString();
-    final imagePath = look['image_path']?.toString();
-
+    final url = look['image_url']?.toString();
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(16),
@@ -2929,12 +2917,7 @@ class _LookCard extends StatelessWidget {
                   ClipRRect(
                     borderRadius:
                         const BorderRadius.vertical(top: Radius.circular(16)),
-                    child: SizedBox.expand(
-                      child: _LookImage(
-                        imageUrl: imageUrl,
-                        imagePath: imagePath,
-                      ),
-                    ),
+                    child: SizedBox.expand(child: _LookImage(url: url)),
                   ),
                   Positioned(
                     top: 6,
@@ -2991,67 +2974,75 @@ class _LookCard extends StatelessWidget {
   }
 }
 
-// REPLACED _LookImage widget with support for both network URLs and local file paths
 class _LookImage extends StatelessWidget {
-  final String? imageUrl;
-  final String? imagePath;
-
-  const _LookImage({
-    this.imageUrl,
-    this.imagePath,
-  });
+  final String? url;
+  const _LookImage({required this.url});
 
   @override
   Widget build(BuildContext context) {
-    final provider = _imageProvider();
-
-    if (provider == null) {
+    if (url == null || url!.isEmpty) {
       return Container(
         color: const Color(0xFFFFF1F8),
         child: const Center(
-          child: Icon(
-            Icons.face_retouching_natural,
-            size: 48,
-            color: Color(0xFFFF4D97),
-          ),
+          child: Icon(Icons.face_retouching_natural,
+              size: 48, color: Color(0xFFFF4D97)),
         ),
       );
     }
-
-    return Image(
-      image: provider,
+    return Image.network(
+      url!,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) {
-        return Container(
-          color: const Color(0xFFFFF1F8),
-          child: const Center(
-            child: Icon(
-              Icons.face_retouching_natural,
-              size: 48,
-              color: Color(0xFFFF4D97),
-            ),
-          ),
-        );
-      },
+      loadingBuilder: (_, child, progress) =>
+          progress == null
+              ? child
+              : Container(
+                  color: const Color(0xFFFFF1F8),
+                  alignment: Alignment.center,
+                  child: const CircularProgressIndicator(
+                      color: Color(0xFFFF4D97), strokeWidth: 2),
+                ),
+      errorBuilder: (_, _, _) => Container(
+        color: const Color(0xFFFFF1F8),
+        child: const Center(
+          child: Icon(Icons.broken_image_outlined,
+              size: 40, color: Color(0xFFFF4D97)),
+        ),
+      ),
     );
-  }
-
-  ImageProvider? _imageProvider() {
-    if (imageUrl != null && imageUrl!.isNotEmpty) {
-      return NetworkImage(imageUrl!);
-    }
-
-    if (imagePath != null && imagePath!.isNotEmpty) {
-      final file = File(imagePath!);
-      if (file.existsSync()) {
-        return FileImage(file);
-      }
-    }
-
-    return null;
   }
 }
 
+class _MetaChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  const _MetaChip({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFF4D97).withOpacity(0.08),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: const Color(0xFFFF4D97)),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              color: Color(0xFFFF4D97),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 // ── Change Password Bottom Sheet ──────────────────────────────────────────────
 
@@ -3236,7 +3227,10 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
                 onChanged: _onNewPasswordChanged,
                 validator: (v) {
                   if (v == null || v.isEmpty) return 'Enter a new password';
-                  if (v.length < 6) return 'At least 6 characters required';
+                  if (v.length < 8) return 'At least 8 characters required';
+                  if (!v.contains(RegExp(r'[A-Z]'))) return 'Add at least one uppercase letter';
+                  if (!v.contains(RegExp(r'[0-9]'))) return 'Add at least one number';
+                  if (!v.contains(RegExp(r'[!@#\$%^&*(),.?":{}|<>]'))) return 'Add at least one symbol';
                   return null;
                 },
               ),
@@ -3268,6 +3262,18 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'Min. 8 characters with uppercase, lowercase, number & symbol for a strong password.',
+                    style: TextStyle(fontSize: 12, color: Colors.blueGrey),
+                  ),
                 ),
               ],
               const SizedBox(height: 16),
