@@ -6,6 +6,7 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../utils/responsive.dart';
+import '../helpers/color_classification_helper.dart';
 
 class ProductFormPage extends StatefulWidget {
   final String businessId;
@@ -30,7 +31,6 @@ class _ProductFormPageState extends State<ProductFormPage> {
   static const List<String> _skinTypeOptions = ['Dry', 'Oily', 'Combination', 'Sensitive', 'Normal'];
   static const List<String> _finishTypeOptions = ['Matte', 'Dewy', 'Natural', 'Glossy', 'Velvet', 'Soft Matte'];
   static const List<String> _coverageLevelOptions = ['Light', 'Medium', 'Full', 'Buildable'];
-  static const List<String> _undertoneOptions = ['Warm', 'Cool', 'Neutral'];
 
   static const List<String> _fallbackCategories = [
     'Primer',
@@ -57,7 +57,6 @@ class _ProductFormPageState extends State<ProductFormPage> {
   final Set<String> _selectedSkinTypes = {};
   final Set<String> _selectedFinishTypes = {};
   final Set<String> _selectedCoverageLevels = {};
-  final Set<String> _selectedUndertones = {};
 
   final _imagePicker = ImagePicker();
   Uint8List? _selectedImageBytes;
@@ -76,117 +75,58 @@ class _ProductFormPageState extends State<ProductFormPage> {
   final Set<String> _selectedLookTags = {};
   bool _saving = false;
 
+  // ADDED: Clean production-level getter for auto-detected undertones
+  List<String> get _autoDetectedUndertones {
+    return ColorClassificationHelper
+        .classify(_hexCodeController.text)
+        .undertones;
+  }
+
   // Auto-detected shade depth (no manual selection needed)
   String _getAutoDetectedShadeDepth() {
     return _detectShadeDepthFromHex(_hexCodeController.text);
   }
 
+  // Uses ColorClassificationHelper
   String _detectShadeDepthFromHex(String hexCode) {
-    final cleaned = hexCode.replaceAll('#', '').trim();
-
-    if (cleaned.length != 6) return 'Medium';
-
-    final r = int.parse(cleaned.substring(0, 2), radix: 16);
-    final g = int.parse(cleaned.substring(2, 4), radix: 16);
-    final b = int.parse(cleaned.substring(4, 6), radix: 16);
-
-    final brightness = (0.299 * r) + (0.587 * g) + (0.114 * b);
-
-    if (brightness >= 215) return 'Fair';
-    if (brightness >= 175) return 'Light';
-    if (brightness >= 130) return 'Medium';
-    if (brightness >= 85) return 'Morena';
-
-    return 'Deep Morena';
+    return ColorClassificationHelper.classify(hexCode).shadeDepth;
   }
 
-  // AI-powered color family detection from hex code
+  // Uses ColorClassificationHelper
+  List<String> _detectCompatibleUndertonesFromHex(String hexCode) {
+    return ColorClassificationHelper.classify(hexCode).undertones;
+  }
+
+  // Uses ColorClassificationHelper
   String _detectColorFamilyFromHex(String hexCode) {
-    final cleaned = hexCode.replaceAll('#', '').trim();
+    return ColorClassificationHelper.classify(hexCode).colorFamily;
+  }
 
-    if (cleaned.length != 6) return 'Rosy Pink';
+  // Strict target area detection
+  String _detectTargetArea(String category) {
+    final c = category.toLowerCase();
 
-    try {
-      final r = int.parse(cleaned.substring(0, 2), radix: 16);
-      final g = int.parse(cleaned.substring(2, 4), radix: 16);
-      final b = int.parse(cleaned.substring(4, 6), radix: 16);
-
-      final maxChannel = [r, g, b].reduce((a, b) => a > b ? a : b);
-      final minChannel = [r, g, b].reduce((a, b) => a < b ? a : b);
-
-      final brightness = (0.299 * r) + (0.587 * g) + (0.114 * b);
-      final saturation = maxChannel - minChannel;
-
-      final redDominant = r > g && r > b;
-      final warm = r >= b;
-      final cool = b > r;
-
-      if (brightness < 65) {
-        if (r > 90 && b > 70) return 'Plum';
-        if (r > 90) return 'Wine Red';
-        return 'Warm Brown';
-      }
-
-      if (r > 150 && g < 95 && b < 110) {
-        if (brightness < 120) return 'Wine Red';
-        return 'Cherry Red';
-      }
-
-      if (r > 120 && b > 100 && g < 115) {
-        if (brightness < 115) return 'Plum';
-        if (cool) return 'Cool Berry';
-        return 'Berry Pink';
-      }
-
-      if (r > 160 && b > 120 && g < 145) {
-        if (saturation < 70) return 'Dusty Mauve';
-        return 'Berry Pink';
-      }
-
-      if (r > 170 && b > 130 && g > 110) {
-        if (cool) return 'Cool Pink';
-        if (saturation < 55) return 'Muted Rose';
-        return 'Rosy Pink';
-      }
-
-      if (r > 180 && g > 120 && b < 130) {
-        if (g > 145) return 'Soft Peach';
-        return 'Warm Coral';
-      }
-
-      if (r > 190 && g > 95 && g < 145 && b < 110) {
-        return 'Orange Coral';
-      }
-
-      if (r > 150 && g > 90 && b < 90) {
-        if (r - g > 55) return 'Terracotta';
-        return 'Warm Coral';
-      }
-
-      if (r > 135 && g > 95 && b > 75 && warm) {
-        if (brightness > 185) return 'Beige Nude';
-        if (r - g < 35 && g - b < 35) return 'Caramel Nude';
-        if (b < 100) return 'Brown Nude';
-        return 'Caramel Nude';
-      }
-
-      if (r > 110 && g > 70 && b < 80) {
-        if (r - g > 45) return 'Terracotta';
-        return 'Warm Brown';
-      }
-
-      if (r > 95 && g > 70 && b > 55 && warm) {
-        return 'Brown Nude';
-      }
-
-      if (redDominant && saturation < 60) {
-        return 'Muted Rose';
-      }
-
-      return 'Rosy Pink';
-    } catch (_) {
-      return 'Rosy Pink';
+    if (c.contains('lipstick') ||
+        c.contains('lip tint') ||
+        c.contains('lip gloss') ||
+        c.contains('lip')) {
+      return 'lips';
     }
+
+    if (c.contains('blush')) return 'blush';
+    if (c.contains('contour')) return 'contour';
+    if (c.contains('eyeshadow') || c.contains('eye shadow')) return 'eyeshadow';
+    if (c.contains('eyeliner') || c.contains('eye liner')) return 'eyeliner';
+    if (c.contains('eyebrow') || c.contains('brow')) return 'brows';
+    if (c.contains('primer')) return 'primer';
+    if (c.contains('setting') || c.contains('mist') || c.contains('fix')) {
+      return 'setting';
+    }
+    if (c.contains('foundation')) return 'foundation';
+    if (c.contains('concealer')) return 'concealer';
+    if (c.contains('powder')) return 'powder';
+
+    return 'general';
   }
 
   void _syncColorFamilyFromHex() {
@@ -241,12 +181,6 @@ class _ProductFormPageState extends State<ProductFormPage> {
     if (shade.isNotEmpty) _shadeNameController.text = shade;
     final hex = (p['hex_code'] ?? '').toString();
     if (hex.isNotEmpty) _hexCodeController.text = hex;
-    final undertone = (p['undertone'] ?? '').toString();
-    if (undertone.isNotEmpty) {
-      _selectedUndertones
-        ..clear()
-        ..addAll(_splitCsv(undertone));
-    }
     final family = (p['color_family'] ?? '').toString();
     if (family.isNotEmpty) _colorFamily = family;
     _morenaFriendly = p['morena_friendly'] == true;
@@ -335,7 +269,8 @@ class _ProductFormPageState extends State<ProductFormPage> {
   // Helper method to auto-generate compatible looks
   String _generateCompatibleLooks() {
     final category = _category.toLowerCase();
-    final undertones = _selectedUndertones.map((e) => e.toLowerCase()).toList();
+    // UPDATED: Now uses the getter for undertones
+    final undertones = _autoDetectedUndertones.map((e) => e.toLowerCase()).toList();
     final colorFamily = _colorFamily.toLowerCase();
     final finishTypes = _selectedFinishTypes.map((e) => e.toLowerCase()).toList();
 
@@ -422,6 +357,32 @@ class _ProductFormPageState extends State<ProductFormPage> {
     }
 
     return looks.take(6).join(', ');
+  }
+
+  int _getRecommendationPriority() {
+    final category = _category.toLowerCase();
+
+    if (category.contains('lip')) return 90;
+    if (category.contains('blush')) return 85;
+    if (category.contains('eyeshadow')) return 80;
+    if (category.contains('eyeliner')) return 75;
+    if (category.contains('eyebrow')) return 70;
+    if (category.contains('foundation')) return 65;
+    if (category.contains('concealer')) return 60;
+
+    return 50;
+  }
+
+  double _getConfidenceWeight() {
+    double weight = 1.0;
+
+    if (_hexCodeController.text.trim().isNotEmpty) weight += 0.2;
+    if (_colorFamily.trim().isNotEmpty) weight += 0.2;
+    if (_getAutoDetectedShadeDepth().trim().isNotEmpty) weight += 0.2;
+    if (_selectedFinishTypes.isNotEmpty) weight += 0.1;
+    if (_selectedCoverageLevels.isNotEmpty) weight += 0.1;
+
+    return weight.clamp(1.0, 2.0);
   }
 
   Future<void> _pickImage() async {
@@ -565,8 +526,23 @@ class _ProductFormPageState extends State<ProductFormPage> {
           ? await _uploadProductImage()
           : _imageUrlController.text;
 
-      // Auto-detect shade depth from hex code
-      final autoDetectedShadeDepth = _detectShadeDepthFromHex(_hexCodeController.text);
+      // Get complete color profile from ColorClassificationHelper
+      final colorProfile =
+          ColorClassificationHelper.classify(_hexCodeController.text);
+
+      final autoDetectedShadeDepth = colorProfile.shadeDepth;
+      final autoDetectedUndertones = colorProfile.undertones;
+      final autoDetectedColorFamily = colorProfile.colorFamily;
+
+      final compatibleLooks = _generateCompatibleLooks()
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+
+      final targetArea = _detectTargetArea(_category);
+      final recommendationPriority = _getRecommendationPriority();
+      final confidenceWeight = _getConfidenceWeight();
 
       final payload = <String, dynamic>{
         'business_id': widget.businessId,
@@ -579,14 +555,30 @@ class _ProductFormPageState extends State<ProductFormPage> {
         'image_url': imageUrl,
         'shade_name': hasColor ? _shadeNameController.text : '',
         'hex_code': hasColor ? _hexCodeController.text : '',
-        'undertone': hasColor ? _selectedUndertones.join(', ') : '',
-        'color_family': hasColor ? _colorFamily : '',
+        
+        // Backward compatibility CSV fields
+        'undertone': hasColor ? autoDetectedUndertones.join(', ') : '',
+        'color_family': hasColor ? autoDetectedColorFamily : '',
         'shade_depth': hasColor ? autoDetectedShadeDepth : '',
-        'compatible_looks': _generateCompatibleLooks(),
-        'auto_generated_looks': true,
+        'compatible_looks': compatibleLooks.join(', '),
         'compatible_skin_type': _selectedSkinTypes.join(', '),
         'finish_type': _selectedFinishTypes.join(', '),
         'coverage_level': _selectedCoverageLevels.join(', '),
+        
+        // New JSON fields for production-level recommendation matching
+        'undertones': hasColor ? autoDetectedUndertones : [],
+        'compatible_looks_json': compatibleLooks,
+        'skin_types': _selectedSkinTypes.toList(),
+        'finish_types': _selectedFinishTypes.toList(),
+        'coverage_levels': _selectedCoverageLevels.toList(),
+        
+        // Recommendation metadata
+        'target_area': targetArea,
+        'recommendation_priority': recommendationPriority,
+        'confidence_weight': confidenceWeight,
+        
+        // Flags
+        'auto_generated_looks': true,
         'morena_friendly': _morenaFriendly,
         'beginner_friendly': _beginnerFriendly,
         'budget_friendly': _budgetFriendly,
@@ -778,6 +770,8 @@ class _ProductFormPageState extends State<ProductFormPage> {
   }
 
   Widget _buildAutoDetectedColorFamilyCard() {
+    final detectedFamily = _detectColorFamilyFromHex(_hexCodeController.text);
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
@@ -798,7 +792,7 @@ class _ProductFormPageState extends State<ProductFormPage> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'AI detected color family: $_colorFamily',
+              'AI detected color family: $detectedFamily',
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
@@ -811,58 +805,39 @@ class _ProductFormPageState extends State<ProductFormPage> {
     );
   }
 
-  Widget _buildUndertoneSelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Undertone',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
+  Widget _buildAutoDetectedUndertoneCard() {
+    final undertones = _detectCompatibleUndertonesFromHex(_hexCodeController.text);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F2FF),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: primaryPink.withOpacity(0.18),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.auto_awesome_rounded,
+            color: primaryPink,
+            size: 20,
           ),
-        ),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: _undertoneOptions.map((undertone) {
-            final isSelected = _selectedUndertones.contains(undertone);
-            return GestureDetector(
-              onTap: () {
-                setState(() {
-                  if (isSelected) {
-                    _selectedUndertones.remove(undertone);
-                  } else {
-                    _selectedUndertones.add(undertone);
-                  }
-                });
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: isSelected ? const Color(0xFFFF4FA3) : Colors.white,
-                  borderRadius: BorderRadius.circular(30),
-                  border: Border.all(
-                    color: isSelected ? const Color(0xFFFF4FA3) : Colors.grey.shade300,
-                  ),
-                ),
-                child: Text(
-                  undertone,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: isSelected ? Colors.white : Colors.black87,
-                  ),
-                ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'AI detected compatible undertone: ${undertones.join(', ')}',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: Colors.black87,
               ),
-            );
-          }).toList(),
-        ),
-      ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1219,7 +1194,7 @@ class _ProductFormPageState extends State<ProductFormPage> {
                       const SizedBox(height: 16),
                       _buildAutoDetectedColorFamilyCard(),
                       const SizedBox(height: 16),
-                      _buildUndertoneSelector(),
+                      _buildAutoDetectedUndertoneCard(),
                       const SizedBox(height: 16),
                       _buildChipSelector(
                         'Skin Type Compatibility',
@@ -1273,7 +1248,7 @@ class _ProductFormPageState extends State<ProductFormPage> {
                           ),
                         ),
                         child: const Text(
-                          '✨ AI automatically detects shade depth and color family from hex code. No manual selection needed.',
+                          '✨ AI automatically detects shade depth, color family, and compatible undertone from hex code. No manual selection needed.',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,

@@ -12,6 +12,10 @@ import 'look_engine.dart';
 import 'widgets/face_preview_card.dart';
 import 'widgets/beauty_slider.dart';
 
+// 1. Add imports
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'helpers/product_recommendation_engine.dart';
+
 enum MakeupControlArea {
   lips,
   eyebrows,
@@ -61,7 +65,21 @@ class _ScanResultPageState extends State<ScanResultPage> {
   final ValueNotifier<double> _linerOpacity = ValueNotifier<double>(1.0);
   final ValueNotifier<double> _browOpacity = ValueNotifier<double>(1.0);
 
+  // Combined preview values notifier
+  late final ValueNotifier<MakeupPreviewValues> _previewValues;
+
   late final MakeupLookPreset _currentPreset;
+
+  // 2. Add state variables
+  bool _loadingOverlayColors = false;
+
+  Color? _recommendedLipColor;
+  Color? _recommendedBlushColor;
+  Color? _recommendedEyeshadowColor;
+
+  Map<String, dynamic>? _lockedLipProduct;
+  Map<String, dynamic>? _lockedBlushProduct;
+  Map<String, dynamic>? _lockedEyeshadowProduct;
 
   @override
   void initState() {
@@ -69,21 +87,64 @@ class _ScanResultPageState extends State<ScanResultPage> {
 
     _currentPreset = widget.selectedPreset;
 
+    _previewValues = ValueNotifier<MakeupPreviewValues>(
+      MakeupPreviewValues(
+        globalIntensity: _globalOpacity.value,
+        lipOpacity: _lipOpacity.value,
+        blushOpacity: _blushOpacity.value,
+        eyeOpacity: _eyeOpacity.value,
+        linerOpacity: _linerOpacity.value,
+        browOpacity: _browOpacity.value,
+      ),
+    );
+
+    // Add listeners to update combined notifier
+    _globalOpacity.addListener(_updatePreviewValues);
+    _lipOpacity.addListener(_updatePreviewValues);
+    _blushOpacity.addListener(_updatePreviewValues);
+    _eyeOpacity.addListener(_updatePreviewValues);
+    _linerOpacity.addListener(_updatePreviewValues);
+    _browOpacity.addListener(_updatePreviewValues);
+
     // Use already-detected face immediately.
     // This avoids waiting for ML Kit again.
     _previewFace = widget.detectedFace;
 
     _loadPreviewAndDetect();
+
+    // 7. Call loader in initState()
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadRecommendedOverlayColors();
+    });
+  }
+
+  void _updatePreviewValues() {
+    _previewValues.value = MakeupPreviewValues(
+      globalIntensity: _globalOpacity.value,
+      lipOpacity: _lipOpacity.value,
+      blushOpacity: _blushOpacity.value,
+      eyeOpacity: _eyeOpacity.value,
+      linerOpacity: _linerOpacity.value,
+      browOpacity: _browOpacity.value,
+    );
   }
 
   @override
   void dispose() {
+    _globalOpacity.removeListener(_updatePreviewValues);
+    _lipOpacity.removeListener(_updatePreviewValues);
+    _blushOpacity.removeListener(_updatePreviewValues);
+    _eyeOpacity.removeListener(_updatePreviewValues);
+    _linerOpacity.removeListener(_updatePreviewValues);
+    _browOpacity.removeListener(_updatePreviewValues);
+
     _globalOpacity.dispose();
     _lipOpacity.dispose();
     _blushOpacity.dispose();
     _eyeOpacity.dispose();
     _linerOpacity.dispose();
     _browOpacity.dispose();
+    _previewValues.dispose();
 
     super.dispose();
   }
@@ -234,11 +295,116 @@ class _ScanResultPageState extends State<ScanResultPage> {
     });
   }
 
+  // 3. Add safe HEX parser
+  Color? _safeColorFromHex(String? hex) {
+    if (hex == null) return null;
+
+    final cleaned = hex.trim().replaceAll('#', '');
+
+    if (!RegExp(r'^[0-9A-Fa-f]{6}$').hasMatch(cleaned)) {
+      return null;
+    }
+
+    return Color(int.parse('FF$cleaned', radix: 16));
+  }
+
+  // 4. Add target-area recommendation loader
+  Future<Map<String, dynamic>?> _fetchBestProductForOverlay({
+    required String targetArea,
+  }) async {
+    try {
+      final response = await Supabase.instance.client
+          .from('products')
+          .select()
+          .eq('is_active', true);
+
+      final allProducts = List<Map<String, dynamic>>.from(response);
+
+      final recommended = ProductRecommendationEngine.recommendBestProducts(
+        products: allProducts,
+        selectedLook: widget.look?.lookName ?? '',
+        userUndertone: widget.faceProfile?.undertone.name ?? 'Neutral',
+        userShadeDepth: _userShadeDepthFromFaceProfile(),
+        targetArea: targetArea,
+        preferredFinish: '',
+        limit: 1,
+      );
+
+      if (recommended.isEmpty) return null;
+
+      return recommended.first;
+    } catch (e) {
+      debugPrint('❌ Overlay product fetch failed for $targetArea: $e');
+      return null;
+    }
+  }
+
+  // 5. Add shade depth helper
+  String _userShadeDepthFromFaceProfile() {
+    final raw = widget.faceProfile?.skinTone.name.toLowerCase() ?? '';
+
+    if (raw.contains('fair')) return 'Fair';
+    if (raw.contains('light')) return 'Light';
+    if (raw.contains('medium')) return 'Medium';
+    if (raw.contains('morena')) return 'Morena';
+    if (raw.contains('deep')) return 'Deep Morena';
+
+    return 'Medium';
+  }
+
+  // 6. Add overlay color loader
+  Future<void> _loadRecommendedOverlayColors() async {
+    if (_loadingOverlayColors) return;
+
+    setState(() => _loadingOverlayColors = true);
+
+    try {
+      final lip = await _fetchBestProductForOverlay(targetArea: 'lips');
+      final blush = await _fetchBestProductForOverlay(targetArea: 'blush');
+      final eyeshadow =
+          await _fetchBestProductForOverlay(targetArea: 'eyeshadow');
+
+      if (!mounted) return;
+
+      // Simplified debug logging
+      debugPrint('💄 PREVIEW LIP PRODUCT: ${lip?['shade_name']} ${lip?['hex_code']}');
+      debugPrint('🌸 PREVIEW BLUSH PRODUCT: ${blush?['shade_name']} ${blush?['hex_code']}');
+      debugPrint('👁 PREVIEW EYESHADOW PRODUCT: ${eyeshadow?['shade_name']} ${eyeshadow?['hex_code']}');
+
+      // Parse colors BEFORE setState
+      final lipColor = _safeColorFromHex(lip?['hex_code']?.toString());
+      final blushColor = _safeColorFromHex(blush?['hex_code']?.toString());
+      final eyeshadowColor = _safeColorFromHex(eyeshadow?['hex_code']?.toString());
+
+      if (!mounted) return;
+
+      setState(() {
+        _lockedLipProduct = lip;
+        _lockedBlushProduct = blush;
+        _lockedEyeshadowProduct = eyeshadow;
+
+        _recommendedLipColor = lipColor;
+        _recommendedBlushColor = blushColor;
+        _recommendedEyeshadowColor = eyeshadowColor;
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _loadingOverlayColors = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final faceForOverlay = _previewFace ?? widget.detectedFace;
     final canOverlay =
         _uiImage != null && faceForOverlay != null && widget.look != null;
+
+    // Check if overlay colors are ready
+    final overlayReady =
+        _recommendedLipColor != null ||
+        _recommendedBlushColor != null ||
+        _recommendedEyeshadowColor != null;
 
     return Scaffold(
       backgroundColor: const Color(0xFFFFF7FA),
@@ -329,22 +495,26 @@ class _ScanResultPageState extends State<ScanResultPage> {
                           fit: StackFit.expand,
                           children: [
                             RepaintBoundary(
-                              child: FacePreviewCard(
-                                uiImage: _uiImage,
-                                scannedImagePath: widget.scannedImagePath,
-                                canOverlay: canOverlay,
-                                faceForOverlay: faceForOverlay,
-                                look: widget.look,
-                                faceProfile: widget.faceProfile,
-                                preset: _currentPreset,
-                                globalOpacity: _globalOpacity,
-                                lipOpacity: _lipOpacity,
-                                blushOpacity: _blushOpacity,
-                                eyeOpacity: _eyeOpacity,
-                                linerOpacity: _linerOpacity,
-                                browOpacity: _browOpacity,
-                                makeupLayer: MakeupLayer.full,
-                              ),
+                              child: overlayReady
+                                  ? FacePreviewCard(
+                                      uiImage: _uiImage,
+                                      scannedImagePath: widget.scannedImagePath,
+                                      canOverlay: canOverlay,
+                                      faceForOverlay: faceForOverlay,
+                                      look: widget.look,
+                                      faceProfile: widget.faceProfile,
+                                      preset: _currentPreset,
+                                      previewValues: _previewValues,
+                                      makeupLayer: MakeupLayer.full,
+                                      customLipColor: _recommendedLipColor,
+                                      customBlushColor: _recommendedBlushColor,
+                                      customEyeshadowColor: _recommendedEyeshadowColor,
+                                    )
+                                  : const Center(
+                                      child: CircularProgressIndicator(
+                                        color: Color(0xFFFF4D97),
+                                      ),
+                                    ),
                             ),
                             Positioned(
                               top: 12,

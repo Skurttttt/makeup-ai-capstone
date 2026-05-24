@@ -18,6 +18,7 @@ import 'painters/eyeliner_guide_painter.dart';
 import 'home_screen.dart';
 import 'screens/checkout_screen.dart';
 import 'helpers/instructions_recommendation_helper.dart';
+import 'helpers/product_recommendation_engine.dart';
 import 'widgets/instructions_support_widgets.dart';
 
 // Widgets
@@ -91,6 +92,9 @@ class _InstructionsPageState extends State<InstructionsPage> {
   List<Map<String, dynamic>> _recommendedKitItems = [];
   final Map<String, Color> _recommendedStepColors = {};
   final Set<String> _prefetchedTargetAreas = {};
+  
+  // 1. ADD LOCKED PRODUCT STATE
+  final Map<String, Map<String, dynamic>> _lockedRecommendedProducts = {};
 
   @override
   void initState() {
@@ -181,11 +185,85 @@ class _InstructionsPageState extends State<InstructionsPage> {
     }
   }
 
+  String _normalizeRecommendationTargetArea(String targetArea) {
+    switch (targetArea) {
+      case 'full_face':
+        return 'primer';
+
+      case 'brows':
+        return 'brows';
+
+      case 'eyeshadow':
+        return 'eyeshadow';
+
+      case 'eyeliner':
+        return 'eyeliner';
+
+      case 'lips':
+        return 'lips';
+
+      case 'full_makeup':
+        return 'setting';
+
+      default:
+        return targetArea;
+    }
+  }
+
+  String _userShadeDepthFromFaceProfile() {
+    final raw = widget.faceProfile?.skinTone.name.toLowerCase() ?? '';
+
+    if (raw.contains('fair')) return 'Fair';
+    if (raw.contains('light')) return 'Light';
+    if (raw.contains('medium')) return 'Medium';
+    if (raw.contains('morena')) return 'Morena';
+    if (raw.contains('deep')) return 'Deep Morena';
+
+    return 'Medium';
+  }
+
+  // 2. ADD HELPERS
+  
+  String _productName(Map<String, dynamic>? product) {
+    return product?['name']?.toString() ?? 'recommended product';
+  }
+
+  String _productShade(Map<String, dynamic>? product) {
+    return product?['shade_name']?.toString() ?? '';
+  }
+
+  String _productColorFamily(Map<String, dynamic>? product) {
+    return product?['color_family']?.toString() ?? '';
+  }
+
+  String _productHex(Map<String, dynamic>? product) {
+    return product?['hex_code']?.toString() ?? '';
+  }
+
+  Map<String, dynamic>? _lockedProductFor(String targetArea) {
+    return _lockedRecommendedProducts[targetArea];
+  }
+
+  void _lockRecommendedProduct({
+    required String targetArea,
+    required Map<String, dynamic> product,
+  }) {
+    _lockedRecommendedProducts[targetArea] = product;
+
+    final hex = product['hex_code']?.toString();
+    final color = colorFromHex(hex);
+
+    if (color != null) {
+      _recommendedStepColors[targetArea] = color;
+    }
+  }
+
   Future<void> _lockMarketColorsForLook() async {
     const colorTargetAreas = [
       'eyeshadow',
       'blush_contour',
       'lips',
+      'brows',
     ];
 
     for (final targetArea in colorTargetAreas) {
@@ -301,253 +379,153 @@ class _InstructionsPageState extends State<InstructionsPage> {
   Future<List<Map<String, dynamic>>> _fetchRecommendedProducts(
     String targetArea,
   ) async {
-    final category = categoryForTargetArea(targetArea);
-    final selectedLook = widget.look.lookName.toLowerCase();
-
-    final selectedSkinType = _selectedSkinType == null
-        ? ''
-        : _skinTypeLabel(_selectedSkinType!).toLowerCase();
-
-    final detectedUndertone =
-        widget.faceProfile?.undertone.name.toLowerCase() ?? '';
-
-    final userSkinTone =
-        widget.faceProfile?.skinTone.name.toLowerCase() ?? '';
-
     final response = await Supabase.instance.client
         .from('products')
         .select()
         .eq('is_active', true);
 
-    final products = List<Map<String, dynamic>>.from(response);
+    final allProducts = List<Map<String, dynamic>>.from(response);
 
-    final categoryFilteredProducts = products.where((product) {
-      final productCategory =
-          (product['category'] ?? '').toString().toLowerCase();
+    final detectedUndertone =
+        widget.faceProfile?.undertone.name ?? 'Neutral';
 
-      final requiredCategory = category.toLowerCase();
+    final userShadeDepth = _userShadeDepthFromFaceProfile();
 
-      if (targetArea == 'full_face') {
-        return productCategory.contains('primer') ||
-            productCategory.contains('foundation') ||
-            productCategory.contains('concealer') ||
-            productCategory.contains('cushion') ||
-            productCategory.contains('skin tint');
-      }
+    final selectedSkinType = _selectedSkinType == null
+        ? ''
+        : _skinTypeLabel(_selectedSkinType!);
 
-      if (targetArea == 'eyeshadow') {
-        return productCategory.contains('eyeshadow') ||
-            productCategory.contains('palette');
-      }
+    final normalizedTargetArea =
+        _normalizeRecommendationTargetArea(targetArea);
 
-      // Use helper methods for blush_contour filtering
-      if (targetArea == 'blush_contour') {
-        return _isBlushProduct(product) || _isContourProduct(product);
-      }
+    final limit = switch (normalizedTargetArea) {
+      'primer' => 1,
+      'setting' => 1,
+      'eyeshadow' => 2,
+      'eyeliner' => 2,
+      'lips' => 2,
+      'brows' => 1,
+      _ => 2,
+    };
 
-      if (targetArea == 'lips') {
-        return productCategory.contains('lipstick') ||
-            productCategory.contains('lip tint') ||
-            productCategory.contains('lip gloss') ||
-            productCategory.contains('lip');
-      }
-
-      return productCategory.contains(requiredCategory);
-    }).toList();
-
-    final preferredFamily = preferredColorFamilyForLook(
-      lookName: widget.look.lookName,
-      targetArea: targetArea,
+    final recommendedProducts =
+        ProductRecommendationEngine.recommendBestProducts(
+      products: allProducts,
+      selectedLook: widget.look.lookName,
+      userUndertone: detectedUndertone,
+      userShadeDepth: userShadeDepth,
+      targetArea: normalizedTargetArea,
+      preferredFinish: selectedSkinType,
+      limit: limit,
     );
 
-    final scoredProducts = categoryFilteredProducts.map((product) {
-      int score = 0;
+    // FALLBACK for brows: if we didn't get enough products, add more brow products
+    if (normalizedTargetArea == 'brows' && recommendedProducts.length < 2) {
+      final fallbackBrows = allProducts.where((product) {
+        final name = (product['name'] ?? '').toString().toLowerCase();
+        final category = (product['category'] ?? '').toString().toLowerCase();
+        final target = (product['target_area'] ?? '').toString().toLowerCase();
+        final active = product['is_active'] == true;
 
-      final compatibleLooks =
-          (product['compatible_looks'] ?? '').toString().toLowerCase();
+        final isBrowProduct =
+            category.contains('brow') ||
+            category.contains('eyebrow') ||
+            name.contains('brow') ||
+            name.contains('eyebrow') ||
+            target == 'brows';
 
-      final compatibleSkinType =
-          (product['compatible_skin_type'] ?? '').toString().toLowerCase();
+        return active && isBrowProduct;
+      }).toList();
 
-      final undertone =
-          (product['undertone'] ?? '').toString().toLowerCase();
+      final existingIds = recommendedProducts
+          .map((p) => p['id']?.toString())
+          .whereType<String>()
+          .toSet();
 
-      final shadeDepth =
-          (product['shade_depth'] ?? '').toString().toLowerCase();
+      final extraBrows = fallbackBrows
+          .where((p) => !existingIds.contains(p['id']?.toString()))
+          .take(2 - recommendedProducts.length)
+          .toList();
 
-      final colorFamily =
-          (product['color_family'] ?? '').toString().toLowerCase();
-
-      final productHex =
-          (product['hex_code'] ?? '').toString().trim();
-
-      final productCategory =
-          (product['category'] ?? '').toString().toLowerCase();
-
-      score += 10;
-
-      // Compatible looks is now only secondary.
-      if (targetArea == 'lips') {
-        if (compatibleLooks.contains(selectedLook)) {
-          score += 1;
-        }
-      } else {
-        if (compatibleLooks.contains(selectedLook)) {
-          score += 4;
-        }
-      }
-
-      if (preferredFamily.isNotEmpty) {
-        if (colorFamily.contains(preferredFamily.toLowerCase()) ||
-            preferredFamily.toLowerCase().contains(colorFamily)) {
-          score += 80;
-        } else {
-          score -= 30;
-        }
-      }
-
-      if (selectedSkinType.isNotEmpty &&
-          compatibleSkinType.contains(selectedSkinType)) {
-        score += 3;
-      }
-
-      if (detectedUndertone.isNotEmpty &&
-          undertone.contains(detectedUndertone)) {
-        score += 2;
-      }
-
-      if (userSkinTone.isNotEmpty && shadeDepth.isNotEmpty) {
-        if (skinToneMatchesShadeDepth(userSkinTone, shadeDepth)) {
-          score += 3;
-        }
-      }
-
-      if (targetArea == 'lips') {
-        final recommendedLipHex =
-            hexFromColor(widget.look.lipstickColor);
-
-        score += lipstickStrictScore(
-          product: product,
-          lookName: widget.look.lookName,
-          recommendedHex: recommendedLipHex,
-          recommendedColorFamily: preferredFamily,
-          userUndertone: detectedUndertone,
-          userSkinType: selectedSkinType,
-          userShadeDepth: userSkinTone,
-        ).toInt();
-      } else {
-        score += lookColorFamilyScore(
-          lookName: widget.look.lookName,
-          targetArea: targetArea,
-          colorFamily: colorFamily,
-        );
-
-        // Product HEX should exist for color-based areas.
-        if ((targetArea == 'eyeshadow' ||
-                targetArea == 'blush_contour') &&
-            productHex.isEmpty) {
-          score -= 100;
-        }
-      }
-
-      // Additional scoring for blush_contour products
-      if (targetArea == 'blush_contour') {
-        final productName = (product['name'] ?? '').toString().toLowerCase();
-        final shadeName = (product['shade_name'] ?? '').toString().toLowerCase();
-
-        final variationsRaw = product['variations'];
-        final variationsText = variationsRaw == null
-            ? ''
-            : variationsRaw.toString().toLowerCase();
-
-        final isBlush =
-            productCategory.contains('blush') ||
-            productName.contains('blush');
-
-        final isContour =
-            productCategory.contains('contour') ||
-            productName.contains('contour');
-
-        final isMultiPalette =
-            productCategory.contains('palette') ||
-            productName.contains('palette') ||
-            productName.contains('multi palette') ||
-            productName.contains('multi-palette');
-
-        final hasSet123 =
-            shadeName.contains('set 1') ||
-            shadeName.contains('set 2') ||
-            shadeName.contains('set 3') ||
-            variationsText.contains('set 1') ||
-            variationsText.contains('set 2') ||
-            variationsText.contains('set 3');
-
-        if (isBlush) {
-          score += 50;
-        }
-
-        if (isContour || (isMultiPalette && hasSet123)) {
-          score += 50;
-        }
-      }
-
-      return {
-        ...product,
-        '_match_score': score,
-      };
-    }).toList();
-
-    scoredProducts.sort((a, b) {
-      return (b['_match_score'] as int).compareTo(a['_match_score'] as int);
-    });
-
-    // Keep all scored products for blush_contour, but limit others to 2
-    final bestProducts = targetArea == 'blush_contour'
-        ? scoredProducts
-        : scoredProducts.take(2).toList();
-
-    // MARKET COLOR LOCKING:
-    // The first/best product HEX becomes the official color.
-    if (bestProducts.isNotEmpty) {
-      final bestHex = bestProducts.first['hex_code']?.toString();
-      final bestColor = colorFromHex(bestHex);
-
-      if (bestColor != null) {
-        _recommendedStepColors[targetArea] = bestColor;
-      }
+      recommendedProducts.addAll(extraBrows);
     }
 
-    return bestProducts;
+    // DEBUG PRINT - Add this line
+    debugPrint('🟢 $targetArea → $normalizedTargetArea → COUNT: ${recommendedProducts.length}');
+
+    // 3. UPDATE _fetchRecommendedProducts() - Replace if block
+    if (recommendedProducts.isNotEmpty) {
+      _lockRecommendedProduct(
+        targetArea: targetArea,
+        product: recommendedProducts.first,
+      );
+    }
+
+    return recommendedProducts;
   }
 
-  // Fetch blush and contour products separately with debug prints
+  // 4. UPDATE _fetchBlushContourProducts()
   Future<List<Map<String, dynamic>>> _fetchBlushContourProducts() async {
-    final products = await _fetchRecommendedProducts('blush_contour');
+    final response = await Supabase.instance.client
+        .from('products')
+        .select()
+        .eq('is_active', true);
 
-    final blushProducts = products
-        .where(_isBlushProduct)
-        .take(2)
-        .map((p) => {
-              ...p,
-              '_recommendation_group': 'BLUSH',
-            })
-        .toList();
+    final allProducts = List<Map<String, dynamic>>.from(response);
 
-    final contourProducts = products
-        .where(_isContourProduct)
-        .take(2)
-        .map((p) => {
-              ...p,
-              '_recommendation_group': 'CONTOUR',
-            })
-        .toList();
+    final detectedUndertone =
+        widget.faceProfile?.undertone.name ?? 'Neutral';
 
-    debugPrint('BLUSH COUNT: ${blushProducts.length}');
-    debugPrint('CONTOUR COUNT: ${contourProducts.length}');
+    final userShadeDepth = _userShadeDepthFromFaceProfile();
+
+    final selectedSkinType = _selectedSkinType == null
+        ? ''
+        : _skinTypeLabel(_selectedSkinType!);
+
+    final blushProducts =
+        ProductRecommendationEngine.recommendBestProducts(
+      products: allProducts,
+      selectedLook: widget.look.lookName,
+      userUndertone: detectedUndertone,
+      userShadeDepth: userShadeDepth,
+      targetArea: 'blush',
+      preferredFinish: selectedSkinType,
+      limit: 2,
+    ).map((p) => {
+          ...p,
+          '_recommendation_group': 'BLUSH',
+        }).toList();
+
+    final contourProducts =
+        ProductRecommendationEngine.recommendBestProducts(
+      products: allProducts,
+      selectedLook: widget.look.lookName,
+      userUndertone: detectedUndertone,
+      userShadeDepth: userShadeDepth,
+      targetArea: 'contour',
+      preferredFinish: selectedSkinType,
+      limit: 2,
+    ).map((p) => {
+          ...p,
+          '_recommendation_group': 'CONTOUR',
+        }).toList();
+
+    if (blushProducts.isNotEmpty) {
+      _lockRecommendedProduct(
+        targetArea: 'blush_contour',
+        product: blushProducts.first,
+      );
+
+      _lockedRecommendedProducts['blush'] = blushProducts.first;
+    }
+
+    if (contourProducts.isNotEmpty) {
+      _lockedRecommendedProducts['contour'] = contourProducts.first;
+    }
 
     return [
-      ...blushProducts,
-      ...contourProducts,
+      ...blushProducts.take(2),
+      ...contourProducts.take(2),
     ];
   }
 
@@ -983,6 +961,94 @@ class _InstructionsPageState extends State<InstructionsPage> {
     return text;
   }
 
+  // 5. ADD PERSONALIZED TUTORIAL TEXT
+  
+  String _personalizedInstruction({
+    required String targetArea,
+    required String fallbackInstruction,
+  }) {
+    final product = _lockedProductFor(targetArea) ??
+        (targetArea == 'blush_contour'
+            ? _lockedProductFor('blush')
+            : null);
+
+    if (product == null) return fallbackInstruction;
+
+    final name = _productName(product);
+    final shade = _productShade(product);
+
+    final shadeText = shade.isNotEmpty ? ' in $shade' : '';
+
+    switch (targetArea) {
+      case 'full_face':
+        return 'Start by applying $name$shadeText to prepare a smooth and even base before applying the rest of your makeup.';
+
+      case 'brows':
+        return 'Use $name$shadeText to softly fill in sparse areas of your brows while following your natural brow shape.';
+
+      case 'eyeshadow':
+        return 'Apply $name$shadeText on the eyelids, blend softly into the crease, and build depth gradually for a balanced eye look.';
+
+      case 'eyeliner':
+        return 'Use $name$shadeText close to the upper lash line, then extend slightly outward to define the eyes.';
+
+      case 'blush_contour':
+        final blush = _lockedProductFor('blush');
+        final contour = _lockedProductFor('contour');
+
+        final blushName = _productName(blush);
+        final blushShade = _productShade(blush);
+        final contourName = _productName(contour);
+        final contourShade = _productShade(contour);
+
+        return 'Apply $blushName${blushShade.isNotEmpty ? ' in $blushShade' : ''} on the upper cheek area, then use $contourName${contourShade.isNotEmpty ? ' in $contourShade' : ''} below the cheekbone to add soft dimension.';
+
+      case 'lips':
+        return 'Apply $name$shadeText from the center of your lips outward, then blend the edges for a polished finish.';
+
+      case 'full_makeup':
+        return 'Set your makeup using $name$shadeText with light X and T motions to help keep the final look fresh and long-lasting.';
+
+      default:
+        return fallbackInstruction;
+    }
+  }
+
+  // 6. ADD "WHY THIS COLOR SUITS YOU"
+  
+  String _personalizedWhyText({
+    required String targetArea,
+    required String fallbackWhy,
+  }) {
+    final product = _lockedProductFor(targetArea) ??
+        (targetArea == 'blush_contour'
+            ? _lockedProductFor('blush')
+            : null);
+
+    if (product == null) return fallbackWhy;
+
+    final shade = _productShade(product);
+    final family = _productColorFamily(product);
+    final undertone = widget.faceProfile?.undertone.name ?? 'your undertone';
+    final look = widget.look.lookName;
+
+    if (targetArea == 'blush_contour') {
+      final blush = _lockedProductFor('blush');
+      final contour = _lockedProductFor('contour');
+
+      return 'The blush shade ${_productShade(blush)} adds warmth and freshness, while ${_productName(contour)} helps add soft dimension that complements your $undertone undertone and $look look.';
+    }
+
+    if (targetArea == 'full_makeup') {
+      return 'This product helps complete and set the look so the makeup appears more polished, balanced, and long-lasting.';
+    }
+
+    final shadeText = shade.isNotEmpty ? shade : 'this shade';
+    final familyText = family.isNotEmpty ? family : 'color family';
+
+    return '$shadeText belongs to the $familyText family, which was selected to match your $undertone undertone and support the $look look.';
+  }
+
   void _ensureGuideForTargetArea(String targetArea) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _prefetchRecommendedProductColor(targetArea);
@@ -1135,9 +1201,15 @@ class _InstructionsPageState extends State<InstructionsPage> {
                                     .where((p) => p['_recommendation_group'] == group)
                                     .toList()
                                     .indexOf(product);
-                                matchLabel = sameGroupIndex == 0
-                                    ? '$group BEST MATCH'
-                                    : '$group ALTERNATIVE';
+                                if (group == 'CONTOUR') {
+                                  matchLabel = sameGroupIndex == 0
+                                      ? 'CONTOUR BEST MATCH'
+                                      : 'CONTOUR ALTERNATIVE';
+                                } else {
+                                  matchLabel = sameGroupIndex == 0
+                                      ? '$group BEST MATCH'
+                                      : '$group ALTERNATIVE';
+                                }
                               } else {
                                 matchLabel = index == 0 ? 'BEST MATCH' : 'ALTERNATIVE';
                               }
@@ -1366,10 +1438,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
     return const Center(child: CircularProgressIndicator());
   }
 
-  // Recommended kit methods
-// ... (previous code remains the same until _buildFinalRecommendedKit) ...
-
-  // Recommended kit methods
+  // 8. UPDATE _buildFinalRecommendedKit()
   Future<void> _buildFinalRecommendedKit() async {
     if (_buildingRecommendedKit) return;
 
@@ -1389,59 +1458,53 @@ class _InstructionsPageState extends State<InstructionsPage> {
       final Map<String, Map<String, dynamic>> uniqueProducts = {};
 
       for (final targetArea in targetAreas) {
-        final products = targetArea == 'blush_contour'
-            ? await _fetchBlushContourProducts()
-            : await _fetchRecommendedProducts(targetArea);
-
-        if (products.isEmpty) continue;
-
-        // UPDATED: For blush_contour, find the best blush and best contour separately
-        List<Map<String, dynamic>> itemsToAdd;
-
         if (targetArea == 'blush_contour') {
-          final blushBest = products.where((p) {
-            final group = p['_recommendation_group']?.toString();
-            return group == 'BLUSH';
-          }).isNotEmpty
-              ? products.firstWhere((p) {
-                  final group = p['_recommendation_group']?.toString();
-                  return group == 'BLUSH';
-                })
-              : null;
+          final blush = _lockedProductFor('blush');
+          final contour = _lockedProductFor('contour');
 
-          final contourBest = products.where((p) {
-            final group = p['_recommendation_group']?.toString();
-            return group == 'CONTOUR';
-          }).isNotEmpty
-              ? products.firstWhere((p) {
-                  final group = p['_recommendation_group']?.toString();
-                  return group == 'CONTOUR';
-                })
-              : null;
+          for (final product in [blush, contour]) {
+            if (product == null) continue;
 
-          itemsToAdd = [
-            if (blushBest != null) blushBest,
-            if (contourBest != null) contourBest,
-          ];
-        } else {
-          itemsToAdd = [products.first];
+            final productId = product['id']?.toString();
+            if (productId == null || productId.isEmpty) continue;
+            if (uniqueProducts.containsKey(productId)) continue;
+
+            uniqueProducts[productId] = {
+              ...product,
+              'quantity': 1,
+              'variation': {
+                'color_name': product['shade_name'],
+                'hex_code': product['hex_code'],
+              },
+            };
+          }
+
+          continue;
         }
 
-        for (final bestMatch in itemsToAdd) {
-          final productId = bestMatch['id']?.toString();
+        final product = _lockedProductFor(targetArea);
 
-          if (productId == null || productId.isEmpty) continue;
-          if (uniqueProducts.containsKey(productId)) continue;
-
-          uniqueProducts[productId] = {
-            ...bestMatch,
-            'quantity': 1,
-            'variation': {
-              'color_name': bestMatch['shade_name'],
-              'hex_code': bestMatch['hex_code'],
-            },
-          };
+        if (product == null) {
+          final products = await _fetchRecommendedProducts(targetArea);
+          if (products.isEmpty) continue;
         }
+
+        final lockedProduct = _lockedProductFor(targetArea);
+        if (lockedProduct == null) continue;
+
+        final productId = lockedProduct['id']?.toString();
+
+        if (productId == null || productId.isEmpty) continue;
+        if (uniqueProducts.containsKey(productId)) continue;
+
+        uniqueProducts[productId] = {
+          ...lockedProduct,
+          'quantity': 1,
+          'variation': {
+            'color_name': lockedProduct['shade_name'],
+            'hex_code': lockedProduct['hex_code'],
+          },
+        };
       }
 
       if (!mounted) return;
@@ -1466,8 +1529,6 @@ class _InstructionsPageState extends State<InstructionsPage> {
       }
     }
   }
-
-// ... (rest of the code remains the same) ...
 
   void _showFinalRecommendedKitSheet() {
     showModalBottomSheet(
@@ -1852,6 +1913,7 @@ class _InstructionsPageState extends State<InstructionsPage> {
     );
   }
 
+  // 7. UPDATE _buildAIStepsPager()
   Widget _buildAIStepsPager() {
     const fixedStepOrder = [
       {
@@ -1962,13 +2024,23 @@ class _InstructionsPageState extends State<InstructionsPage> {
 
                     final aiStep = _getAiStepForFixedStep(index + 1, targetArea);
 
-                    final instruction =
+                    final rawInstruction =
                         aiStep['instruction']?.toString() ??
                         fixedStep['fallbackInstruction'].toString();
 
-                    final whyThisColorSuitsYou = _cleanWhyText(
+                    final instruction = _personalizedInstruction(
+                      targetArea: targetArea,
+                      fallbackInstruction: rawInstruction,
+                    );
+
+                    final rawWhyThisColorSuitsYou = _cleanWhyText(
                       aiStep['whyThisColorSuitsYou']?.toString() ?? '',
                       targetArea,
+                    );
+
+                    final whyThisColorSuitsYou = _personalizedWhyText(
+                      targetArea: targetArea,
+                      fallbackWhy: rawWhyThisColorSuitsYou,
                     );
 
                     _ensureGuideForTargetArea(targetArea);

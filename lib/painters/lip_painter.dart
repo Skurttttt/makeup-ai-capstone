@@ -22,118 +22,109 @@ class LipPainter {
     final k = intensity.clamp(0.0, 1.0);
     if (k <= 0.001) return;
 
-    // ML Kit lip contours
     final upper = face.contours[FaceContourType.upperLipTop]?.points;
     final lower = face.contours[FaceContourType.lowerLipBottom]?.points;
 
-    // If contours missing, do nothing (avoid weird artifacts)
-    if (upper == null || lower == null || upper.length < 6 || lower.length < 6) return;
+    if (upper == null ||
+        lower == null ||
+        upper.length < 6 ||
+        lower.length < 6) {
+      return;
+    }
 
-    // Convert to Offsets
-    final upperPts = upper.map((p) => ui.Offset(p.x.toDouble(), p.y.toDouble())).toList();
-    final lowerPts = lower.map((p) => ui.Offset(p.x.toDouble(), p.y.toDouble())).toList();
+    final upperPts = upper
+        .map((p) => ui.Offset(p.x.toDouble(), p.y.toDouble()))
+        .toList();
 
-    // Build a closed lip region path (upper + reversed lower)
+    final lowerPts = lower
+        .map((p) => ui.Offset(p.x.toDouble(), p.y.toDouble()))
+        .toList();
+
     final lipPath = _buildLipRegionPath(upperPts, lowerPts);
 
-    // Bounds / scale-aware blur
     final bounds = lipPath.getBounds();
     final lipW = bounds.width;
     final lipH = bounds.height;
+
     if (lipW <= 1 || lipH <= 1) return;
 
-    final sigmaBase = max(lipW, lipH) * 0.035; // tuned for lips
-    final sigmaSoft = sigmaBase * 0.9;
-    final sigmaFeather = sigmaBase * 1.35;
-
-    // Center for gradients
     final center = bounds.center;
 
-    // Finish tuning
+    final sigmaBase = max(lipW, lipH) * 0.025;
+    final sigmaSoft = sigmaBase.clamp(1.2, 4.5);
+    final sigmaFeather = (sigmaBase * 1.15).clamp(1.8, 6.0);
+
     final isMatte = lipFinish == LipFinish.matte;
 
-    // Matte = more pigment, less shine
-    // Glossy = slightly lighter pigment + highlight
-    final pigment = isMatte ? 0.62 : 0.48;
-    final feather = isMatte ? 0.18 : 0.14;
+    final darkness =
+        (1.0 - ((lipstickColor.red + lipstickColor.green + lipstickColor.blue) / 765.0))
+            .clamp(0.0, 1.0);
 
-    final baseShader = ui.Gradient.radial(
-      center,
-      max(lipW, lipH) * 0.95,
-      [
-        lipstickColor.withOpacity(pigment * k),
-        lipstickColor.withOpacity((pigment * 0.55) * k),
-        lipstickColor.withOpacity(0.0),
-      ],
-      const [0.0, 0.70, 1.0],
-    );
+    final saturation =
+        (([lipstickColor.red, lipstickColor.green, lipstickColor.blue].reduce(max) -
+                    [lipstickColor.red, lipstickColor.green, lipstickColor.blue].reduce(min)) /
+                255.0)
+            .clamp(0.0, 1.0);
 
-    final featherShader = ui.Gradient.radial(
-      center,
-      max(lipW, lipH) * 1.25,
-      [
-        lipstickColor.withOpacity(feather * k),
-        lipstickColor.withOpacity((feather * 0.35) * k),
-        lipstickColor.withOpacity(0.0),
-      ],
-      const [0.0, 0.78, 1.0],
-    );
+    final isDarkOrBold = darkness > 0.42 || saturation > 0.45;
 
-    // Layer so blending looks like it sits on lips (not sticker)
-    // Keep the offscreen layer tight. Large saveLayer bounds are expensive on GPU.
-    final layerBounds = bounds.inflate(max(10.0, max(lipW, lipH) * 0.35));
+    final pigment = isDarkOrBold
+        ? 0.78
+        : isMatte
+            ? 0.66
+            : 0.56;
+
+    final depthOpacity = isDarkOrBold ? 0.28 : 0.12;
+    final glossOpacity = isDarkOrBold ? 0.045 : 0.10;
+
+    final layerBounds = bounds.inflate(max(8.0, max(lipW, lipH) * 0.25));
+
     canvas.saveLayer(layerBounds, Paint());
 
-    // PASS 1: pigment (visible)
-    canvas.drawPath(
-      lipPath,
-      Paint()
-        ..isAntiAlias = true
-        ..style = PaintingStyle.fill
-        ..shader = baseShader
-        ..blendMode = BlendMode.srcOver
-        ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, sigmaSoft),
-    );
+    final basePaint = Paint()
+      ..isAntiAlias = true
+      ..style = PaintingStyle.fill
+      ..shader = ui.Gradient.radial(
+        center,
+        max(lipW, lipH) * 0.95,
+        [
+          lipstickColor.withOpacity(pigment * k),
+          lipstickColor.withOpacity((pigment * 0.82) * k),
+          lipstickColor.withOpacity((pigment * 0.45) * k),
+        ],
+        const [0.0, 0.70, 1.0],
+      )
+      ..blendMode = BlendMode.srcOver
+      ..maskFilter = ui.MaskFilter.blur(
+        ui.BlurStyle.normal,
+        sigmaSoft,
+      );
 
-    // PASS 2: depth (keeps it from looking flat)
-    canvas.drawPath(
-      lipPath,
-      Paint()
-        ..isAntiAlias = true
-        ..style = PaintingStyle.fill
-        ..shader = ui.Gradient.radial(
-          center,
-          max(lipW, lipH) * 0.75,
-          [
-            lipstickColor.withOpacity(0.10 * k),
-            lipstickColor.withOpacity(0.0),
-          ],
-          const [0.0, 1.0],
-        )
-        ..blendMode = BlendMode.multiply
-        ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, sigmaSoft * 0.9),
-    );
+    canvas.drawPath(lipPath, basePaint);
 
-    // PASS 3: feather edge (kills hard boundary)
-    canvas.drawPath(
-      lipPath,
-      Paint()
-        ..isAntiAlias = true
-        ..style = PaintingStyle.fill
-        ..shader = featherShader
-        ..blendMode = BlendMode.softLight
-        ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, sigmaFeather),
-    );
+    final depthPaint = Paint()
+      ..isAntiAlias = true
+      ..style = PaintingStyle.fill
+      ..color = lipstickColor.withOpacity(depthOpacity * k)
+      ..blendMode = BlendMode.multiply
+      ..maskFilter = ui.MaskFilter.blur(
+        ui.BlurStyle.normal,
+        sigmaSoft * 0.75,
+      );
 
-    // PASS 4: gloss highlight (only if glossy)
-    if (!isMatte) {
-      // highlight band slightly above center
-      final highlightCenter = ui.Offset(center.dx, center.dy - lipH * 0.18);
+    canvas.drawPath(lipPath, depthPaint);
+
+    if (!isMatte && glossOpacity > 0) {
+      final highlightCenter = ui.Offset(
+        center.dx,
+        center.dy - lipH * 0.18,
+      );
+
       final highlightShader = ui.Gradient.radial(
         highlightCenter,
-        max(lipW, lipH) * 0.55,
+        max(lipW, lipH) * 0.42,
         [
-          Colors.white.withOpacity(0.12 * k),
+          Colors.white.withOpacity(glossOpacity * k),
           Colors.white.withOpacity(0.0),
         ],
         const [0.0, 1.0],
@@ -145,21 +136,26 @@ class LipPainter {
           ..isAntiAlias = true
           ..style = PaintingStyle.fill
           ..shader = highlightShader
-          ..blendMode = BlendMode.screen
-          ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, sigmaSoft * 0.85),
+          ..blendMode = BlendMode.srcOver
+          ..maskFilter = ui.MaskFilter.blur(
+            ui.BlurStyle.normal,
+            sigmaSoft * 0.65,
+          ),
       );
     }
 
-    // PASS 5: slight edge stroke (very subtle)
     canvas.drawPath(
       lipPath,
       Paint()
         ..isAntiAlias = true
         ..style = PaintingStyle.stroke
-        ..strokeWidth = max(0.8, lipW * 0.03)
-        ..color = lipstickColor.withOpacity(0.06 * k)
-        ..blendMode = BlendMode.softLight
-        ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, sigmaFeather * 0.95),
+        ..strokeWidth = max(0.6, lipW * 0.018)
+        ..color = lipstickColor.withOpacity(0.18 * k)
+        ..blendMode = BlendMode.multiply
+        ..maskFilter = ui.MaskFilter.blur(
+          ui.BlurStyle.normal,
+          sigmaFeather,
+        ),
     );
 
     canvas.restore();
