@@ -303,7 +303,6 @@ class _AdminProfitsSectionState extends State<AdminProfitsSection> {
 
     final statusColors = {
       'active': AdminTheme.successColor,
-      'trial': AdminTheme.accentColor,
       'paused': AdminTheme.warningColor,
       'past_due': AdminTheme.dangerColor,
       'expired': AdminTheme.textSecondary,
@@ -312,7 +311,6 @@ class _AdminProfitsSectionState extends State<AdminProfitsSection> {
 
     final statusIcons = {
       'active': Icons.check_circle_rounded,
-      'trial': Icons.hourglass_top_rounded,
       'paused': Icons.pause_circle_rounded,
       'past_due': Icons.warning_rounded,
       'expired': Icons.cancel_rounded,

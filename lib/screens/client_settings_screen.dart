@@ -577,13 +577,6 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen>
           ),
           const Divider(height: 24, color: Color(0xFFF0F0F0)),
           _buildActionTile(
-            icon: Icons.download_rounded,
-            title: 'Export Data',
-            subtitle: 'Download your business data',
-            onTap: _exportData,
-          ),
-          const Divider(height: 24, color: Color(0xFFF0F0F0)),
-          _buildActionTile(
             icon: Icons.info_rounded,
             title: 'About',
             subtitle: 'App version and information',
@@ -1191,10 +1184,6 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen>
       activeColor: pinkPrimary,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     );
-  }
-
-  void _exportData() {
-    _showSuccessMessage('Exporting your data... 📊');
   }
 
   void _showAboutDialog() {

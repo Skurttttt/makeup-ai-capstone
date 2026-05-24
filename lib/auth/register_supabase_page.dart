@@ -99,7 +99,7 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
       final postal = _postalController.text.trim();
       final password = _passwordController.text;
 
-      // Check if email already exists
+      // Check if email already exists in the accounts table
       try {
         final exists = await _supabaseService.emailExists(email);
         if (exists) {
@@ -107,7 +107,7 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text(
-                  'Email already exists. Please use another email or delete the old account.',
+                  'An account with this email already exists. Please log in instead.',
                 ),
                 backgroundColor: Colors.red,
               ),
@@ -116,7 +116,7 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
           return;
         }
       } catch (_) {
-        // Continue with signup even if check fails
+        // DB check failed — proceed and let Supabase auth be the final gate.
       }
 
       // Signup with trigger creating account automatically
@@ -137,6 +137,27 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
         },
       );
 
+      // Supabase "ghost-response" detection: when email confirmation is enabled
+      // and the email already exists in auth, Supabase returns a non-null user
+      // but with an EMPTY identities list instead of throwing an error.
+      // This is the most reliable way to catch duplicates that slipped past the
+      // accounts-table check above (e.g. user exists in auth but not accounts).
+      if (authRes.user == null ||
+          (authRes.user!.identities != null &&
+              authRes.user!.identities!.isEmpty)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'This email is already registered. Please log in or use a different email.',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
       // Write all profile fields into accounts row directly (in case the
       // trigger didn't pick them up from metadata).
       try {
@@ -148,6 +169,10 @@ class _RegisterSupabasePageState extends State<RegisterSupabasePage> {
             'full_name': fullName,
             'phone': phone,
           }, onConflict: 'id');
+
+          // Ensure the new user has the free subscription with its limits.
+          // This is a fallback in case the DB trigger hasn't run yet.
+          await _supabaseService.assignFreeSubscription(newUser.id);
         }
       } catch (_) {
         // Trigger may already have inserted the row — ignore.

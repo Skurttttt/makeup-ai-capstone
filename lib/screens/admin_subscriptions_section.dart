@@ -122,7 +122,6 @@ class _AdminSubscriptionsSectionState
     final paginated = filtered.skip(_page * _pageSize).take(_pageSize).toList();
 
     final activeCount = _subscriptions.where((s) => s['status'] == 'active').length;
-    final trialCount = _subscriptions.where((s) => s['status'] == 'trial').length;
     final expiredCount = _subscriptions
         .where((s) => s['status'] == 'expired' || s['status'] == 'canceled')
         .length;
@@ -143,8 +142,6 @@ class _AdminSubscriptionsSectionState
                   Icons.subscriptions_rounded, AdminTheme.accentColor),
               buildSummaryCard('Active', '$activeCount',
                   Icons.check_circle_rounded, AdminTheme.successColor),
-              buildSummaryCard('Trial', '$trialCount',
-                  Icons.star_half_rounded, AdminTheme.warningColor),
               buildSummaryCard('Expired / Canceled', '$expiredCount',
                   Icons.cancel_rounded, AdminTheme.dangerColor),
             ],
@@ -219,7 +216,6 @@ class _AdminSubscriptionsSectionState
                 items: const [
                   DropdownMenuItem(value: 'all', child: Text('All')),
                   DropdownMenuItem(value: 'active', child: Text('Active')),
-                  DropdownMenuItem(value: 'trial', child: Text('Trial')),
                   DropdownMenuItem(value: 'past_due', child: Text('Past Due')),
                   DropdownMenuItem(value: 'canceled', child: Text('Canceled')),
                   DropdownMenuItem(value: 'expired', child: Text('Expired')),
@@ -1550,17 +1546,6 @@ class _AdminSubscriptionsSectionState
                               const SizedBox(width: 8),
                               Expanded(
                                 child: _buildStatusCard(
-                                  icon: Icons.star_half_rounded,
-                                  title: 'Trial',
-                                  subtitle: 'Trial period',
-                                  isSelected: status == 'trial',
-                                  onTap: () => setDialogState(() => status = 'trial'),
-                                  color: const Color(0xFFF59E0B),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: _buildStatusCard(
                                   icon: Icons.pause_circle_rounded,
                                   title: 'Paused',
                                   subtitle: 'Temporarily paused',
@@ -1834,7 +1819,6 @@ class _AdminSubscriptionsSectionState
                           ),
                           items: const [
                             DropdownMenuItem(value: 'active', child: Text('Active')),
-                            DropdownMenuItem(value: 'trial', child: Text('Trial')),
                             DropdownMenuItem(value: 'pending', child: Text('Pending')),
                             DropdownMenuItem(value: 'past_due', child: Text('Past Due')),
                             DropdownMenuItem(value: 'canceled', child: Text('Canceled')),

@@ -12,6 +12,10 @@ import 'home_screen.dart';
 import 'screens/admin_screen_new.dart';
 import 'screens/client_screen.dart';
 
+/// Global navigator key used to push routes even when the originating
+/// widget (AuthGate) is no longer mounted (e.g. deep-link race condition).
+final _navigatorKey = GlobalKey<NavigatorState>();
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -59,20 +63,8 @@ class App extends StatelessWidget {
           primary: const Color(0xFFFF4D97),
         ),
       ),
+      navigatorKey: _navigatorKey,
       home: const AuthGate(),
-      onGenerateRoute: (settings) {
-        // Handle deep link for password reset
-        final uri = Uri.tryParse(settings.name ?? '');
-        if (uri != null && uri.path == '/reset-password') {
-          final accessToken = uri.queryParameters['access_token'];
-          if (accessToken != null && accessToken.isNotEmpty) {
-            return MaterialPageRoute(
-              builder: (_) => ChangePasswordPage(accessToken: accessToken),
-            );
-          }
-        }
-        return null;
-      },
     );
   }
 }
@@ -91,13 +83,14 @@ class _AuthGateState extends State<AuthGate> {
   void initState() {
     super.initState();
     _redirect();
-    // Listen for password recovery deep link on mobile
+    // Listen for password recovery deep link (mobile & web).
+    // Use the global navigator key so this works even if AuthGate has
+    // already been replaced by the login page (deep-link timing race).
     _authSubscription =
         Supabase.instance.client.auth.onAuthStateChange.listen((data) {
-      if (data.event == AuthChangeEvent.passwordRecovery && mounted) {
+      if (data.event == AuthChangeEvent.passwordRecovery) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          Navigator.of(context).pushReplacement(
+          _navigatorKey.currentState?.pushReplacement(
             MaterialPageRoute(
               builder: (_) => const ChangePasswordPage(),
             ),

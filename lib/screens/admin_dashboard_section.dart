@@ -73,15 +73,6 @@ class _AdminDashboardSectionState extends State<AdminDashboardSection> {
           0,
           (sum, s) => sum + ((s['amount_paid'] as num?)?.toDouble() ?? 0),
         );
-        final churnRate = totalUsers > 0
-            ? ((subscriptions
-                            .where((s) => s['status'] == 'expired')
-                            .length /
-                        totalUsers) *
-                    100)
-                .toStringAsFixed(1)
-            : '0.0';
-
         return SingleChildScrollView(
           padding: EdgeInsets.all(_sectionPadding),
           child: Column(
@@ -108,13 +99,7 @@ class _AdminDashboardSectionState extends State<AdminDashboardSection> {
                       Icons.payments_rounded,
                       AdminTheme.warningColor,
                       '+15%'),
-                  buildKpiCard(
-                      context,
-                      'Churn Rate',
-                      '$churnRate%',
-                      Icons.trending_down_rounded,
-                      AdminTheme.dangerColor,
-                      '-2.1%'),
+
                 ],
               ),
               const SizedBox(height: 24),
@@ -356,9 +341,13 @@ class _AdminDashboardSectionState extends State<AdminDashboardSection> {
   // ==================== SYSTEM HEALTH ====================
 
   Widget _buildSystemHealth(List<dynamic> users, List<dynamic> subs) {
+    final activeSubUserIds = subs
+        .where((s) => s['status'] == 'active')
+        .map((s) => s['user_id']?.toString())
+        .whereType<String>()
+        .toSet();
     final activeUsers = users
-        .where((u) =>
-            (u['is_active'] == true) || (u['status']?.toString() == 'active'))
+        .where((u) => activeSubUserIds.contains(u['id']?.toString()))
         .length;
     final activeSubs = subs.where((s) => s['status'] == 'active').length;
 
