@@ -565,9 +565,11 @@ class _AdminAccountsSectionState extends State<AdminAccountsSection> {
     final nameController = TextEditingController();
     final emailController = TextEditingController();
     final passwordController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
     String role = 'staff';
     bool isLoading = false;
     bool showPassword = false;
+    bool showConfirm = false;
     String? selectedPlanId;
     String passwordStrength = '';
     double passwordProgress = 0.0;
@@ -1126,9 +1128,17 @@ class _AdminAccountsSectionState extends State<AdminAccountsSection> {
                                     }
                                   } catch (e) {
                                     if (context.mounted) {
+                                      final msg = e.toString().toLowerCase();
+                                      final friendlyMsg =
+                                          msg.contains('already registered') ||
+                                                  msg.contains('already exists') ||
+                                                  msg.contains('duplicate') ||
+                                                  msg.contains('unique')
+                                              ? 'This email is already registered. Use a different email.'
+                                              : 'Error: $e';
                                       showAdminSnackBar(
                                         context,
-                                        'Error: $e',
+                                        friendlyMsg,
                                         isError: true,
                                       );
                                     }
