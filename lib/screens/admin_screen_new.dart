@@ -523,7 +523,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
 
     return Container(
       height: compact ? 56 : 72,
-      padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 24),
+      padding: EdgeInsets.only(left: compact ? 12 : 24, right: 4),
       decoration: BoxDecoration(
         color: AdminTheme.cardColor,
         border: const Border(
@@ -615,7 +615,7 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
           // Live indicator (hidden on phones to save space)
           if (!compact)
             Container(
-              margin: const EdgeInsets.symmetric(horizontal: 8),
+              margin: const EdgeInsets.only(left: 8),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: AdminTheme.successColor.withOpacity(0.1),

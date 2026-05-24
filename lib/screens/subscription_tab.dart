@@ -215,8 +215,13 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
         sub['plan'] ??
         'Premium';
     final billing = planDetails['billing_period'] ?? sub['billing_period'] ?? '';
-    final isLifetime =
-        billing == 'lifetime' || planName.toString().toLowerCase().contains('lifetime');
+    final isFreeSubPlan = planName.toString().toLowerCase().contains('free') ||
+        (planDetails['price'] != null &&
+            (planDetails['price'] is num
+                ? (planDetails['price'] as num) == 0
+                : planDetails['price'].toString() == '0'));
+    final isLifetime = !isFreeSubPlan &&
+        (billing == 'lifetime' || planName.toString().toLowerCase().contains('lifetime'));
     final periodEnd = sub['current_period_end']?.toString();
     String expiryText = '';
     if (!isLifetime && periodEnd != null) {
@@ -266,7 +271,9 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
                 Text(
                   isLifetime
                       ? 'You have $planName! 🎉'
-                      : 'Active: $planName',
+                      : isFreeSubPlan
+                          ? planName.toString()
+                          : 'Active: $planName',
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -275,11 +282,13 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  isLifetime
-                      ? 'You enjoy lifetime premium access — no renewal needed.'
-                      : (expiryText.isNotEmpty
-                          ? expiryText
-                          : 'Your plan is active'),
+                  isFreeSubPlan
+                      ? 'Explore FaceTune features for free.'
+                      : isLifetime
+                          ? 'You enjoy lifetime premium access — no renewal needed.'
+                          : (expiryText.isNotEmpty
+                              ? expiryText
+                              : 'Your plan is active'),
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.9),
                     fontSize: 12,
@@ -296,7 +305,7 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
-              isLifetime ? '∞ Lifetime' : billing,
+              isLifetime ? '∞ Lifetime' : (isFreeSubPlan ? 'Free' : billing),
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 11,
@@ -573,7 +582,7 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
     final lowerPlanName = planName.toLowerCase();
     final isPremium =
         lowerPlanName.contains('premium') || lowerPlanName.contains('lifetime');
-    final isPro = lowerPlanName.contains('pro') && !isPremium;
+    const isPro = false; // Only one paid plan (Premium) — no Pro tier
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -685,7 +694,7 @@ class _SubscriptionTabState extends State<SubscriptionTab> {
             title: 'Auto-Save Looks to Cloud',
             value: canSave
                 ? 'Synced across your devices'
-                : 'Local only',
+                : 'Not available on free plan',
             included: canSave,
           ),
           _buildFeatureItem(

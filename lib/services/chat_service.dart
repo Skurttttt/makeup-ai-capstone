@@ -401,12 +401,11 @@ class ChatService {
     if (_matchesAny(m, ['help', 'what can you do', 'menu', 'options'])) {
       return const BotReply(
         text:
-            "I can help you with:\n• 💄 Finding products (e.g. \"red matte lipstick\")\n• 🎨 Shade matching for your undertone & skin type\n• 💰 Live prices and stock\n• 🚚 Shipping & delivery times\n• 💳 Payment (COD, GCash, Maya, Visa/Mastercard, Bank Transfer, QR Ph)\n• ↩️ Returns and refunds\n• 📦 Tracking your orders",
+            "I can help you with:\n• 💄 Finding products (e.g. \"red matte lipstick\")\n• 🎨 Shade matching for your undertone & skin type\n• 💰 Live prices and stock\n• 🚚 Shipping & delivery times\n• 💳 Payment (COD, GCash, PayMongo)\n• ↩️ Returns and refunds\n• 📦 Tracking your orders",
         suggestions: [
           'Show bestsellers',
           'Track my order',
           'How to pay',
-          'Shade match',
         ],
       );
     }
@@ -426,13 +425,12 @@ class ChatService {
     // ── Payment ──────────────────────────────────────────────────────────
     if (_matchesAny(m, [
       'cod', 'cash on delivery', 'cash-on-delivery',
-      'gcash', 'paymongo', 'xendit', 'paymaya', 'maya', 'payment', 'pay ',
-      'how to pay', 'credit card', 'debit card', 'visa', 'mastercard',
-      'bank transfer', 'qr ph', 'qrph', 'e-wallet', 'ewallet', 'bayad',
+      'gcash', 'paymongo', 'paymaya', 'payment', 'pay ', 'how to pay',
+      'credit card', 'debit card', 'bayad',
     ])) {
       return const BotReply(
         text:
-            "We accept the following payment methods 💳:\n• 💵 Cash on Delivery (COD) — pay when your order arrives\n• 📲 GCash — instant e-wallet payment\n• 📲 Maya — pay with your Maya wallet\n• 💳 Visa & Mastercard — credit or debit card\n• 🏦 Bank Transfer — via online banking\n• 📷 QR Ph — scan to pay with any PH bank app\n\nCard and e-wallet payments are securely processed through Xendit. Just pick your preferred method at checkout!",
+            "We accept 💳:\n• Cash on Delivery (COD)\n• GCash\n• Credit / Debit cards via PayMongo\nYou can pick your preferred method at checkout.",
         suggestions: ['Shipping fee', 'How to order', 'Track my order'],
       );
     }
@@ -643,7 +641,6 @@ class ChatService {
         'Show bestsellers',
         'Track my order',
         'How to pay',
-        'Shade match',
       ],
     );
   }

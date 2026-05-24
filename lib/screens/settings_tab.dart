@@ -4,11 +4,12 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io'; // ADDED IMPORT
 import '../services/supabase_service.dart';
 import '../utils/logout_util.dart';
 import 'user_subscription_page.dart';
 import 'chat_list_screen.dart';
+import 'chat_screen.dart';
+import '../services/chat_service.dart';
 import '../services/scan_quota_service.dart';
 import '../scan_result_page.dart';
 import '../instructions_page.dart';
@@ -45,7 +46,7 @@ class _SettingsTabState extends State<SettingsTab> {
   DateTime? _currentPlanRenewsAt;
   bool _hasActiveSubscription = false;
 
-  // Plan tier: 'regular' | 'pro' | 'premium'
+  // Plan tier: 'regular' | 'premium'
   String _planTier = 'regular';
   // ignore: unused_field
   bool _canSaveResults = false;
@@ -56,7 +57,6 @@ class _SettingsTabState extends State<SettingsTab> {
   int _dailyScanLimit = 5;
   int _scansUsedToday = 0;
   bool get _isRegular => _planTier == 'regular';
-  bool get _isPro => _planTier == 'pro';
   bool get _isPremium => _planTier == 'premium';
   bool get _hasUnlimitedScans => _dailyScanLimit < 0;
   int get _scansRemaining =>
@@ -209,10 +209,17 @@ class _SettingsTabState extends State<SettingsTab> {
       return;
     }
 
-    if (raw.contains('premium') || raw.contains('lifetime')) {
+    if (raw.contains('premium') || raw.contains('lifetime') ||
+        raw.contains('pro') || raw.contains('weekly') || raw.contains('monthly')) {
       _planTier = 'premium';
     } else {
-      _planTier = 'pro';
+      // Free/basic plan — treat as regular despite having a subscription row
+      _planTier = 'regular';
+      _dailyScanLimit = 5;
+      _canSaveResults = false;
+      _canExportHd = false;
+      _removeWatermark = false;
+      return;
     }
 
     _dailyScanLimit = -1;
@@ -229,8 +236,8 @@ class _SettingsTabState extends State<SettingsTab> {
       if (!mounted) return;
 
       setState(() {
-        _planTier = _hasActiveSubscription ? _planTier : usage.tier;
-        _dailyScanLimit = _hasActiveSubscription ? -1 : usage.dailyLimit;
+        _planTier = usage.tier;
+        _dailyScanLimit = usage.dailyLimit;
         _scansUsedToday = usage.usedToday;
         _canSaveResults = usage.canAutoSaveToCloud;
       });
@@ -271,10 +278,8 @@ class _SettingsTabState extends State<SettingsTab> {
     switch (_planTier) {
       case 'premium':
         return 'PREMIUM';
-      case 'pro':
-        return 'PRO';
       default:
-        return 'REGULAR';
+        return 'FREE';
     }
   }
 
@@ -282,11 +287,48 @@ class _SettingsTabState extends State<SettingsTab> {
     switch (_planTier) {
       case 'premium':
         return const Color(0xFF9C27B0);
-      case 'pro':
-        return const Color(0xFFFF4D97);
       default:
         return const Color(0xFF78909C);
     }
+  }
+
+  Future<void> _openSellerChat() async {
+    final svc = ChatService.instance;
+    final sellerId = await svc.getDefaultSellerId();
+    if (sellerId == null) {
+      // Fallback: show list if seller can't be resolved
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ChatListScreen()),
+      );
+      return;
+    }
+    // Get seller display name
+    String sellerName = 'Shop';
+    try {
+      final acc = await Supabase.instance.client
+          .from('accounts')
+          .select('business_name, full_name')
+          .eq('id', sellerId)
+          .maybeSingle();
+      if (acc != null) {
+        sellerName = (acc['business_name']?.toString() ?? acc['full_name']?.toString() ?? 'Shop').trim();
+        if (sellerName.isEmpty) sellerName = 'Shop';
+      }
+    } catch (_) {}
+    final convo = await svc.getOrCreateConversation(sellerId: sellerId);
+    if (convo == null) return;
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatScreen(
+          conversationId: convo['id'].toString(),
+          otherDisplayName: sellerName,
+        ),
+      ),
+    );
   }
 
   void _saveSettings() {
@@ -505,13 +547,8 @@ class _SettingsTabState extends State<SettingsTab> {
                   _buildSettingItem(
                     Icons.chat_bubble_outline,
                     'My Messages',
-                    'Chat with sellers',
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ChatListScreen(),
-                      ),
-                    ),
+                    'Chat with the shop',
+                    () => _openSellerChat(),
                     const Color(0xFFFF4D97),
                   ),
                   _buildSwitchItem(
@@ -885,7 +922,7 @@ class _SettingsTabState extends State<SettingsTab> {
                     const SizedBox(width: 12),
                     const Expanded(
                       child: Text(
-                        'Go unlimited with Pro & Premium',
+                        'Go unlimited with Premium',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 16,
@@ -899,7 +936,7 @@ class _SettingsTabState extends State<SettingsTab> {
                 _upgradePerk(Icons.all_inclusive,
                     'Unlimited face scans — no waiting until midnight'),
                 _upgradePerk(Icons.cloud_done_outlined,
-                    'Auto-saved looks synced across devices'),
+                    'Save & sync your looks — not available on free'),
                 _upgradePerk(Icons.high_quality_outlined,
                     'HD downloads & no watermark (Premium)'),
                 _upgradePerk(Icons.support_agent,
@@ -2885,7 +2922,6 @@ class _SavedLooksSheetState extends State<_SavedLooksSheet> {
   }
 }
 
-// UPDATED _LookCard with imageUrl and imagePath support
 class _LookCard extends StatelessWidget {
   final Map<String, dynamic> look;
   final VoidCallback onTap;
@@ -2901,9 +2937,7 @@ class _LookCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final name = (look['look_name'] ?? 'Saved Look').toString();
     final created = look['created_at']?.toString();
-    final imageUrl = look['image_url']?.toString();
-    final imagePath = look['image_path']?.toString();
-
+    final url = look['image_url']?.toString();
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(16),
@@ -2921,12 +2955,7 @@ class _LookCard extends StatelessWidget {
                   ClipRRect(
                     borderRadius:
                         const BorderRadius.vertical(top: Radius.circular(16)),
-                    child: SizedBox.expand(
-                      child: _LookImage(
-                        imageUrl: imageUrl,
-                        imagePath: imagePath,
-                      ),
-                    ),
+                    child: SizedBox.expand(child: _LookImage(url: url)),
                   ),
                   Positioned(
                     top: 6,
@@ -2983,67 +3012,75 @@ class _LookCard extends StatelessWidget {
   }
 }
 
-// REPLACED _LookImage widget with support for both network URLs and local file paths
 class _LookImage extends StatelessWidget {
-  final String? imageUrl;
-  final String? imagePath;
-
-  const _LookImage({
-    this.imageUrl,
-    this.imagePath,
-  });
+  final String? url;
+  const _LookImage({required this.url});
 
   @override
   Widget build(BuildContext context) {
-    final provider = _imageProvider();
-
-    if (provider == null) {
+    if (url == null || url!.isEmpty) {
       return Container(
         color: const Color(0xFFFFF1F8),
         child: const Center(
-          child: Icon(
-            Icons.face_retouching_natural,
-            size: 48,
-            color: Color(0xFFFF4D97),
-          ),
+          child: Icon(Icons.face_retouching_natural,
+              size: 48, color: Color(0xFFFF4D97)),
         ),
       );
     }
-
-    return Image(
-      image: provider,
+    return Image.network(
+      url!,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) {
-        return Container(
-          color: const Color(0xFFFFF1F8),
-          child: const Center(
-            child: Icon(
-              Icons.face_retouching_natural,
-              size: 48,
-              color: Color(0xFFFF4D97),
-            ),
-          ),
-        );
-      },
+      loadingBuilder: (_, child, progress) =>
+          progress == null
+              ? child
+              : Container(
+                  color: const Color(0xFFFFF1F8),
+                  alignment: Alignment.center,
+                  child: const CircularProgressIndicator(
+                      color: Color(0xFFFF4D97), strokeWidth: 2),
+                ),
+      errorBuilder: (_, _, _) => Container(
+        color: const Color(0xFFFFF1F8),
+        child: const Center(
+          child: Icon(Icons.broken_image_outlined,
+              size: 40, color: Color(0xFFFF4D97)),
+        ),
+      ),
     );
-  }
-
-  ImageProvider? _imageProvider() {
-    if (imageUrl != null && imageUrl!.isNotEmpty) {
-      return NetworkImage(imageUrl!);
-    }
-
-    if (imagePath != null && imagePath!.isNotEmpty) {
-      final file = File(imagePath!);
-      if (file.existsSync()) {
-        return FileImage(file);
-      }
-    }
-
-    return null;
   }
 }
 
+class _MetaChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  const _MetaChip({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFF4D97).withOpacity(0.08),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: const Color(0xFFFF4D97)),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              color: Color(0xFFFF4D97),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 // ── Change Password Bottom Sheet ──────────────────────────────────────────────
 
@@ -3228,7 +3265,10 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
                 onChanged: _onNewPasswordChanged,
                 validator: (v) {
                   if (v == null || v.isEmpty) return 'Enter a new password';
-                  if (v.length < 6) return 'At least 6 characters required';
+                  if (v.length < 8) return 'At least 8 characters required';
+                  if (!v.contains(RegExp(r'[A-Z]'))) return 'Add at least one uppercase letter';
+                  if (!v.contains(RegExp(r'[0-9]'))) return 'Add at least one number';
+                  if (!v.contains(RegExp(r'[!@#\$%^&*(),.?":{}|<>]'))) return 'Add at least one symbol';
                   return null;
                 },
               ),
@@ -3260,6 +3300,18 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'Min. 8 characters with uppercase, lowercase, number & symbol for a strong password.',
+                    style: TextStyle(fontSize: 12, color: Colors.blueGrey),
+                  ),
                 ),
               ],
               const SizedBox(height: 16),

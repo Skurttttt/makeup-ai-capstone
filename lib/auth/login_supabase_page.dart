@@ -184,10 +184,9 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFFFF4D97).withOpacity(0.30),
-                              blurRadius: 24,
-                              spreadRadius: 2,
-                              offset: const Offset(0, 8),
+                              color: const Color(0xFFFF4D97).withOpacity(0.25),
+                              blurRadius: 20,
+                              spreadRadius: 4,
                             ),
                           ],
                         ),

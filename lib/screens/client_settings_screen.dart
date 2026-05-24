@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/chat_service.dart';
 
 class ClientSettingsScreen extends StatefulWidget {
@@ -902,78 +903,246 @@ class _ClientSettingsScreenState extends State<ClientSettingsScreen>
   }
 
   void _showChangePasswordDialog() {
-    showDialog(
+    final currentCtrl = TextEditingController();
+    final newCtrl = TextEditingController();
+    final confirmCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    bool loading = false;
+    bool showCurrent = false;
+    bool showNew = false;
+    bool showConfirm = false;
+    double strength = 0;
+    String? errorMsg;
+
+    void calcStrength(String v, StateSetter set) {
+      double s = 0;
+      if (v.length >= 8) s += 0.25;
+      if (v.contains(RegExp(r'[A-Z]'))) s += 0.25;
+      if (v.contains(RegExp(r'[0-9]'))) s += 0.25;
+      if (v.contains(RegExp(r'[!@#\$%^&*(),.?":{}|<>]'))) s += 0.25;
+      set(() => strength = s);
+    }
+
+    Color strengthColor(double s) {
+      if (s <= 0.25) return Colors.red;
+      if (s <= 0.5) return Colors.orange;
+      if (s <= 0.75) return Colors.yellow.shade700;
+      return Colors.green;
+    }
+
+    String strengthLabel(double s) {
+      if (s <= 0.25) return 'Weak';
+      if (s <= 0.5) return 'Fair';
+      if (s <= 0.75) return 'Good';
+      return 'Strong';
+    }
+
+    showModalBottomSheet(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Icon(Icons.lock_rounded, color: pinkPrimary),
-            const SizedBox(width: 12),
-            const Text('Change Password', style: TextStyle(fontWeight: FontWeight.w700)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              obscureText: true,
-              decoration: InputDecoration(
-                labelText: 'Current Password',
-                prefixIcon: const Icon(Icons.lock_outline),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: pinkPrimary),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) {
+          Future<void> submit() async {
+            if (!formKey.currentState!.validate()) return;
+            setSheet(() { loading = true; errorMsg = null; });
+            try {
+              final user = Supabase.instance.client.auth.currentUser;
+              if (user?.email == null) {
+                setSheet(() { errorMsg = 'No authenticated user.'; loading = false; });
+                return;
+              }
+              try {
+                await Supabase.instance.client.auth.signInWithPassword(
+                  email: user!.email!,
+                  password: currentCtrl.text.trim(),
+                );
+              } on AuthException {
+                setSheet(() { errorMsg = 'Current password is incorrect.'; loading = false; });
+                return;
+              }
+              await Supabase.instance.client.auth.updateUser(
+                UserAttributes(password: newCtrl.text.trim()),
+              );
+              if (ctx.mounted) Navigator.pop(ctx);
+              if (mounted) _showSuccessMessage('Password updated successfully! 🔒');
+            } on AuthException catch (e) {
+              setSheet(() { errorMsg = e.message; loading = false; });
+            } catch (_) {
+              setSheet(() { errorMsg = 'Something went wrong. Please try again.'; loading = false; });
+            }
+          }
+
+          final bottom = MediaQuery.of(ctx).viewInsets.bottom;
+          return Container(
+            padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + bottom),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            ),
+            child: Form(
+              key: formKey,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40, height: 4,
+                        decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Row(children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(color: pinkPrimary.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+                        child: const Icon(Icons.lock_reset, color: pinkPrimary, size: 24),
+                      ),
+                      const SizedBox(width: 12),
+                      const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Change Password', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1A1D2E))),
+                          Text('Keep your account secure', style: TextStyle(fontSize: 13, color: Colors.grey)),
+                        ],
+                      ),
+                    ]),
+                    const SizedBox(height: 24),
+                    // Current password
+                    TextFormField(
+                      controller: currentCtrl,
+                      obscureText: !showCurrent,
+                      validator: (v) => (v == null || v.isEmpty) ? 'Enter your current password' : null,
+                      decoration: InputDecoration(
+                        labelText: 'Current password',
+                        prefixIcon: const Icon(Icons.lock_outline, color: pinkPrimary),
+                        suffixIcon: IconButton(
+                          icon: Icon(showCurrent ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: Colors.grey[500], size: 20),
+                          onPressed: () => setSheet(() => showCurrent = !showCurrent),
+                        ),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: pinkPrimary, width: 2)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // New password
+                    TextFormField(
+                      controller: newCtrl,
+                      obscureText: !showNew,
+                      onChanged: (v) => calcStrength(v, setSheet),
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return 'Enter a new password';
+                        if (v.length < 8) return 'At least 8 characters required';
+                        if (!v.contains(RegExp(r'[A-Z]'))) return 'Add at least one uppercase letter';
+                        if (!v.contains(RegExp(r'[0-9]'))) return 'Add at least one number';
+                        if (!v.contains(RegExp(r'[!@#\$%^&*(),.?":{}|<>]'))) return 'Add at least one symbol';
+                        return null;
+                      },
+                      decoration: InputDecoration(
+                        labelText: 'New password',
+                        prefixIcon: const Icon(Icons.lock_open_outlined, color: pinkPrimary),
+                        suffixIcon: IconButton(
+                          icon: Icon(showNew ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: Colors.grey[500], size: 20),
+                          onPressed: () => setSheet(() => showNew = !showNew),
+                        ),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: pinkPrimary, width: 2)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      ),
+                    ),
+                    if (newCtrl.text.isNotEmpty) ...[  
+                      const SizedBox(height: 8),
+                      Row(children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: strength,
+                              minHeight: 6,
+                              backgroundColor: Colors.grey[200],
+                              valueColor: AlwaysStoppedAnimation<Color>(strengthColor(strength)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(strengthLabel(strength), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: strengthColor(strength))),
+                      ]),
+                    ],
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(10)),
+                      child: const Text(
+                        'Min. 8 characters with uppercase, lowercase, number & symbol for a strong password.',
+                        style: TextStyle(fontSize: 12, color: Colors.blueGrey),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Confirm password
+                    TextFormField(
+                      controller: confirmCtrl,
+                      obscureText: !showConfirm,
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return 'Please confirm password';
+                        if (v != newCtrl.text) return 'Passwords do not match';
+                        return null;
+                      },
+                      decoration: InputDecoration(
+                        labelText: 'Confirm new password',
+                        prefixIcon: const Icon(Icons.lock_outline, color: pinkPrimary),
+                        suffixIcon: IconButton(
+                          icon: Icon(showConfirm ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: Colors.grey[500], size: 20),
+                          onPressed: () => setSheet(() => showConfirm = !showConfirm),
+                        ),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: pinkPrimary, width: 2)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    if (errorMsg != null) ...[  
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.red.shade200)),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.error_outline_rounded, color: Colors.red.shade600, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(errorMsg!, style: TextStyle(color: Colors.red.shade700, fontSize: 13))),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: loading ? null : submit,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: pinkPrimary,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: pinkPrimary.withOpacity(0.5),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          elevation: 3,
+                        ),
+                        child: loading
+                            ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
+                            : const Text('Update Password', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              obscureText: true,
-              decoration: InputDecoration(
-                labelText: 'New Password',
-                prefixIcon: const Icon(Icons.lock_rounded),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: pinkPrimary),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              obscureText: true,
-              decoration: InputDecoration(
-                labelText: 'Confirm New Password',
-                prefixIcon: const Icon(Icons.lock_rounded),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: pinkPrimary),
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _showSuccessMessage('Password changed successfully! 🔒');
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: pinkPrimary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: const Text('Update Password'),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
