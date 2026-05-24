@@ -427,7 +427,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       }
 
       if (_selectedPaymentMethod == 'xendit' ||
-          _selectedPaymentMethod == 'gcash') {
+          _selectedPaymentMethod == 'gcash' ||
+          _selectedPaymentMethod == 'maya' ||
+          _selectedPaymentMethod == 'bank_transfer' ||
+          _selectedPaymentMethod == 'qr_ph') {
         final paymentResponse =
             await _supabaseService.createXenditCheckoutForOrder(
           items: widget.cartItems
@@ -801,7 +804,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   icon: Icons.credit_card,
                   iconColor: const Color(0xFF0052CC),
                   title: 'Credit / Debit card',
-                  subtitle: 'Visa, Mastercard, GCash via Xendit',
+                  subtitle: 'Visa, Mastercard via Xendit',
                   trailing: 'Recommended',
                 ),
                 const SizedBox(height: 10),
@@ -813,6 +816,36 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   iconColor: const Color(0xFF00A4EF),
                   title: 'GCash',
                   subtitle: 'Pay with your GCash wallet',
+                ),
+                const SizedBox(height: 10),
+                _PaymentTile(
+                  selected: _selectedPaymentMethod == 'maya',
+                  onTap: () =>
+                      setState(() => _selectedPaymentMethod = 'maya'),
+                  icon: Icons.account_balance_wallet_outlined,
+                  iconColor: const Color(0xFF00B14F),
+                  title: 'Maya',
+                  subtitle: 'Pay with your Maya wallet',
+                ),
+                const SizedBox(height: 10),
+                _PaymentTile(
+                  selected: _selectedPaymentMethod == 'bank_transfer',
+                  onTap: () =>
+                      setState(() => _selectedPaymentMethod = 'bank_transfer'),
+                  icon: Icons.account_balance_outlined,
+                  iconColor: const Color(0xFF5C6BC0),
+                  title: 'Bank Transfer',
+                  subtitle: 'Pay via online banking',
+                ),
+                const SizedBox(height: 10),
+                _PaymentTile(
+                  selected: _selectedPaymentMethod == 'qr_ph',
+                  onTap: () =>
+                      setState(() => _selectedPaymentMethod = 'qr_ph'),
+                  icon: Icons.qr_code_2,
+                  iconColor: const Color(0xFFE53935),
+                  title: 'QR Ph',
+                  subtitle: 'Scan with any PH bank app',
                 ),
                 const SizedBox(height: 10),
                 _PaymentTile(
