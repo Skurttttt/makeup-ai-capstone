@@ -19,7 +19,15 @@ class LipPainter {
   });
 
   void paint(Canvas canvas, Size size) {
-    final k = intensity.clamp(0.0, 1.0);
+    // =====================================================
+    // LIP SAFETY OPACITY
+    // 100% slider = visually 80% only
+    // Prevents filter/sticker effect
+    // =====================================================
+    
+    final k = (intensity.clamp(0.0, 1.0) * 0.80)
+        .clamp(0.0, 1.0);
+        
     if (k <= 0.001) return;
 
     final upper = face.contours[FaceContourType.upperLipTop]?.points;

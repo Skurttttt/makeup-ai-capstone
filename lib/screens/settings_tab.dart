@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
+import 'dart:io'; // ADDED IMPORT
 import '../services/supabase_service.dart';
 import '../utils/logout_util.dart';
 import 'user_subscription_page.dart';
@@ -2884,6 +2885,7 @@ class _SavedLooksSheetState extends State<_SavedLooksSheet> {
   }
 }
 
+// UPDATED _LookCard with imageUrl and imagePath support
 class _LookCard extends StatelessWidget {
   final Map<String, dynamic> look;
   final VoidCallback onTap;
@@ -2899,7 +2901,9 @@ class _LookCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final name = (look['look_name'] ?? 'Saved Look').toString();
     final created = look['created_at']?.toString();
-    final url = look['image_url']?.toString();
+    final imageUrl = look['image_url']?.toString();
+    final imagePath = look['image_path']?.toString();
+
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(16),
@@ -2917,7 +2921,12 @@ class _LookCard extends StatelessWidget {
                   ClipRRect(
                     borderRadius:
                         const BorderRadius.vertical(top: Radius.circular(16)),
-                    child: SizedBox.expand(child: _LookImage(url: url)),
+                    child: SizedBox.expand(
+                      child: _LookImage(
+                        imageUrl: imageUrl,
+                        imagePath: imagePath,
+                      ),
+                    ),
                   ),
                   Positioned(
                     top: 6,
@@ -2974,41 +2983,64 @@ class _LookCard extends StatelessWidget {
   }
 }
 
+// REPLACED _LookImage widget with support for both network URLs and local file paths
 class _LookImage extends StatelessWidget {
-  final String? url;
-  const _LookImage({required this.url});
+  final String? imageUrl;
+  final String? imagePath;
+
+  const _LookImage({
+    this.imageUrl,
+    this.imagePath,
+  });
 
   @override
   Widget build(BuildContext context) {
-    if (url == null || url!.isEmpty) {
+    final provider = _imageProvider();
+
+    if (provider == null) {
       return Container(
         color: const Color(0xFFFFF1F8),
         child: const Center(
-          child: Icon(Icons.face_retouching_natural,
-              size: 48, color: Color(0xFFFF4D97)),
+          child: Icon(
+            Icons.face_retouching_natural,
+            size: 48,
+            color: Color(0xFFFF4D97),
+          ),
         ),
       );
     }
-    return Image.network(
-      url!,
+
+    return Image(
+      image: provider,
       fit: BoxFit.cover,
-      loadingBuilder: (_, child, progress) =>
-          progress == null
-              ? child
-              : Container(
-                  color: const Color(0xFFFFF1F8),
-                  alignment: Alignment.center,
-                  child: const CircularProgressIndicator(
-                      color: Color(0xFFFF4D97), strokeWidth: 2),
-                ),
-      errorBuilder: (_, _, _) => Container(
-        color: const Color(0xFFFFF1F8),
-        child: const Center(
-          child: Icon(Icons.broken_image_outlined,
-              size: 40, color: Color(0xFFFF4D97)),
-        ),
-      ),
+      errorBuilder: (_, __, ___) {
+        return Container(
+          color: const Color(0xFFFFF1F8),
+          child: const Center(
+            child: Icon(
+              Icons.face_retouching_natural,
+              size: 48,
+              color: Color(0xFFFF4D97),
+            ),
+          ),
+        );
+      },
     );
+  }
+
+  ImageProvider? _imageProvider() {
+    if (imageUrl != null && imageUrl!.isNotEmpty) {
+      return NetworkImage(imageUrl!);
+    }
+
+    if (imagePath != null && imagePath!.isNotEmpty) {
+      final file = File(imagePath!);
+      if (file.existsSync()) {
+        return FileImage(file);
+      }
+    }
+
+    return null;
   }
 }
 

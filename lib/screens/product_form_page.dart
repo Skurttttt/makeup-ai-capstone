@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../utils/responsive.dart';
 import '../helpers/color_classification_helper.dart';
+import '../helpers/palette_mood_engine.dart';
 
 class ProductFormPage extends StatefulWidget {
   final String businessId;
@@ -32,16 +33,18 @@ class _ProductFormPageState extends State<ProductFormPage> {
   static const List<String> _finishTypeOptions = ['Matte', 'Dewy', 'Natural', 'Glossy', 'Velvet', 'Soft Matte'];
   static const List<String> _coverageLevelOptions = ['Light', 'Medium', 'Full', 'Buildable'];
 
+  // 1. UPDATE CATEGORY CHOICES - Added 'Palette'
   static const List<String> _fallbackCategories = [
-    'Primer',
-    'Lipstick',
     'Blush',
+    'Concealer',
     'Contour',
-    'Setting Spray',
     'Eyebrow',
     'Eyeliner',
     'Eyeshadow',
-    'Concealer',
+    'Lipstick',
+    'Palette', // ADDED
+    'Primer',
+    'Setting Spray',
     'Tools & Brushes',
   ];
 
@@ -75,11 +78,24 @@ class _ProductFormPageState extends State<ProductFormPage> {
   final Set<String> _selectedLookTags = {};
   bool _saving = false;
 
-  // ADDED: Clean production-level getter for auto-detected undertones
+  // Multi-palette fields
+  final List<TextEditingController> _paletteHexControllers =
+      List.generate(8, (_) => TextEditingController());
+  PaletteMoodResult? _paletteMoodResult;
+
+  // Target areas for multi-palette products
+  final Set<String> _selectedTargetAreas = {};
+
+  // Clean production-level getter for auto-detected undertones
   List<String> get _autoDetectedUndertones {
     return ColorClassificationHelper
         .classify(_hexCodeController.text)
         .undertones;
+  }
+
+  // 2. REPLACE _isPaletteCategory
+  bool get _isPaletteCategory {
+    return _category.toLowerCase().trim() == 'palette';
   }
 
   // Auto-detected shade depth (no manual selection needed)
@@ -162,8 +178,27 @@ class _ProductFormPageState extends State<ProductFormPage> {
   }
 
   void _onHexCodeChanged() {
-    // Just trigger a rebuild to update any UI that shows the detected depth
     if (mounted) setState(() {});
+  }
+
+  // Analyze palette mood
+  void _analyzePaletteMood() {
+    final hexes = PaletteMoodEngine.normalizeHexes(
+      primaryHex: _hexCodeController.text,
+      extraHexes: _paletteHexControllers
+          .map((c) => c.text)
+          .where((e) => e.trim().isNotEmpty)
+          .toList(),
+    );
+
+    if (hexes.isEmpty) {
+      setState(() => _paletteMoodResult = null);
+      return;
+    }
+
+    setState(() {
+      _paletteMoodResult = PaletteMoodEngine.analyze(hexes);
+    });
   }
 
   void _populateFromExisting() {
@@ -187,6 +222,32 @@ class _ProductFormPageState extends State<ProductFormPage> {
     _beginnerFriendly = p['beginner_friendly'] == true;
     _budgetFriendly = p['budget_friendly'] == true;
     _studentFriendly = p['student_friendly'] == true;
+
+    // Multi-palette fields
+    final paletteHexesRaw = p['palette_hexes'];
+
+    if (paletteHexesRaw is List) {
+      for (int i = 0; i < paletteHexesRaw.length && i < _paletteHexControllers.length; i++) {
+        _paletteHexControllers[i].text = paletteHexesRaw[i]?.toString() ?? '';
+      }
+    }
+
+    if (_isPaletteCategory) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _analyzePaletteMood();
+      });
+    }
+
+    // Target areas
+    _selectedTargetAreas.clear();
+
+    final targetAreasRaw = p['target_areas'];
+
+    if (targetAreasRaw is List) {
+      _selectedTargetAreas.addAll(
+        targetAreasRaw.map((e) => e.toString()),
+      );
+    }
 
     _selectedSkinTypes
       ..clear()
@@ -223,6 +284,9 @@ class _ProductFormPageState extends State<ProductFormPage> {
     _imageUrlController.dispose();
     _shadeNameController.dispose();
     _hexCodeController.dispose();
+    for (final controller in _paletteHexControllers) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -269,7 +333,6 @@ class _ProductFormPageState extends State<ProductFormPage> {
   // Helper method to auto-generate compatible looks
   String _generateCompatibleLooks() {
     final category = _category.toLowerCase();
-    // UPDATED: Now uses the getter for undertones
     final undertones = _autoDetectedUndertones.map((e) => e.toLowerCase()).toList();
     final colorFamily = _colorFamily.toLowerCase();
     final finishTypes = _selectedFinishTypes.map((e) => e.toLowerCase()).toList();
@@ -507,6 +570,226 @@ class _ProductFormPageState extends State<ProductFormPage> {
     );
   }
 
+  // 3. REPLACE _buildTargetAreasSection
+  Widget _buildTargetAreasSection() {
+    if (!_isPaletteCategory) {
+      return const SizedBox.shrink();
+    }
+
+    final areas = [
+      'Eyeshadow',
+      'Contour',
+    ];
+
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: primaryPink.withOpacity(0.18),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Where can this product be used?',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 14,
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          Wrap(
+            spacing: 8,
+            children: areas.map((area) {
+              final selected = _selectedTargetAreas.contains(area);
+
+              return FilterChip(
+                label: Text(area),
+                selected: selected,
+                selectedColor: primaryPink.withOpacity(0.18),
+                checkmarkColor: primaryPink,
+                onSelected: (value) {
+                  setState(() {
+                    if (value) {
+                      _selectedTargetAreas.add(area);
+                    } else {
+                      _selectedTargetAreas.remove(area);
+                    }
+                  });
+                },
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 4. REPLACE _buildMultiPaletteSection (removed switch, now uses _isPaletteCategory)
+  Widget _buildMultiPaletteSection() {
+    if (!_isPaletteCategory) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.only(top: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: primaryPink.withOpacity(0.18),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Palette HEX Colors',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 14,
+            ),
+          ),
+
+          const SizedBox(height: 6),
+
+          const Text(
+            'Add the important shades inside the palette. The system will analyze the overall palette mood.',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.black54,
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _paletteHexControllers.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              childAspectRatio: 3.1,
+            ),
+            itemBuilder: (_, index) {
+              return TextFormField(
+                controller: _paletteHexControllers[index],
+                textCapitalization: TextCapitalization.characters,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(
+                    RegExp(r'[0-9a-fA-F#]'),
+                  ),
+                  LengthLimitingTextInputFormatter(7),
+                ],
+                decoration: InputDecoration(
+                  labelText: 'Shade ${index + 1}',
+                  hintText: '#D88C9A',
+                  suffixIcon: _paletteHexControllers[index].text.isEmpty
+                      ? null
+                      : Container(
+                          margin: const EdgeInsets.all(12),
+                          width: 18,
+                          height: 18,
+                          decoration: BoxDecoration(
+                            color: _safePreviewColor(
+                              _paletteHexControllers[index].text,
+                            ),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.black12),
+                          ),
+                        ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                onChanged: (_) => _analyzePaletteMood(),
+              );
+            },
+          ),
+
+          const SizedBox(height: 14),
+
+          _buildPaletteMoodPreview(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaletteMoodPreview() {
+    final mood = _paletteMoodResult;
+
+    if (mood == null) {
+      return const Text(
+        'Add valid HEX colors to analyze palette mood.',
+        style: TextStyle(
+          color: Colors.black54,
+          fontSize: 12,
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF3F8),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Detected Mood: ${mood.mood}',
+            style: const TextStyle(
+              fontWeight: FontWeight.w900,
+              color: primaryPink,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Depth: ${mood.depth}',
+            style: const TextStyle(fontSize: 12),
+          ),
+          Text(
+            'Warmth: ${mood.warmth.toStringAsFixed(2)}',
+            style: const TextStyle(fontSize: 12),
+          ),
+          Text(
+            'Saturation: ${mood.saturation.toStringAsFixed(2)}',
+            style: const TextStyle(fontSize: 12),
+          ),
+          Text(
+            'Contrast: ${mood.contrast.toStringAsFixed(2)}',
+            style: const TextStyle(fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _safePreviewColor(String hex) {
+    final cleaned = hex.replaceAll('#', '').trim();
+
+    if (cleaned.length != 6) {
+      return Colors.transparent;
+    }
+
+    try {
+      return Color(int.parse('FF$cleaned', radix: 16));
+    } catch (_) {
+      return Colors.transparent;
+    }
+  }
+
   Future<void> _saveProduct() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -525,6 +808,19 @@ class _ProductFormPageState extends State<ProductFormPage> {
       final imageUrl = _selectedImageBytes != null
           ? await _uploadProductImage()
           : _imageUrlController.text;
+
+      // Palette hexes and mood analysis
+      final paletteHexes = PaletteMoodEngine.normalizeHexes(
+        primaryHex: _hexCodeController.text,
+        extraHexes: _paletteHexControllers
+            .map((c) => c.text)
+            .where((e) => e.trim().isNotEmpty)
+            .toList(),
+      );
+
+      final paletteMood = _isPaletteCategory && paletteHexes.isNotEmpty
+          ? PaletteMoodEngine.analyze(paletteHexes)
+          : null;
 
       // Get complete color profile from ColorClassificationHelper
       final colorProfile =
@@ -576,6 +872,18 @@ class _ProductFormPageState extends State<ProductFormPage> {
         'target_area': targetArea,
         'recommendation_priority': recommendationPriority,
         'confidence_weight': confidenceWeight,
+        
+        // Multi-palette fields - 6. REPLACE is_multi_palette with _isPaletteCategory
+        'is_multi_palette': _isPaletteCategory,
+        'palette_hexes': hasColor && _isPaletteCategory ? paletteHexes : [],
+        'palette_mood': hasColor && _isPaletteCategory ? paletteMood?.mood ?? '' : '',
+        'palette_depth': hasColor && _isPaletteCategory ? paletteMood?.depth ?? '' : '',
+        'palette_contrast': hasColor && _isPaletteCategory ? paletteMood?.contrast ?? 0.0 : 0.0,
+        'palette_warmth': hasColor && _isPaletteCategory ? paletteMood?.warmth ?? 0.0 : 0.0,
+        'palette_saturation': hasColor && _isPaletteCategory ? paletteMood?.saturation ?? 0.0 : 0.0,
+        
+        // Target areas for multi-palette products
+        'target_areas': _selectedTargetAreas.toList(),
         
         // Flags
         'auto_generated_looks': true,
@@ -1236,6 +1544,11 @@ class _ProductFormPageState extends State<ProductFormPage> {
                           }),
                         ),
                       ],
+                      const SizedBox(height: 16),
+                      // Target areas section (only for palette category)
+                      _buildTargetAreasSection(),
+                      // Multi-palette section (only for palette category)
+                      _buildMultiPaletteSection(),
                       const SizedBox(height: 16),
                       Container(
                         width: double.infinity,

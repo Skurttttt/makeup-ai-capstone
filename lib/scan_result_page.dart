@@ -15,6 +15,7 @@ import 'widgets/beauty_slider.dart';
 // 1. Add imports
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'helpers/product_recommendation_engine.dart';
+import '../helpers/color_calibration_helper.dart'; // ADDED IMPORT
 
 enum MakeupControlArea {
   lips,
@@ -308,6 +309,21 @@ class _ScanResultPageState extends State<ScanResultPage> {
     return Color(int.parse('FF$cleaned', radix: 16));
   }
 
+  // ADDED: Helper to get display hex for multi-palette products
+  String? _displayHexForProduct(Map<String, dynamic>? product) {
+    if (product == null) return null;
+
+    final paletteHexes = product['palette_hexes'];
+
+    if (product['is_multi_palette'] == true &&
+        paletteHexes is List &&
+        paletteHexes.isNotEmpty) {
+      return paletteHexes.first.toString();
+    }
+
+    return product['hex_code']?.toString();
+  }
+
   // 4. Add target-area recommendation loader
   Future<Map<String, dynamic>?> _fetchBestProductForOverlay({
     required String targetArea,
@@ -371,10 +387,10 @@ class _ScanResultPageState extends State<ScanResultPage> {
       debugPrint('🌸 PREVIEW BLUSH PRODUCT: ${blush?['shade_name']} ${blush?['hex_code']}');
       debugPrint('👁 PREVIEW EYESHADOW PRODUCT: ${eyeshadow?['shade_name']} ${eyeshadow?['hex_code']}');
 
-      // Parse colors BEFORE setState
-      final lipColor = _safeColorFromHex(lip?['hex_code']?.toString());
-      final blushColor = _safeColorFromHex(blush?['hex_code']?.toString());
-      final eyeshadowColor = _safeColorFromHex(eyeshadow?['hex_code']?.toString());
+      // Parse colors using multi-palette aware helper
+      final lipColor = _safeColorFromHex(_displayHexForProduct(lip));
+      final blushColor = _safeColorFromHex(_displayHexForProduct(blush));
+      final eyeshadowColor = _safeColorFromHex(_displayHexForProduct(eyeshadow));
 
       if (!mounted) return;
 
@@ -383,7 +399,11 @@ class _ScanResultPageState extends State<ScanResultPage> {
         _lockedBlushProduct = blush;
         _lockedEyeshadowProduct = eyeshadow;
 
-        _recommendedLipColor = lipColor;
+        // UPDATED: Apply color calibration for lip color
+        _recommendedLipColor =
+            lipColor == null
+                ? null
+                : ColorCalibrationHelper.calibrateLipColor(lipColor);
         _recommendedBlushColor = blushColor;
         _recommendedEyeshadowColor = eyeshadowColor;
       });
