@@ -71,7 +71,7 @@ class ChatService {
       final acc = await _client
           .from('accounts')
           .select('id')
-          .or('role.eq.client,account_type.eq.business')
+          .or('role.eq.staff,account_type.eq.business')
           .limit(1)
           .maybeSingle();
       if (acc != null && acc['id'] != null) return acc['id'].toString();
@@ -209,6 +209,7 @@ class ChatService {
         'last_message': preview,
         'last_message_at': DateTime.now().toIso8601String(),
         'updated_at': DateTime.now().toIso8601String(),
+        'last_sender_role': role,
       }).eq('id', conversationId);
     } catch (_) {}
   }

@@ -2128,6 +2128,46 @@ class _ReviewItemCard extends StatelessWidget {
               ),
             ),
           ],
+          // ── seller reply ──────────────────────────────────────
+          Builder(builder: (_) {
+            final reply = review['seller_reply']?.toString();
+            if (reply == null || reply.isEmpty) return const SizedBox.shrink();
+            return Container(
+              margin: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF3E5F5),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFCE93D8).withOpacity(0.5)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.storefront_rounded,
+                      size: 13, color: Color(0xFF8E24AA)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Seller Reply',
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF8E24AA))),
+                        const SizedBox(height: 2),
+                        Text(reply,
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade800,
+                                height: 1.4)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
         ],
       ),
     );
@@ -2158,7 +2198,7 @@ class _ReviewsSheetState extends State<_ReviewsSheet> {
       final rows = await Supabase.instance.client
           .from('product_reviews')
           .select(
-              'rating, comment, created_at, buyer_id, accounts(full_name, first_name)')
+              'rating, comment, created_at, buyer_id, seller_reply, seller_replied_at, accounts(full_name, first_name)')
           .eq('product_id', widget.product['id'].toString())
           .order('created_at', ascending: false);
       return List<Map<String, dynamic>>.from(rows as List);

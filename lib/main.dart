@@ -10,6 +10,7 @@ import 'auth/change_password_page.dart';
 import 'home_screen.dart';
 import 'screens/admin_screen_new.dart';
 import 'screens/client_screen.dart';
+import 'services/theme_notifier.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,6 +40,7 @@ Future<void> main() async {
     debugPrint('❌ Supabase initialization error: $e');
   }
 
+  await ThemeNotifier.instance.init();
   runApp(const App());
 }
 
@@ -47,31 +49,45 @@ class App extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'FaceTune - Beauty & Style',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        primaryColor: const Color(0xFFFF4D97),
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFFF4D97),
-          primary: const Color(0xFFFF4D97),
+    return ListenableBuilder(
+      listenable: ThemeNotifier.instance,
+      builder: (context, _) => MaterialApp(
+        title: 'FaceTune - Beauty & Style',
+        debugShowCheckedModeBanner: false,
+        themeMode: ThemeNotifier.instance.mode,
+        theme: ThemeData(
+          useMaterial3: true,
+          primaryColor: const Color(0xFFFF4D97),
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFFFF4D97),
+            primary: const Color(0xFFFF4D97),
+          ),
         ),
-      ),
-      home: const AuthGate(),
-      onGenerateRoute: (settings) {
-        // Handle deep link for password reset
-        final uri = Uri.tryParse(settings.name ?? '');
-        if (uri != null && uri.path == '/reset-password') {
-          final accessToken = uri.queryParameters['access_token'];
-          if (accessToken != null && accessToken.isNotEmpty) {
-            return MaterialPageRoute(
-              builder: (_) => ChangePasswordPage(accessToken: accessToken),
-            );
+        darkTheme: ThemeData(
+          useMaterial3: true,
+          brightness: Brightness.dark,
+          primaryColor: const Color(0xFFFF4D97),
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFFFF4D97),
+            primary: const Color(0xFFFF4D97),
+            brightness: Brightness.dark,
+          ),
+        ),
+        home: const AuthGate(),
+        onGenerateRoute: (settings) {
+          // Handle deep link for password reset
+          final uri = Uri.tryParse(settings.name ?? '');
+          if (uri != null && uri.path == '/reset-password') {
+            final accessToken = uri.queryParameters['access_token'];
+            if (accessToken != null && accessToken.isNotEmpty) {
+              return MaterialPageRoute(
+                builder: (_) => ChangePasswordPage(accessToken: accessToken),
+              );
+            }
           }
-        }
-        return null;
-      },
+          return null;
+        },
+      ),
     );
   }
 }
@@ -204,7 +220,7 @@ class _AuthGateState extends State<AuthGate> {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const AdminScreenNew()),
       );
-    } else if (accountType == 'business' || role?.toLowerCase() == 'client') {
+    } else if (accountType == 'business' || role?.toLowerCase() == 'staff') {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const ClientScreen()),
       );

@@ -76,8 +76,8 @@ class SupabaseAuthIntegration {
           case 'admin':
             role = UserRole.admin;
             break;
-          case 'client':
-            role = UserRole.client;
+          case 'staff':
+            role = UserRole.staff;
             break;
           default:
             role = UserRole.user;

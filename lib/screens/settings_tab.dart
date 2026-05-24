@@ -6,11 +6,11 @@ import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
 import '../services/supabase_service.dart';
 import '../utils/logout_util.dart';
+import '../services/theme_notifier.dart';
 import 'user_subscription_page.dart';
 import 'chat_list_screen.dart';
 import '../services/scan_quota_service.dart';
 import '../scan_result_page.dart';
-import '../instructions_page.dart';
 import '../look_engine.dart';
 
 class SettingsTab extends StatefulWidget {
@@ -63,6 +63,7 @@ class _SettingsTabState extends State<SettingsTab> {
 
   // Settings state
   bool _notificationsEnabled = true;
+  bool _darkMode = false;
   String _selectedLanguage = 'English';
   bool _autoSaveLooks = true;
   bool _shareUsageData = true;
@@ -120,7 +121,7 @@ class _SettingsTabState extends State<SettingsTab> {
   }
 
   void _loadSettings() {
-    // Load settings from shared preferences or local storage
+    _darkMode = ThemeNotifier.instance.isDark;
   }
 
   Future<void> _loadCurrentSubscription() async {
@@ -543,6 +544,16 @@ class _SettingsTabState extends State<SettingsTab> {
                     _selectedLanguage,
                     () => _showLanguageDialog(),
                     const Color(0xFF06B6D4),
+                  ),
+                  _buildSwitchItem(
+                    Icons.dark_mode_rounded,
+                    'Dark Mode',
+                    _darkMode,
+                    (value) {
+                      setState(() => _darkMode = value);
+                      ThemeNotifier.instance.toggle(value);
+                    },
+                    const Color(0xFF6366F1),
                   ),
                   _buildSettingItem(
                     Icons.storage,

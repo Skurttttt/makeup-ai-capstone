@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'screens/home_tab.dart';
 import 'screens/scan_tab.dart';
@@ -26,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late int _currentIndex;
 
   bool _scanDisabled = false;
+  StreamSubscription<AppNotification>? _notifSub;
 
   final List<Widget> _tabs = const [
     HomeTab(),
@@ -49,6 +53,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (uid != null) {
       NotificationService.instance.startForBuyer(uid);
     }
+    _notifSub = NotificationService.instance.onNewNotification.listen(_pingBuyer);
   }
 
   Future<void> _checkScanAvailability() async {
@@ -110,8 +115,61 @@ class _HomeScreenState extends State<HomeScreen> {
     await _checkScanAvailability();
   }
 
+  void _pingBuyer(AppNotification n) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      if (messenger == null) return;
+      final color = switch (n.type) {
+        AppNotificationType.order   => const Color(0xFF22C55E),
+        AppNotificationType.lowStock => const Color(0xFFFF9800),
+        AppNotificationType.message  => const Color(0xFFFF4D97),
+      };
+      final icon = switch (n.type) {
+        AppNotificationType.order   => Icons.shopping_bag_rounded,
+        AppNotificationType.lowStock => Icons.inventory_2_rounded,
+        AppNotificationType.message  => Icons.chat_bubble_rounded,
+      };
+      HapticFeedback.mediumImpact();
+      SystemSound.play(SystemSoundType.alert);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(SnackBar(
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        duration: const Duration(seconds: 4),
+        content: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(n.title,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13)),
+                  const SizedBox(height: 2),
+                  Text(n.body,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ));
+    });
+  }
+
   @override
   void dispose() {
+    _notifSub?.cancel();
     NotificationService.instance.stop();
 
     super.dispose();

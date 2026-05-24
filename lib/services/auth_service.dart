@@ -1,7 +1,7 @@
 // lib/services/auth_service.dart
 import 'package:flutter/material.dart';
 
-enum UserRole { admin, superAdmin, staff, user, client }
+enum UserRole { admin, superAdmin, staff, user }
 
 class AuthService extends ChangeNotifier {
   UserRole _userRole = UserRole.user;

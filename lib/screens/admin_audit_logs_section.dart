@@ -3,6 +3,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/supabase_service.dart';
 import '../utils/export_helper.dart';
 import '../utils/responsive.dart';
@@ -473,13 +474,25 @@ class _AdminAuditLogsSectionState extends State<AdminAuditLogsSection> {
       final filename = onlyFiltered
           ? 'audit_logs_filtered_$ts.csv'
           : 'audit_logs_$ts.csv';
-      await saveCsvFile(filename, buffer.toString());
+      final savedPath = await saveCsvFile(filename, buffer.toString());
       if (mounted) {
-        showAdminSnackBar(
-          context,
-          'Exported ${logs.length} log${logs.length != 1 ? 's' : ''}',
-          isError: false,
-        );
+        if (savedPath != null) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Exported ${logs.length} log${logs.length != 1 ? 's' : ''} to ${savedPath.split(RegExp(r'[\\/]')).last}'),
+            action: SnackBarAction(
+              label: 'Open',
+              onPressed: () async {
+                try { await launchUrl(Uri.file(savedPath)); } catch (_) {}
+              },
+            ),
+          ));
+        } else {
+          showAdminSnackBar(
+            context,
+            'Exported ${logs.length} log${logs.length != 1 ? 's' : ''} (download started)',
+            isError: false,
+          );
+        }
       }
     } catch (e) {
       if (mounted) {

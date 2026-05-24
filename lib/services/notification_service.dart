@@ -67,7 +67,8 @@ class NotificationService extends ChangeNotifier {
   final Set<String> _seenOrderItemIds = {};
   final Map<String, DateTime> _seenConversationStamps = {};
   final Map<String, String> _seenOrderStatuses = {};
-  final Set<String> _seenLowStockIds = {};
+  // Maps product_id -> 'low' | 'out' so we can re-alert when state escalates.
+  final Map<String, String> _seenStockAlerts = {};
   bool _orderItemsBootstrapped = false;
   bool _conversationsBootstrapped = false;
   bool _buyerOrdersBootstrapped = false;
@@ -110,7 +111,7 @@ class NotificationService extends ChangeNotifier {
     _seenOrderItemIds.clear();
     _seenConversationStamps.clear();
     _seenOrderStatuses.clear();
-    _seenLowStockIds.clear();
+    _seenStockAlerts.clear();
     _orderItemsBootstrapped = false;
     _conversationsBootstrapped = false;
     _buyerOrdersBootstrapped = false;
@@ -276,14 +277,17 @@ class NotificationService extends ChangeNotifier {
           .eq('business_id', bid)
           .lte('stock_quantity', 5);
 
-      final currentLow = <String>{};
+      final currentLowIds = <String>{};
       for (final row in rows) {
         final id = row['id']?.toString();
         if (id == null) continue;
-        currentLow.add(id);
-        if (_seenLowStockIds.contains(id)) continue;
-        _seenLowStockIds.add(id);
+        currentLowIds.add(id);
         final stock = (row['stock_quantity'] as num?)?.toInt() ?? 0;
+        final state = stock == 0 ? 'out' : 'low';
+        final prevState = _seenStockAlerts[id];
+        // Fire alert on first sight OR when escalating from low → out of stock.
+        if (prevState == state) continue;
+        _seenStockAlerts[id] = state;
         final name = (row['name'] ?? 'Product').toString();
         _push(AppNotification(
           id: 'low_${id}_${DateTime.now().millisecondsSinceEpoch}',
@@ -296,7 +300,7 @@ class NotificationService extends ChangeNotifier {
           meta: {'product_id': id},
         ));
       }
-      _seenLowStockIds.removeWhere((id) => !currentLow.contains(id));
+      _seenStockAlerts.removeWhere((id, _) => !currentLowIds.contains(id));
     } catch (_) {}
   }
 

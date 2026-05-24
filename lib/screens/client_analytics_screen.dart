@@ -96,7 +96,13 @@ class _ClientAnalyticsScreenState extends State<ClientAnalyticsScreen>
             final activeProducts =
                 products.where((p) => p['is_active'] == true).length;
             final lowStockProducts = products
-                .where((p) => (p['stock_quantity'] as int? ?? 0) <= 5)
+                .where((p) {
+                  final q = (p['stock_quantity'] as num?)?.toInt() ?? 0;
+                  return q > 0 && q <= 5;
+                })
+                .toList();
+            final outOfStockProducts = products
+                .where((p) => (p['stock_quantity'] as num?)?.toInt() == 0)
                 .toList();
             final totalInventoryValue = products.fold(
               0.0,
@@ -141,15 +147,63 @@ class _ClientAnalyticsScreenState extends State<ClientAnalyticsScreen>
                 : (activeProducts / products.length) * 100;
             final outOfStockPercent = products.isEmpty
                 ? 0.0
-                : (lowStockProducts.length / products.length) * 100;
+                : (outOfStockProducts.length / products.length) * 100;
 
-            final sortedProducts = [...products]
-              ..sort(
-                (a, b) => ((b['price'] as num?)?.toDouble() ?? 0).compareTo(
-                  (a['price'] as num?)?.toDouble() ?? 0,
-                ),
-              );
-            final topProducts = sortedProducts.take(5).toList();
+            // Aggregate units sold and revenue per product from order items
+            // in the selected date range.
+            final salesByProduct = <String, Map<String, num>>{};
+            for (final item in rangeOrders) {
+              final pid = item['product_id']?.toString();
+              if (pid == null) continue;
+              final qty = (item['quantity'] as num?)?.toInt() ?? 0;
+              final rev = (item['total_price'] as num?)?.toDouble() ?? 0.0;
+              final entry = salesByProduct.putIfAbsent(
+                  pid, () => {'units': 0, 'revenue': 0.0});
+              entry['units'] = (entry['units'] as num) + qty;
+              entry['revenue'] = (entry['revenue'] as num) + rev;
+            }
+
+            // Sort products: first by units sold desc, then by revenue desc.
+            // If no sales exist in the range fall back to highest-priced.
+            final List<Map<String, dynamic>> topProducts;
+            if (salesByProduct.isEmpty) {
+              topProducts = ([...products]
+                    ..sort((a, b) =>
+                        ((b['price'] as num?)?.toDouble() ?? 0).compareTo(
+                            (a['price'] as num?)?.toDouble() ?? 0)))
+                  .take(5)
+                  .map((p) => {...p, '_unitsSold': 0, '_revenue': 0.0})
+                  .toList();
+            } else {
+              topProducts = ([...products]
+                    ..sort((a, b) {
+                      final aId = a['id']?.toString() ?? '';
+                      final bId = b['id']?.toString() ?? '';
+                      final aUnits =
+                          (salesByProduct[aId]?['units'] ?? 0).toInt();
+                      final bUnits =
+                          (salesByProduct[bId]?['units'] ?? 0).toInt();
+                      if (bUnits != aUnits) return bUnits.compareTo(aUnits);
+                      final aRev =
+                          (salesByProduct[aId]?['revenue'] ?? 0.0).toDouble();
+                      final bRev =
+                          (salesByProduct[bId]?['revenue'] ?? 0.0).toDouble();
+                      return bRev.compareTo(aRev);
+                    }))
+                  .where((p) =>
+                      (salesByProduct[p['id']?.toString()]?['units'] ?? 0) > 0)
+                  .take(5)
+                  .map((p) {
+                    final pid = p['id']?.toString() ?? '';
+                    return {
+                      ...p,
+                      '_unitsSold': (salesByProduct[pid]?['units'] ?? 0).toInt(),
+                      '_revenue':
+                          (salesByProduct[pid]?['revenue'] ?? 0.0).toDouble(),
+                    };
+                  })
+                  .toList();
+            }
 
             // Revenue trend
             final revenueTrend = _calculateRevenueTrend(rangeOrders);
@@ -860,16 +914,16 @@ class _ClientAnalyticsScreenState extends State<ClientAnalyticsScreen>
               final index = entry.key;
               final product = entry.value;
               final name = (product['name'] ?? 'Unnamed').toString();
-              final price = (product['price'] as num?)?.toDouble() ?? 0;
-              final stock = (product['stock_quantity'] as int?) ?? 0;
-              return _buildProductRow(index, name, price, stock);
+              final revenue = (product['_revenue'] as num?)?.toDouble() ?? 0.0;
+              final unitsSold = (product['_unitsSold'] as num?)?.toInt() ?? 0;
+              return _buildProductRow(index, name, revenue, unitsSold);
             }),
         ],
       ),
     );
   }
 
-  Widget _buildProductRow(int index, String name, double price, int stock) {
+  Widget _buildProductRow(int index, String name, double revenue, int unitsSold) {
     final colors = [
       pinkPrimary,
       pinkAccent,
@@ -924,7 +978,7 @@ class _ClientAnalyticsScreenState extends State<ClientAnalyticsScreen>
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  'Stock: $stock units',
+                  '$unitsSold unit${unitsSold == 1 ? '' : 's'} sold',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey.shade500,
@@ -942,7 +996,7 @@ class _ClientAnalyticsScreenState extends State<ClientAnalyticsScreen>
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
-              _formatPHP(price),
+              _formatPHP(revenue),
               style: TextStyle(
                 fontWeight: FontWeight.w700,
                 color: pinkPrimary,
@@ -1081,7 +1135,7 @@ class _ClientAnalyticsScreenState extends State<ClientAnalyticsScreen>
         color: pinkPrimary,
         title: 'Top Performer ⭐',
         description:
-            '"${topProducts.first['name'] ?? 'Product'}" is your highest-priced item — make sure it is well-stocked and featured.',
+            '"${topProducts.first['name'] ?? 'Product'}" is your best-selling item — keep it well-stocked and featured.',
       ));
     }
 

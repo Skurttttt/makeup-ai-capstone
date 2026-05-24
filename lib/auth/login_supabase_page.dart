@@ -123,7 +123,6 @@ class _LoginSupabasePageState extends State<LoginSupabasePage> {
               builder: (_) => AdminScreenNew(currentUserRole: r)),
         );
       } else if (r == 'staff' ||
-          r == 'client' ||
           accountType == 'business') {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const ClientScreen()),

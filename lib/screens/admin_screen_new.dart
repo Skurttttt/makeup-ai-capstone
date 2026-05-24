@@ -123,6 +123,61 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
     });
   }
 
+  /// Show a floating snackbar. Must be called from a realtime callback
+  /// (i.e. outside the build phase), so we defer via addPostFrameCallback.
+  void _showAdminToast(
+    String title,
+    String body, {
+    Color? color,
+    IconData? icon,
+  }) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      if (messenger == null) return;
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(SnackBar(
+        backgroundColor: color ?? AdminTheme.accentColor,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(12),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        duration: const Duration(seconds: 5),
+        content: Row(
+          children: [
+            Icon(icon ?? Icons.notifications_rounded,
+                color: Colors.white, size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13)),
+                  const SizedBox(height: 2),
+                  Text(body,
+                      style:
+                          const TextStyle(color: Colors.white, fontSize: 12),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+          ],
+        ),
+        action: SnackBarAction(
+          label: 'View',
+          textColor: Colors.white,
+          onPressed: _openNotificationPanel,
+        ),
+      ));
+    });
+  }
+
   void _setupRealtimeListeners() {
     _accountsChannel = _supabaseService.client
         .channel('accounts_admin_changes')
@@ -130,7 +185,24 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'accounts',
-          callback: (payload) => _scheduleRebuild(),
+          callback: (payload) {
+            _scheduleRebuild();
+            if (payload.eventType == PostgresChangeEvent.insert) {
+              final name = (payload.newRecord['full_name'] as String?)
+                      ?.trim()
+                      .isNotEmpty ==
+                  true
+                  ? payload.newRecord['full_name'] as String
+                  : (payload.newRecord['email'] as String? ?? 'Someone');
+              _showAdminToast(
+                'New user registered 👤',
+                '$name joined the platform',
+                color: const Color(0xFF10B981),
+                icon: Icons.person_add_rounded,
+              );
+              _scheduleNotifRefresh();
+            }
+          },
         )
         .subscribe();
 
@@ -143,6 +215,12 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
           callback: (payload) {
             _scheduleRebuild();
             if (payload.eventType == PostgresChangeEvent.insert) {
+              _showAdminToast(
+                'New subscription 🎉',
+                'A user subscribed to a plan',
+                color: const Color(0xFFF59E0B),
+                icon: Icons.card_membership_rounded,
+              );
               _scheduleNotifRefresh();
             }
           },
@@ -165,7 +243,18 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'orders',
-          callback: (payload) => _scheduleNotifRefresh(),
+          callback: (payload) {
+            final total = (payload.newRecord['total'] as num?);
+            final totalStr =
+                total != null ? '₱${total.toStringAsFixed(2)}' : '';
+            _showAdminToast(
+              'New order received! 🛍️',
+              totalStr.isNotEmpty ? 'Total: $totalStr' : 'A new order was placed',
+              color: const Color(0xFF22C55E),
+              icon: Icons.shopping_bag_rounded,
+            );
+            _scheduleNotifRefresh();
+          },
         )
         .subscribe();
 
@@ -175,7 +264,21 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'support_requests',
-          callback: (payload) => _scheduleNotifRefresh(),
+          callback: (payload) {
+            final subject = (payload.newRecord['subject'] as String?)
+                    ?.trim()
+                    .isNotEmpty ==
+                true
+                ? payload.newRecord['subject'] as String
+                : 'A support request was submitted';
+            _showAdminToast(
+              'Support request received 🎫',
+              subject,
+              color: const Color(0xFF3B82F6),
+              icon: Icons.support_agent_rounded,
+            );
+            _scheduleNotifRefresh();
+          },
         )
         .subscribe();
 
@@ -185,7 +288,18 @@ class _AdminScreenNewState extends State<AdminScreenNew> {
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'feedbacks',
-          callback: (payload) => _scheduleNotifRefresh(),
+          callback: (payload) {
+            final rating = payload.newRecord['rating'];
+            final ratingStr =
+                rating != null ? '⭐ $rating / 5 stars' : 'A user left feedback';
+            _showAdminToast(
+              'New feedback received 💬',
+              ratingStr,
+              color: const Color(0xFF8B5CF6),
+              icon: Icons.feedback_rounded,
+            );
+            _scheduleNotifRefresh();
+          },
         )
         .subscribe();
   }
